@@ -97,11 +97,12 @@ Route::middleware(['auth'])->group(function () {
             Route::post('offer-sheets', [VendorController::class, 'storeOfferSheet'])->name('offer-sheets.store');
             Route::get('offer-sheets/{offerSheet}', [VendorController::class, 'showOfferSheet'])->name('offer-sheets.show');
             Route::get('offer-sheets/{offerSheet}/download', [VendorController::class, 'downloadOfferSheet'])->name('offer-sheets.download');
-
             Route::post('offer-sheet/upload-image', [VendorController::class, 'uploadImage'])->name('offer-sheet.upload-image');
-
             Route::get('consignments', [VendorController::class, 'consignments'])->name('consignments');
             Route::post('consignments/{consignment}/inspection', [VendorController::class, 'uploadInspection'])->name('inspections.upload');
+            Route::post('consignments/{consignment}/commercial-invoice', [VendorController::class, 'uploadCommercialInvoice'])->name('commercial-invoices.upload');
+
+            Route::get('inspections', [VendorController::class, 'inspectionReports'])->name('inspections.index');
             Route::get('live-sheets', [VendorController::class, 'liveSheets'])->name('live-sheets');
             Route::get('live-sheets/blank-template', [VendorController::class, 'downloadLiveSheetBlankTemplate'])->name('live-sheets.blank-template');
             Route::get('live-sheets/{liveSheet}/edit', [VendorController::class, 'editLiveSheet'])->name('live-sheets.edit');
@@ -109,11 +110,8 @@ Route::middleware(['auth'])->group(function () {
             Route::get('live-sheets/{liveSheet}/download', [VendorController::class, 'downloadLiveSheetTemplate'])->name('live-sheets.download');
             Route::post('live-sheets/{liveSheet}/upload', [VendorController::class, 'uploadLiveSheet'])->name('live-sheets.upload');
             Route::post('live-sheets/{liveSheet}', [VendorController::class, 'submitLiveSheet'])->name('live-sheets.submit');
-
             Route::post('live-sheets/{liveSheet}/create-consignment', [VendorController::class, 'createConsignment'])->name('live-sheets.create-consignment');
-
             Route::post('live-sheets/{liveSheet}/dates', [VendorController::class, 'saveLiveSheetDates'])->name('vendor.live-sheets.dates');
-
             Route::get('sales', [VendorController::class, 'salesReport'])->name('sales');
             Route::get('chargebacks', [VendorController::class, 'chargebacks'])->name('chargebacks');
             Route::get('payouts', [VendorController::class, 'payouts'])->name('payouts');

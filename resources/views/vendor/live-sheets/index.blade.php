@@ -24,12 +24,12 @@
                     <th>Status</th>
 
                     <th style="min-width:160px;">
-                        Ex-Factory date - Goods ready Date
+                        Goods Ready Date
                         <span style="display:block;font-size:.62rem;font-weight:400;color:#94a3b8;">Within next 75 days</span>
                     </th>
                     <th style="min-width:160px;">
                         Final Inspection Date
-                        <span style="display:block;font-size:.62rem;font-weight:400;color:#94a3b8;">Within 7 days of Ex-Factory</span>
+                        <span style="display:block;font-size:.62rem;font-weight:400;color:#94a3b8;">Within 7 days of Goods Ready Date</span>
                     </th>
 
                     <th>Created</th>
@@ -44,7 +44,7 @@
                 $maxExFactory = now()->addDays(75)->toDateString();
                 $exFactory = $ls->ex_factory_date?->toDateString() ?? '';
                 $finalInsp = $ls->final_inspection_date?->toDateString() ?? '';
-                // Max inspection = ex-factory + 7 days (or today + 100 as fallback before ex-factory is set)
+                // Max inspection = Goods Ready Date + 7 days (or today + 100 as fallback before Goods Ready Date is set)
                 $maxInspection = $exFactory ? \Carbon\Carbon::parse($exFactory)->addDays(7)->toDateString() : '';
                 @endphp
                 <tr id="row-{{ $ls->id }}">
@@ -60,7 +60,7 @@
                         @endif
                     </td>
 
-                    {{-- Ex-Factory Date --}}
+                    {{-- Goods Ready Date --}}
 
                     @php
                     $formattedExFactory = $exFactory
@@ -123,7 +123,7 @@
                             @if($exFactory)
                             Latest: {{ \Carbon\Carbon::parse($exFactory)->addDays(10)->format('d M Y') }}
                             @else
-                            Set Ex-Factory first
+                            Set Goods Ready Date first
                             @endif
                         </div>
                         @elseif($ls->consignment_id)

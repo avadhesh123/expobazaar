@@ -426,7 +426,7 @@ class VendorController extends Controller
                     'width_cm'    => isset($p['width']) ? round($p['width'] * 2.54, 2) : null,
                     'height_cm'   => isset($p['height']) ? round($p['height'] * 2.54, 2) : null,
                     'weight_grams' => isset($p['weight']) ? round($p['weight'] * 453.592, 2) : null,
-                    'vendor_price'   => $p['vendor_fob'] ?? 0,                    
+                    'vendor_price'   => $p['vendor_fob'] ?? 0,
                     'status'       => 'draft',
                 ]);
             } elseif ($product->vendor_id !== $vendor->id) {
@@ -845,38 +845,38 @@ class VendorController extends Controller
             'Content-Disposition' => "attachment; filename=\"{$filename}\"",
         ]);
     }
-public function uploadImage(Request $request)
-{
-    $request->validate([
-        'image' => 'required|image|mimes:jpeg,png,jpg,gif,webp|max:5120', // 5MB
-        'offer_sheet_item_id' => 'required|exists:offer_sheet_items,id'
-    ]);
+    public function uploadImage(Request $request)
+    {
+        $request->validate([
+            'image' => 'required|image|mimes:jpeg,png,jpg,gif,webp|max:5120', // 5MB
+            'offer_sheet_item_id' => 'required|exists:offer_sheet_items,id'
+        ]);
 
-    $item = OfferSheetItem::findOrFail($request->offer_sheet_item_id);
+        $item = OfferSheetItem::findOrFail($request->offer_sheet_item_id);
 
- 
 
-    if ($request->hasFile('image')) {
-        // Delete old image if exists
-        if ($item->thumbnail && \Storage::disk('public')->exists($item->thumbnail)) {
-            \Storage::disk('public')->delete($item->thumbnail);
+
+        if ($request->hasFile('image')) {
+            // Delete old image if exists
+            if ($item->thumbnail && \Storage::disk('public')->exists($item->thumbnail)) {
+                \Storage::disk('public')->delete($item->thumbnail);
+            }
+
+            // Store new image
+            $path = $request->file('image')->store('offer-thumbnails', 'public');
+
+            // Save path to database
+            $item->update(['thumbnail' => $path]);
+
+            return response()->json([
+                'success' => true,
+                'image_url' => \Storage::url($path),
+                'message' => 'Image uploaded successfully.'
+            ]);
         }
 
-        // Store new image
-        $path = $request->file('image')->store('offer-thumbnails', 'public');
-
-        // Save path to database
-        $item->update(['thumbnail' => $path]);
-
-        return response()->json([
-            'success' => true,
-            'image_url' => \Storage::url($path),
-            'message' => 'Image uploaded successfully.'
-        ]);
+        return response()->json(['success' => false, 'message' => 'No image uploaded.'], 400);
     }
-
-    return response()->json(['success' => false, 'message' => 'No image uploaded.'], 400);
-}
     // =====================================================================
     //  CONSIGNMENTS, LIVE SHEETS, SALES, CHARGEBACKS, PAYOUTS
     //  (same as previous version — kept intact)
@@ -1452,6 +1452,24 @@ public function uploadImage(Request $request)
         ]);
         return back()->with('success', 'Inspection report uploaded.');
     }
+    public function uploadCommercialInvoice(Request $request, Consignment $consignment)
+    {
+        $request->validate(['commercial_invoice' => 'nullable|file|max:20480', 'packing_list' => 'nullable|file|max:20480']);
+print_r($request->all());exit;
+        $path = $request->file('commercial_invoice')->store('inspections/' . $consignment->id, 'public');
+        $path = $request->file('packing_list')->store('inspections/' . $consignment->id, 'public');
+
+        \App\Models\InspectionReport::create([
+            'consignment_id' => $consignment->id,
+            'inspection_type' => $request->inspection_type,
+            'report_file' => $path,
+            'report_name' => $request->file('commercial_invoice')->getClientOriginalName(),
+            'result' => $request->result,
+            'remarks' => $request->remarks,
+            'uploaded_by' => auth()->id(),
+        ]);
+        return back()->with('success', 'Commercial invoice uploaded.');
+    }
 
     public function salesReport(Request $request)
     {
@@ -1559,5 +1577,27 @@ public function uploadImage(Request $request)
         }
 
         return response()->json(['success' => true, $data]);
+    }
+    public function inspectionReports(Request $request)
+    {
+        $vendor = auth()->user()->vendor;
+
+        $reports = \App\Models\InspectionReport::whereHas('consignment', fn($q) => $q->where('vendor_id', $vendor->id))
+            ->with('consignment', 'uploader')
+            ->when($request->type, fn($q, $v) => $q->where('inspection_type', $v))
+            ->when($request->result, fn($q, $v) => $q->where('result', $v))
+            ->when($request->consignment_id, fn($q, $v) => $q->where('consignment_id', $v))
+            ->latest()->paginate(20);
+
+        $consignments = $vendor->consignments()->latest()->get();
+
+        $stats = [
+            'total'    => \App\Models\InspectionReport::whereHas('consignment', fn($q) => $q->where('vendor_id', $vendor->id))->count(),
+            'passed'   => \App\Models\InspectionReport::whereHas('consignment', fn($q) => $q->where('vendor_id', $vendor->id))->where('result', 'passed')->count(),
+            'failed'   => \App\Models\InspectionReport::whereHas('consignment', fn($q) => $q->where('vendor_id', $vendor->id))->where('result', 'failed')->count(),
+            'conditional' => \App\Models\InspectionReport::whereHas('consignment', fn($q) => $q->where('vendor_id', $vendor->id))->where('result', 'conditional')->count(),
+        ];
+
+        return view('vendor.inspections.index', compact('reports', 'consignments', 'stats', 'vendor'));
     }
 }
