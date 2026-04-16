@@ -16,12 +16,14 @@ class InspectionReport extends Model
         'remarks',
         'findings',
         'uploaded_by',
+        'commercial_invoice_file',
+        'commercial_invoice_name',
+        'packing_list_file',
+        'packing_list_name',
     ];
 
     protected $casts = [
         'findings' => 'array',
-        'commercial_invoice_uploaded_at' => 'datetime',
-        'packing_list_uploaded_at'       => 'datetime',
     ];
 
     public function consignment()
@@ -35,14 +37,5 @@ class InspectionReport extends Model
     public function uploader()
     {
         return $this->belongsTo(User::class, 'uploaded_by');
-    }
-    public function commercialInvoiceUploadedBy()
-    {
-        return $this->belongsTo(User::class, 'commercial_invoice_uploaded_by');
-    }
-
-    public function packingListUploadedBy()
-    {
-        return $this->belongsTo(User::class, 'packing_list_uploaded_by');
     }
 }

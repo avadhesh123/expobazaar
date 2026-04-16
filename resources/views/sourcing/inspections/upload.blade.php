@@ -23,12 +23,12 @@
 
 {{-- Inspection Status Cards --}}
 @php
-    $reports = $consignment->inspectionReports->groupBy('inspection_type');
-    $types = [
-        'inline'  => ['Inline Inspection', '#3b82f6', '#dbeafe', 'fa-search', 'During production — checks materials, processes, initial quality.'],
-        'midline' => ['Midline Inspection', '#e8a838', '#fef3c7', 'fa-tasks', 'Mid-production — verifies progress, dimensions, workmanship.'],
-        'final'   => ['Final Inspection', '#7c3aed', '#ede9fe', 'fa-check-double', 'Post-production — full quality check before shipment.'],
-    ];
+$reports = $consignment->inspectionReports->groupBy('inspection_type');
+$types = [
+'inline' => ['Inline Inspection', '#3b82f6', '#dbeafe', 'fa-search', 'During production — checks materials, processes, initial quality.'],
+'midline' => ['Midline Inspection', '#e8a838', '#fef3c7', 'fa-tasks', 'Mid-production — verifies progress, dimensions, workmanship.'],
+'final' => ['Final Inspection', '#7c3aed', '#ede9fe', 'fa-check-double', 'Post-production — full quality check before shipment.'],
+];
 @endphp
 
 <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:1rem;margin-bottom:1.25rem;">
@@ -45,16 +45,50 @@
             </div>
             <div style="font-size:.72rem;color:#64748b;margin-bottom:.75rem;">{{ $desc }}</div>
             @if($typeReports->count() > 0)
-                @foreach($typeReports as $r)
-                <div style="display:flex;align-items:center;gap:.5rem;padding:.4rem .5rem;background:#f8fafc;border-radius:6px;margin-bottom:.3rem;font-size:.78rem;">
-                    <i class="fas fa-file-pdf" style="color:{{ $color }};"></i>
-                    <a href="{{ asset('storage/app/public/' . $r->report_file) }}" target="_blank" style="flex:1;color:#0d1b2a;font-weight:500;">{{ Str::limit($r->report_name, 30) }}</a>
-                    <span class="badge {{ ['passed'=>'badge-success','failed'=>'badge-danger','conditional'=>'badge-warning'][$r->result] ?? 'badge-gray' }}" style="font-size:.6rem;">{{ ucfirst($r->result) }}</span>
-                    <form method="POST" action="{{ route('sourcing.inspections.delete', $r) }}" onsubmit="return confirm('Delete?')">@csrf @method('DELETE')<button type="submit" style="background:none;border:none;color:#dc2626;cursor:pointer;font-size:.7rem;"><i class="fas fa-times"></i></button></form>
-                </div>
-                @endforeach
+            @foreach($typeReports as $r)
+
+            <div style="display:flex;align-items:center;gap:.5rem;padding:.4rem .5rem;background:#f8fafc;border-radius:6px;margin-bottom:.3rem;font-size:.78rem;">
+                <i class="fas fa-file-pdf" style="color:{{ $color }};"></i>
+                <a href="{{ asset('storage/app/public/' . $r->report_file) }}" target="_blank" style="flex:1;color:#0d1b2a;font-weight:500;">{{ Str::limit($r->report_name, 30) }}</a>
+                <span class="badge {{ ['passed'=>'badge-success','failed'=>'badge-danger','conditional'=>'badge-warning'][$r->result] ?? 'badge-gray' }}" style="font-size:.6rem;">{{ ucfirst($r->result) }}</span>
+                <form method="POST" action="{{ route('sourcing.inspections.delete', $r) }}" onsubmit="return confirm('Delete?')">@csrf @method('DELETE')<button type="submit" style="background:none;border:none;color:#dc2626;cursor:pointer;font-size:.7rem;"><i class="fas fa-times"></i></button></form>
+            </div>
+
+            {{-- Commercial Invoice --}}
+            @if($r->commercial_invoice_file)
+            <div style="display:flex;align-items:center;gap:.5rem;padding:.4rem .5rem;background:#f8fafc;border-radius:6px;margin-bottom:.3rem;font-size:.78rem;">
+                <a href="{{ Storage::url($r->commercial_invoice_file) }}" target="_blank" style="flex:1;color:#0d1b2a;font-weight:500;">
+                    {{ Str::limit($r->commercial_invoice_name, 30) }}
+                </a>
+                <span class="badge {{ ['passed'=>'badge-success','failed'=>'badge-danger','conditional'=>'badge-warning'][$r->result] ?? 'badge-gray' }}" style="font-size:.6rem;">Commercial Invoice</span>
+
+                <form method="POST" action="{{ route('sourcing.inspections.delete', $r) }}" onsubmit="return confirm('Delete Commercial Invoice?')">
+                    @csrf @method('DELETE')
+                    <button type="submit" style="background:none;border:none;color:#dc2626;cursor:pointer;font-size:.7rem;">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </form>
+            </div>
+            @endif
+
+            {{-- Packing List --}}
+            @if($r->packing_list_file)
+            <div style="display:flex;align-items:center;gap:.5rem;padding:.4rem .5rem;background:#f8fafc;border-radius:6px;margin-bottom:.3rem;font-size:.78rem;">
+                 <a href="{{ Storage::url($r->packing_list_file) }}" target="_blank" style="flex:1;color:#0d1b2a;font-weight:500;">
+                    {{ Str::limit($r->packing_list_name, 30) }}
+                </a>
+                <span class="badge {{ ['passed'=>'badge-success','failed'=>'badge-danger','conditional'=>'badge-warning'][$r->result] ?? 'badge-gray' }}" style="font-size:.6rem;">Packing List</span>
+                <form method="POST" action="{{ route('sourcing.inspections.delete', $r) }}" onsubmit="return confirm('Delete Packing List?')">
+                    @csrf @method('DELETE')
+                    <button type="submit" style="background:none;border:none;color:#dc2626;cursor:pointer;font-size:.7rem;">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </form>
+            </div>
+            @endif
+            @endforeach
             @else
-                <div style="text-align:center;padding:.5rem;color:#d1d5db;font-size:.75rem;"><i class="fas fa-cloud-upload-alt" style="display:block;font-size:1.2rem;margin-bottom:.2rem;"></i>No report uploaded</div>
+            <div style="text-align:center;padding:.5rem;color:#d1d5db;font-size:.75rem;"><i class="fas fa-cloud-upload-alt" style="display:block;font-size:1.2rem;margin-bottom:.2rem;"></i>No report uploaded</div>
             @endif
         </div>
     </div>
@@ -63,7 +97,9 @@
 
 {{-- Upload Form --}}
 <div class="card" style="border-color:#e8a838;">
-    <div class="card-header" style="background:#fffbeb;"><h3 style="color:#92400e;"><i class="fas fa-upload" style="margin-right:.5rem;"></i> Upload New Inspection Report</h3></div>
+    <div class="card-header" style="background:#fffbeb;">
+        <h3 style="color:#92400e;"><i class="fas fa-upload" style="margin-right:.5rem;"></i> Upload New Inspection Report</h3>
+    </div>
     <div class="card-body">
         <form method="POST" action="{{ route('sourcing.inspections.store', $consignment) }}" enctype="multipart/form-data">
             @csrf
@@ -92,17 +128,31 @@
                     <div style="font-size:.65rem;color:#94a3b8;margin-top:.2rem;">PDF, JPG, PNG, DOC, XLSX — Max 20MB</div>
                 </div>
             </div>
-            <div class="form-group" style="margin-top:.5rem;">
-                <label>Product (Optional — for product-specific inspection)</label>
-                <select name="product_id" style="font-family:inherit;">
-                    <option value="">All products in consignment</option>
-                    @if($consignment->liveSheet)
+            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:1rem;">
+
+                <div class="form-group">
+                    <label>Commercial Invoice </label>
+                    <input type="file" accept=".pdf,.jpg,.jpeg,.png,.doc,.docx,.xlsx" name="commercial_invoice" style="font: size 0.82em;">
+                    <div style="font-size:.65rem;color:#94a3b8;margin-top:.2rem;">PDF, JPG, PNG, DOC, XLSX — Max 20MB</div>
+                </div>
+                <div class="form-group">
+                    <label>Packing List </label>
+                    <input type="file" accept=".pdf,.jpg,.jpeg,.png,.doc,.docx,.xlsx" name="packing_list" style="font-size:.82rem;">
+                    <div style="font-size:.65rem;color:#94a3b8;margin-top:.2rem;">PDF, JPG, PNG, DOC, XLSX — Max 20MB</div>
+                </div>
+                <div class="form-group">
+                    <label>Product (Optional — for product-specific inspection)</label>
+                    <select name="product_id" style="font-family:inherit;">
+                        <option value="">All products in consignment</option>
+                        @if($consignment->liveSheet)
                         @foreach($consignment->liveSheet->items as $item)
-                            <option value="{{ $item->product_id }}">{{ $item->product->sku ?? '' }} — {{ $item->product->name ?? '' }}</option>
+                        <option value="{{ $item->product_id }}">{{ $item->product->sku ?? '' }} — {{ $item->product->name ?? '' }}</option>
                         @endforeach
-                    @endif
-                </select>
+                        @endif
+                    </select>
+                </div>
             </div>
+
             <div class="form-group" style="margin-top:.5rem;">
                 <label>Remarks / Findings</label>
                 <textarea name="remarks" rows="3" placeholder="Describe inspection findings, defects found, corrective actions needed..." style="font-family:inherit;font-size:.82rem;width:100%;padding:.5rem .65rem;border:1px solid #d1d5db;border-radius:8px;resize:vertical;"></textarea>
@@ -118,7 +168,9 @@
 {{-- Timeline --}}
 @if($consignment->inspectionReports->count() > 0)
 <div class="card" style="margin-top:1.25rem;">
-    <div class="card-header"><h3><i class="fas fa-history" style="margin-right:.5rem;color:#64748b;"></i> Inspection Timeline</h3></div>
+    <div class="card-header">
+        <h3><i class="fas fa-history" style="margin-right:.5rem;color:#64748b;"></i> Inspection Timeline</h3>
+    </div>
     <div class="card-body">
         <div style="display:flex;flex-direction:column;gap:.75rem;">
             @foreach($consignment->inspectionReports->sortByDesc('created_at') as $r)

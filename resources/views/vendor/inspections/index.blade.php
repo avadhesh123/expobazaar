@@ -62,7 +62,10 @@
                     <th>Type</th>
                     <th>Report</th>
                     <th>Result</th>
-                    <th>Remarks</th>
+                 
+                    <th>Commercial Invoice</th>
+                    <th>Packing List</th>
+                       <th>Remarks</th>
                     <th>Uploaded By</th>
                     <th>Date</th>
                     <th>Download</th>
@@ -88,6 +91,26 @@
                         <span class="badge {{ $resultColors[$report->result] ?? 'badge-gray' }}">
                             {{ ucfirst($report->result) }}
                         </span>
+                    </td>
+                     <td>
+                        @if($report->commercial_invoice_file)
+                        <a href="{{ Storage::url($report->commercial_invoice_file) }}" target="_blank" style="font-size:.82rem;color:#1e40af;">
+                            <i class="fas fa-file-pdf" style="margin-right:.2rem;"></i>
+                            {{ Str::limit($report->commercial_invoice_name, 25) }}
+                        </a>
+                        @else
+                        —
+                        @endif
+                    </td>
+                    <td>
+                        @if($report->packing_list_file)
+                        <a href="{{ Storage::url($report->packing_list_file) }}" target="_blank" style="font-size:.82rem;color:#1e40af;">
+                            <i class="fas fa-file-pdf" style="margin-right:.2rem;"></i>
+                            {{ Str::limit($report->packing_list_name, 25) }}
+                        </a>
+                        @else
+                        —
+                        @endif
                     </td>
                     <td style="font-size:.82rem;max-width:200px;">
                         {{ $report->remarks ? Str::limit($report->remarks, 80) : '—' }}

@@ -439,27 +439,42 @@ class SourcingController extends Controller
 
     public function storeInspection(Request $request, Consignment $consignment)
     {
-        $request->validate([
+        $validated = $request->validate([
             'inspection_type' => 'required|in:inline,midline,final',
             'report_file'     => 'required|file|mimes:pdf,jpg,jpeg,png,doc,docx,xlsx|max:20480',
+            'commercial_invoice' => 'nullable|file|mimes:pdf,jpg,jpeg,png,doc,docx,xlsx|max:20480',
+            'packing_list'       => 'nullable|file|mimes:pdf,jpg,jpeg,png,doc,docx,xlsx|max:20480',
             'result'          => 'required|in:passed,failed,conditional',
             'remarks'         => 'nullable|string|max:1000',
         ]);
 
-        $file = $request->file('report_file');
-        $path = $file->store('inspection-reports/' . $consignment->id, 'public');
+        $folder = 'inspection-reports/' . $consignment->id;
 
-        \App\Models\InspectionReport::create([
-            'consignment_id'  => $consignment->id,
-            'product_id'      => $request->product_id,
-            'inspection_type' => $request->inspection_type,
-            'report_file'     => $path,
-            'report_name'     => $file->getClientOriginalName(),
-            'result'          => $request->result,
-            'remarks'         => $request->remarks,
-            'findings'        => $request->findings ? json_decode($request->findings, true) : null,
-            'uploaded_by'     => auth()->id(),
-        ]);
+        $data = [
+            'consignment_id'     => $consignment->id,
+            'product_id'         => $request->product_id,
+            'inspection_type'    => $validated['inspection_type'],
+            'report_file'        => $request->file('report_file')->store($folder, 'public'),
+            'report_name'        => $request->file('report_file')->getClientOriginalName(),
+            'result'             => $validated['result'] ?? null,
+            'remarks'            => $validated['remarks'] ?? null,
+            'findings'          => $request->findings ? json_decode($request->findings, true) : null,
+            'uploaded_by'        => auth()->id(),
+        ];
+
+        // Commercial Invoice
+        if ($request->hasFile('commercial_invoice')) {
+            $data['commercial_invoice_file'] = $request->file('commercial_invoice')->store($folder, 'public');
+            $data['commercial_invoice_name'] = $request->file('commercial_invoice')->getClientOriginalName();
+        }
+
+        // Packing List
+        if ($request->hasFile('packing_list')) {
+            $data['packing_list_file'] = $request->file('packing_list')->store($folder, 'public');
+            $data['packing_list_name'] = $request->file('packing_list')->getClientOriginalName();
+        }
+
+        \App\Models\InspectionReport::create($data);
 
         \App\Models\ActivityLog::log('uploaded', 'inspection', $consignment, null, [
             'type' => $request->inspection_type,
@@ -467,7 +482,7 @@ class SourcingController extends Controller
         ], ucfirst($request->inspection_type) . ' inspection uploaded');
 
         return redirect()->route('sourcing.inspections.upload', $consignment)
-            ->with('success', ucfirst($request->inspection_type) . ' inspection report uploaded — Result: ' . ucfirst($request->result));
+            ->with('success', 'Inspection report uploaded successfully.');
     }
 
     public function showInspection(\App\Models\InspectionReport $inspection)

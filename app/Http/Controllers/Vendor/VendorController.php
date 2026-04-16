@@ -401,8 +401,8 @@ class VendorController extends Controller
                 // Sub-category as child
                 if (!empty($p['sub_category'])) {
                     $subCat = Category::firstOrCreate(
-                        ['slug' => Str::slug($p['sub_category']), 'parent_id' => $cat->id],
-                        ['name' => $p['sub_category'], 'sort_order' => 0]
+                        ['slug' => Str::slug($p['sub_category'])],
+                        ['name' => $p['sub_category'], 'parent_id' => $cat->id, 'sort_order' => 0]
                     );
                     $categoryId = $subCat->id;
                 }
@@ -1436,16 +1436,68 @@ class VendorController extends Controller
 
         return $rows;
     }
-
     public function uploadInspection(Request $request, Consignment $consignment)
     {
-        $request->validate(['inspection_type' => 'required|in:inline,midline,final', 'report' => 'required|file|max:20480']);
+        $validated = $request->validate([
+            'inspection_type'    => 'required|in:inline,midline,final',
+            'report'             => 'required|file|mimes:pdf,jpg,jpeg,png,doc,docx,xlsx|max:20480',
+            'commercial_invoice' => 'nullable|file|mimes:pdf,jpg,jpeg,png,doc,docx,xlsx|max:20480',
+            'packing_list'       => 'nullable|file|mimes:pdf,jpg,jpeg,png,doc,docx,xlsx|max:20480',
+            'result'             => 'nullable|string',
+            'remarks'            => 'nullable|string',
+        ]);
+
+        $folder = 'inspection-reports/' . $consignment->id;
+
+        $data = [
+            'consignment_id'     => $consignment->id,
+            'inspection_type'    => $validated['inspection_type'],
+            'report_file'        => $request->file('report')->store($folder, 'public'),
+            'report_name'        => $request->file('report')->getClientOriginalName(),
+            'result'             => $validated['result'] ?? null,
+            'remarks'            => $validated['remarks'] ?? null,
+            'uploaded_by'        => auth()->id(),
+        ];
+
+        // Commercial Invoice
+        if ($request->hasFile('commercial_invoice')) {
+            $data['commercial_invoice_file'] = $request->file('commercial_invoice')->store($folder, 'public');
+            $data['commercial_invoice_name'] = $request->file('commercial_invoice')->getClientOriginalName();
+        }
+
+        // Packing List
+        if ($request->hasFile('packing_list')) {
+            $data['packing_list_file'] = $request->file('packing_list')->store($folder, 'public');
+            $data['packing_list_name'] = $request->file('packing_list')->getClientOriginalName();
+        }
+
+        file_put_contents("storage/logs/VendorInspection.log" . date("Y-m-d") . ".log", print_r($data, true) . "\n", FILE_APPEND);
+
+        \App\Models\InspectionReport::create($data);
+
+        \App\Models\ActivityLog::log('uploaded', 'inspection', $consignment, null, [
+            'type' => $request->inspection_type,
+            'result' => $request->result
+        ], ucfirst($request->inspection_type) . ' inspection uploaded by vendor.');
+
+        return back()->with('success', 'Inspection report uploaded successfully.');
+    }
+    public function uploadInspectionBACK(Request $request, Consignment $consignment)
+    {
+        $request->validate(['inspection_type' => 'required|in:inline,midline,final', 'report' => 'required|file|max:20480', 'commercial_invoice' => 'nullable|file|max:20480', 'packing_list' => 'nullable|file|max:20480']);
         $path = $request->file('report')->store('inspections/' . $consignment->id, 'public');
+
+        $com_inv_path = $request->file('commercial_invoice')->store('inspections/' . $consignment->id, 'public');
+        $pack_list_path = $request->file('packing_list')->store('inspections/' . $consignment->id, 'public');
         \App\Models\InspectionReport::create([
             'consignment_id' => $consignment->id,
             'inspection_type' => $request->inspection_type,
             'report_file' => $path,
             'report_name' => $request->file('report')->getClientOriginalName(),
+            'commercial_invoice_file' => $com_inv_path,
+            'commercial_invoice_name' => $request->file('commercial_invoice') ? $request->file('commercial_invoice')->getClientOriginalName() : null,
+            'packing_list_file' => $pack_list_path,
+            'packing_list_name' => $request->file('packing_list') ? $request->file('packing_list')->getClientOriginalName() : null,
             'result' => $request->result,
             'remarks' => $request->remarks,
             'uploaded_by' => auth()->id(),
@@ -1455,7 +1507,8 @@ class VendorController extends Controller
     public function uploadCommercialInvoice(Request $request, Consignment $consignment)
     {
         $request->validate(['commercial_invoice' => 'nullable|file|max:20480', 'packing_list' => 'nullable|file|max:20480']);
-print_r($request->all());exit;
+        print_r($request->all());
+        exit;
         $path = $request->file('commercial_invoice')->store('inspections/' . $consignment->id, 'public');
         $path = $request->file('packing_list')->store('inspections/' . $consignment->id, 'public');
 
