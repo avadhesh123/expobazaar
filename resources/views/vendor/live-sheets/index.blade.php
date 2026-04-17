@@ -86,7 +86,7 @@
                         </div>
 
                         <div style="font-size:.65rem;color:#94a3b8;margin-top:.2rem;">
-                            Latest: {{ now()->addDays(90)->format('d M Y') }}
+                            Latest: {{ now()->addDays(75)->format('d M Y') }}
                         </div>
 
                         @elseif($ls->consignment_id)
@@ -121,7 +121,7 @@
                         </div>
                         <div class="insp-hint-{{ $ls->id }}" style="font-size:.65rem;color:#94a3b8;margin-top:.2rem;">
                             @if($exFactory)
-                            Latest: {{ \Carbon\Carbon::parse($exFactory)->addDays(10)->format('d M Y') }}
+                            Latest: {{ \Carbon\Carbon::parse($exFactory)->addDays(7)->format('d M Y') }}
                             @else
                             Set Goods Ready Date first
                             @endif
@@ -149,7 +149,6 @@
                             @csrf
                             <button type="submit" class="btn btn-success btn-sm" style="margin-top: 2px;"><i class="fas fa-box"></i> Create Consignment</button>
                         </form>
-
                         @endif
 
                     </td>

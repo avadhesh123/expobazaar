@@ -593,6 +593,10 @@ class VendorController extends Controller
      * Extract embedded images from Excel sheet and save to storage
      * Returns array keyed by row number => saved file path
      */
+    /**
+     * Extract embedded images from Excel sheet and save to storage.
+     * Returns array keyed by spreadsheet row number => saved file path.
+     */
     protected function extractExcelImages($sheet, string $excelFilePath = ''): array
     {
         $imageMap = [];
@@ -602,49 +606,57 @@ class VendorController extends Controller
             $drawings = $sheet->getDrawingCollection();
 
             foreach ($drawings as $drawing) {
+                // getCoordinates() returns the top-left anchor cell (e.g. "D2")
+                // This is reliable for row detection regardless of image size/offset
                 $coordinates = $drawing->getCoordinates();
                 preg_match('/([A-Z]+)(\d+)/', $coordinates, $matches);
                 $row = (int) ($matches[2] ?? 0);
 
                 if ($row < 2) {
-                    continue; // Skip header row images (like logo)
+                    continue; // Skip header row images (logos etc.)
                 }
 
+                $destDir  = 'offer-thumbnails/' . $vendorId;
+
+                $skuRaw = trim((string) $sheet->getCell('B' . $row)->getValue());
+                $cleanSku = preg_replace('/[^A-Za-z0-9\-_]/', '', $skuRaw);
+
+                // Fallback if cleaning removes everything
+                if (empty($cleanSku)) {
+                    $cleanSku = 'product-row' . $row;
+                }
+
+                // $filename = 'offer-img-' . $vendorId . '-row' . $row . '-' . time() . '-' . mt_rand(1000, 9999);
+                $filename = 'offer-img-' . $vendorId . '-' . $cleanSku;
                 $imagePath = null;
-                $filename = 'offer-img-' . $vendorId . '-' . $row . '-' . time() . '-' . mt_rand(100, 999);
-                $destDir = 'offer-thumbnails/' . $vendorId;
-
+                file_put_contents("storage/logs/ExcelImages" . date('Y-m-d') . ".log", "Processing drawing at row {$row} with coordinates {$coordinates} \t {$filename}\n", FILE_APPEND);
                 if ($drawing instanceof \PhpOffice\PhpSpreadsheet\Worksheet\Drawing) {
-                    // File-based drawing — path may be a zip:// internal path
                     $sourcePath = $drawing->getPath();
-                    $ext = strtolower(pathinfo($sourcePath, PATHINFO_EXTENSION) ?: 'png');
-                    $fullFilename = $filename . '.' . $ext;
-                    $destPath = $destDir . '/' . $fullFilename;
+                    $ext        = strtolower(pathinfo($sourcePath, PATHINFO_EXTENSION) ?: 'png');
+                    $destPath   = $destDir . '/' . $filename . '.' . $ext;
+                    $imageData  = null;
 
-                    $imageData = null;
-
-                    // Method 1: Direct file (rare — only if image is external reference)
-                    if (file_exists($sourcePath) && !str_starts_with($sourcePath, 'zip://')) {
+                    // Method 1: Direct filesystem reference
+                    if (!str_starts_with($sourcePath, 'zip://') && file_exists($sourcePath)) {
                         $imageData = file_get_contents($sourcePath);
                     }
 
-                    // Method 2: Read from zip path (zip://filepath#internal/path)
+                    // Method 2: zip:// stream wrapper (PhpSpreadsheet's internal path)
                     if (!$imageData && str_starts_with($sourcePath, 'zip://')) {
                         $imageData = @file_get_contents($sourcePath);
                     }
 
-                    // Method 3: Extract directly from the xlsx zip archive
+                    // Method 3: Open the xlsx zip directly and locate by basename
                     if (!$imageData && $excelFilePath && file_exists($excelFilePath)) {
                         $zip = new \ZipArchive();
                         if ($zip->open($excelFilePath) === true) {
-                            // Find the image file in xl/media/
+                            $base = basename($sourcePath);
                             for ($i = 0; $i < $zip->numFiles; $i++) {
-                                $zipEntry = $zip->getNameIndex($i);
-                                if (str_contains($zipEntry, 'media/') && str_contains($sourcePath, basename($zipEntry))) {
+                                $entry = $zip->getNameIndex($i);
+                                if (str_contains($entry, 'media/') && basename($entry) === $base) {
                                     $imageData = $zip->getFromIndex($i);
-                                    $ext = strtolower(pathinfo($zipEntry, PATHINFO_EXTENSION) ?: 'png');
-                                    $fullFilename = $filename . '.' . $ext;
-                                    $destPath = $destDir . '/' . $fullFilename;
+                                    $ext       = strtolower(pathinfo($entry, PATHINFO_EXTENSION) ?: 'png');
+                                    $destPath  = $destDir . '/' . $filename . '.' . $ext;
                                     break;
                                 }
                             }
@@ -657,17 +669,15 @@ class VendorController extends Controller
                         $imagePath = $destPath;
                     }
                 } elseif ($drawing instanceof \PhpOffice\PhpSpreadsheet\Worksheet\MemoryDrawing) {
-                    // In-memory drawing (pasted/embedded image)
                     $ext = match ($drawing->getMimeType()) {
                         \PhpOffice\PhpSpreadsheet\Worksheet\MemoryDrawing::MIMETYPE_PNG  => 'png',
                         \PhpOffice\PhpSpreadsheet\Worksheet\MemoryDrawing::MIMETYPE_GIF  => 'gif',
                         \PhpOffice\PhpSpreadsheet\Worksheet\MemoryDrawing::MIMETYPE_JPEG => 'jpg',
-                        default => 'png',
+                        default                                                           => 'png',
                     };
-                    $fullFilename = $filename . '.' . $ext;
-                    $destPath = $destDir . '/' . $fullFilename;
-
+                    $destPath     = $destDir . '/' . $filename . '.' . $ext;
                     $imageResource = $drawing->getImageResource();
+
                     if ($imageResource) {
                         ob_start();
                         match ($ext) {
@@ -686,13 +696,17 @@ class VendorController extends Controller
                 }
 
                 if ($imagePath) {
-                    $imageMap[$row] = $imagePath;
+                    // If multiple images anchor to the same row, keep the first one
+                    if (!isset($imageMap[$row])) {
+                        $imageMap[$row] = $imagePath;
+                    }
                 }
             }
 
-            // Fallback: Extract ALL images from xlsx zip and map by order
+            // Fallback: PhpSpreadsheet returned no drawings — parse zip directly
+            // using the drawing XML relationship IDs to correctly pair images with rows
             if (empty($imageMap) && $excelFilePath && file_exists($excelFilePath)) {
-                $imageMap = $this->extractImagesFromZip($excelFilePath, $vendorId);
+                $imageMap = $this->extractImagesFromZip($excelFilePath, $vendorId, $filename);
             }
         } catch (\Exception $e) {
             \Log::warning('Image extraction error: ' . $e->getMessage());
@@ -702,10 +716,10 @@ class VendorController extends Controller
     }
 
     /**
-     * Fallback: Extract images directly from xlsx zip archive
-     * Maps images to data rows by order (image 1 → row 2, image 2 → row 3, etc.)
+     * Fallback image extractor: reads drawing1.xml relationships to correctly
+     * map each image file to its anchor row. This is accurate for any sheet size.
      */
-    protected function extractImagesFromZip(string $excelFilePath, int $vendorId): array
+    protected function extractImagesFromZip(string $excelFilePath, int $vendorId, string $filename): array
     {
         $imageMap = [];
 
@@ -715,52 +729,97 @@ class VendorController extends Controller
                 return $imageMap;
             }
 
-            $mediaFiles = [];
-            for ($i = 0; $i < $zip->numFiles; $i++) {
-                $name = $zip->getNameIndex($i);
-                if (str_starts_with($name, 'xl/media/')) {
-                    $mediaFiles[] = ['index' => $i, 'name' => $name];
+            // ── Step 1: Parse drawing relationships (rId → media filename) ──────
+            // xl/drawings/_rels/drawing1.xml.rels maps relationship IDs to media files
+            $rIdToMedia = [];
+            $relsXml = @$zip->getFromName('xl/drawings/_rels/drawing1.xml.rels');
+            if ($relsXml) {
+                // Each Relationship looks like:
+                // <Relationship Id="rId1" Target="../media/image1.png" .../>
+                preg_match_all(
+                    '/Id="([^"]+)"[^>]+Target="[^"]*media\/([^"]+)"/',
+                    $relsXml,
+                    $relMatches,
+                    PREG_SET_ORDER
+                );
+                foreach ($relMatches as $m) {
+                    $rIdToMedia[$m[1]] = $m[2]; // e.g. 'rId1' => 'image1.png'
                 }
             }
 
-            // Try to read drawing XML to get row anchors
-            $rowAnchors = [];
+            // ── Step 2: Parse drawing1.xml — map each anchor row to its rId ─────
+            // Each <xdr:twoCellAnchor> or <xdr:oneCellAnchor> has:
+            //   <xdr:from><xdr:row>N</xdr:row>...</xdr:from>
+            //   <a:blip r:embed="rId1"/>
+            $rowToRId = [];
             $drawingXml = @$zip->getFromName('xl/drawings/drawing1.xml');
             if ($drawingXml) {
-                preg_match_all('/<xdr:from>.*?<xdr:row>(\d+)<\/xdr:row>.*?<\/xdr:from>/s', $drawingXml, $anchorMatches);
-                if (!empty($anchorMatches[1])) {
-                    $rowAnchors = array_map('intval', $anchorMatches[1]);
+                // Match each anchor block containing both row and rId
+                preg_match_all(
+                    '/<xdr:from>\s*<xdr:col>\d+<\/xdr:col>\s*<xdr:colOff>\d+<\/xdr:colOff>\s*<xdr:row>(\d+)<\/xdr:row>.*?r:embed="([^"]+)"/s',
+                    $drawingXml,
+                    $anchorMatches,
+                    PREG_SET_ORDER
+                );
+                foreach ($anchorMatches as $m) {
+                    $excelRow = (int)$m[1] + 1; // XML rows are 0-indexed; Excel rows are 1-indexed
+                    $rId      = $m[2];
+                    if ($excelRow >= 2) { // skip header row
+                        $rowToRId[$excelRow] = $rId;
+                    }
                 }
             }
 
+            // ── Step 3: Save each media file and build the row → path map ────────
             $destDir = 'offer-thumbnails/' . $vendorId;
-            $dataRowStart = 2; // Row 2 is first data row (row 1 = headers)
 
-            foreach ($mediaFiles as $idx => $media) {
-                $imageData = $zip->getFromIndex($media['index']);
+            foreach ($rowToRId as $excelRow => $rId) {
+                $mediaFilename = $rIdToMedia[$rId] ?? null;
+                if (!$mediaFilename) {
+                    continue;
+                }
+
+                $imageData = $zip->getFromName('xl/media/' . $mediaFilename);
                 if (!$imageData) {
                     continue;
                 }
 
-                $ext = strtolower(pathinfo($media['name'], PATHINFO_EXTENSION) ?: 'png');
-                $filename = 'offer-img-' . $vendorId . '-' . ($idx + 1) . '-' . time() . '.' . $ext;
-                $destPath = $destDir . '/' . $filename;
+                $ext      = strtolower(pathinfo($mediaFilename, PATHINFO_EXTENSION) ?: 'png');
+
+                //   $destPath = $destDir . '/offer-img-' . $vendorId . '-row' . $excelRow . '-' . time() . '-' . mt_rand(1000, 9999) . '.' . $ext;
+                $destPath = $destDir . '/' . $filename . '.' . $ext;
+                file_put_contents("storage/logs/ImagesFromZip" . date('Y-m-d') . ".log", "{$mediaFilename}\t{$destPath}\n", FILE_APPEND);
 
                 \Storage::disk('public')->put($destPath, $imageData);
+                $imageMap[$excelRow] = $destPath;
+            }
 
-                // Map to row: use anchor if available, otherwise sequential
-                if (isset($rowAnchors[$idx])) {
-                    $row = $rowAnchors[$idx] + 1; // Excel rows are 0-indexed in XML
-                    if ($row >= $dataRowStart) {
-                        $imageMap[$row] = $destPath;
+            // ── Step 4: If drawing XML had no parseable relationships, fall back  ─
+            // to saving all media files sequentially (last resort, best-effort)
+            if (empty($imageMap)) {
+                $mediaFiles = [];
+                for ($i = 0; $i < $zip->numFiles; $i++) {
+                    $name = $zip->getNameIndex($i);
+                    if (str_starts_with($name, 'xl/media/')) {
+                        $mediaFiles[] = ['index' => $i, 'name' => $name];
                     }
-                } else {
-                    // Sequential: skip first image if it's likely a logo (row 1)
-                    $row = $dataRowStart + $idx;
-                    if ($idx === 0 && count($mediaFiles) > 1) {
-                        continue; // Skip first image (probably logo)
+                }
+
+                // Sort by filename so image1, image2... are in order
+                usort($mediaFiles, fn($a, $b) => strnatcmp($a['name'], $b['name']));
+
+                $dataRow = 2;
+                foreach ($mediaFiles as $media) {
+                    $imageData = $zip->getFromIndex($media['index']);
+                    if (!$imageData) {
+                        continue;
                     }
-                    $imageMap[$row] = $destPath;
+                    $ext      = strtolower(pathinfo($media['name'], PATHINFO_EXTENSION) ?: 'png');
+                    //  $destPath = $destDir . '/offer-img-' . $vendorId . '-row' . $dataRow . '-' . time() . '-' . mt_rand(1000, 9999) . '.' . $ext;
+                    $destPath = $destDir . '/' . $filename . '.' . $ext;
+                    \Storage::disk('public')->put($destPath, $imageData);
+                    $imageMap[$dataRow] = $destPath;
+                    $dataRow++;
                 }
             }
 
@@ -771,6 +830,7 @@ class VendorController extends Controller
 
         return $imageMap;
     }
+
 
     /**
      * Show offer sheet detail — tabular view with all columns from template

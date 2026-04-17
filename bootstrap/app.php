@@ -18,6 +18,36 @@ return Application::configure(basePath: dirname(__DIR__))
             'company.code' => \App\Http\Middleware\CheckCompanyCode::class,
             'vendor.kyc.approved' => \App\Http\Middleware\VendorKycApproved::class,
         ]);
+
+        // Tell the 'auth' middleware where to redirect unauthenticated users
+        // (default tries route('login') which doesn't exist in this app)
+        $middleware->redirectGuestsTo(function ($request) {
+            if ($request->expectsJson() || $request->ajax()) {
+                return null; // Returns 401 JSON for AJAX
+            }
+            return route('auth.login');
+        });
+
+        // Tell the 'guest' middleware where to redirect authenticated users
+        $middleware->redirectUsersTo(function ($request) {
+            $user = $request->user();
+            if (!$user) {
+                return '/';
+            }
+            if ($user->user_type === 'vendor') {
+                return route('vendor.dashboard');
+            }
+            return match ($user->department) {
+                'admin'       => route('admin.dashboard'),
+                'sourcing'    => route('sourcing.dashboard'),
+                'logistics'   => route('logistics.dashboard'),
+                'finance'     => route('finance.dashboard'),
+                'sales'       => route('sales.dashboard'),
+                'hod'         => route('hod.dashboard'),
+                'cataloguing' => route('cataloguing.dashboard'),
+                default       => '/',
+            };
+        });
     })
     ->withExceptions(function (Exceptions $exceptions) {
 
