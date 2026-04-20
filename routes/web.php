@@ -10,7 +10,6 @@ use App\Http\Controllers\Cataloguing\CatalogueController;
 use App\Http\Controllers\Sales\SalesController;
 use App\Http\Controllers\Finance\FinanceController;
 use App\Http\Controllers\Hod\HodController;
-
 use Illuminate\Support\Facades\Auth;
 
 // Authentication (Email OTP)
@@ -22,14 +21,10 @@ Route::prefix('auth')->name('auth.')->group(function () {
     Route::match(['get', 'post'], 'logout', [AuthController::class, 'logout'])->name('logout');
 });
 
-Route::get('/', fn() => redirect()->route('auth.login'));
+Route::get('/', fn () => redirect()->route('auth.login'));
 
-Route::get('auth/logout', function () {
-    Auth::logout();
-    request()->session()->invalidate();
-    request()->session()->regenerateToken();
-    return redirect()->route('auth.login');
-})->name('auth.logout');
+// Default 'login' route alias — Laravel's built-in middleware expects this name
+Route::redirect('/login', '/auth/login')->name('login');
 
 Route::middleware(['auth'])->group(function () {
 
@@ -262,7 +257,7 @@ Route::middleware(['auth'])->group(function () {
     });
 
     // NOTIFICATIONS
-    Route::get('notifications', fn() => view('components.notifications', ['notifications' => auth()->user()->unreadNotifications()->take(50)->get()]))->name('notifications');
-    Route::post('notifications/{id}/read', fn($id) => tap(back(), fn() => auth()->user()->notifications()->where('id', $id)->update(['read_at' => now()])))->name('notifications.read');
-    Route::post('notifications/mark-all-read', fn() => tap(back(), fn() => auth()->user()->unreadNotifications->markAsRead()))->name('notifications.mark-all-read');
+    Route::get('notifications', fn () => view('components.notifications', ['notifications' => auth()->user()->unreadNotifications()->take(50)->get()]))->name('notifications');
+    Route::post('notifications/{id}/read', fn ($id) => tap(back(), fn () => auth()->user()->notifications()->where('id', $id)->update(['read_at' => now()])))->name('notifications.read');
+    Route::post('notifications/mark-all-read', fn () => tap(back(), fn () => auth()->user()->unreadNotifications->markAsRead()))->name('notifications.mark-all-read');
 });

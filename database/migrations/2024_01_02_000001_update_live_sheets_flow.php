@@ -1,79 +1,69 @@
 <?php
 
 use Illuminate\Database\Migrations\Migration;
-use Illuminate\Support\Facades\DB;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
 
-return new class () extends Migration {
+return new class extends Migration
+{
     public function up(): void
     {
-        // 1. live_sheets: make consignment_id nullable, add new columns
-        DB::statement('ALTER TABLE live_sheets DROP FOREIGN KEY live_sheets_consignment_id_foreign');
-        DB::statement('ALTER TABLE live_sheets DROP COLUMN consignment_id');
-        DB::statement('ALTER TABLE live_sheets ADD COLUMN consignment_id BIGINT UNSIGNED NULL');
-        DB::statement('ALTER TABLE live_sheets ADD CONSTRAINT live_sheets_consignment_id_foreign FOREIGN KEY (consignment_id) REFERENCES consignments(id) ON DELETE SET NULL');
+        // Make consignment_id nullable (live sheet is now created BEFORE consignment)
+        Schema::table('live_sheets', function (Blueprint $table) {
+            // Drop the foreign key first, then modify column
+            $table->dropForeign(['consignment_id']);
+        });
 
-        if (!$this->columnExists('live_sheets', 'offer_sheet_id')) {
-            DB::statement('ALTER TABLE live_sheets ADD COLUMN offer_sheet_id BIGINT UNSIGNED NULL AFTER consignment_id');
-            DB::statement('ALTER TABLE live_sheets ADD CONSTRAINT live_sheets_offer_sheet_id_foreign FOREIGN KEY (offer_sheet_id) REFERENCES offer_sheets(id) ON DELETE SET NULL');
-        }
-        if (!$this->columnExists('live_sheets', 'vendor_id')) {
-            DB::statement('ALTER TABLE live_sheets ADD COLUMN vendor_id BIGINT UNSIGNED NULL AFTER offer_sheet_id');
-            DB::statement('ALTER TABLE live_sheets ADD CONSTRAINT live_sheets_vendor_id_foreign FOREIGN KEY (vendor_id) REFERENCES vendors(id) ON DELETE CASCADE');
-        }
-        if (!$this->columnExists('live_sheets', 'company_code')) {
-            DB::statement('ALTER TABLE live_sheets ADD COLUMN company_code VARCHAR(4) NULL AFTER vendor_id');
-        }
+        Schema::table('live_sheets', function (Blueprint $table) {
+            $table->unsignedBigInteger('consignment_id')->nullable()->change();
+            $table->foreign('consignment_id')->references('id')->on('consignments')->onDelete('set null');
 
-        // 2. live_sheet_items: make consignment_id nullable
-        DB::statement('ALTER TABLE live_sheet_items DROP FOREIGN KEY live_sheet_items_consignment_id_foreign');
-        DB::statement('ALTER TABLE live_sheet_items DROP COLUMN consignment_id');
-        DB::statement('ALTER TABLE live_sheet_items ADD COLUMN consignment_id BIGINT UNSIGNED NULL');
-        DB::statement('ALTER TABLE live_sheet_items ADD CONSTRAINT live_sheet_items_consignment_id_foreign FOREIGN KEY (consignment_id) REFERENCES consignments(id) ON DELETE SET NULL');
+            // Add new columns for the updated flow
+            $table->foreignId('offer_sheet_id')->nullable()->after('consignment_id')->constrained('offer_sheets')->onDelete('set null');
+            $table->foreignId('vendor_id')->nullable()->after('offer_sheet_id')->constrained('vendors')->onDelete('cascade');
+            $table->string('company_code', 4)->nullable()->after('vendor_id');
+        });
 
-        // 3. consignments: add live_sheet_id
-        if (!$this->columnExists('consignments', 'live_sheet_id')) {
-            DB::statement('ALTER TABLE consignments ADD COLUMN live_sheet_id BIGINT UNSIGNED NULL');
-            DB::statement('ALTER TABLE consignments ADD CONSTRAINT consignments_live_sheet_id_foreign FOREIGN KEY (live_sheet_id) REFERENCES live_sheets(id) ON DELETE SET NULL');
-        }
+        // Make consignment_id nullable on live_sheet_items too
+        Schema::table('live_sheet_items', function (Blueprint $table) {
+            $table->dropForeign(['consignment_id']);
+        });
+
+        Schema::table('live_sheet_items', function (Blueprint $table) {
+            $table->unsignedBigInteger('consignment_id')->nullable()->change();
+            $table->foreign('consignment_id')->references('id')->on('consignments')->onDelete('set null');
+        });
+
+        // Add offer_sheet_id and live_sheet_id to consignments (reverse link)
+        Schema::table('consignments', function (Blueprint $table) {
+            if (!Schema::hasColumn('consignments', 'live_sheet_id')) {
+                $table->foreignId('live_sheet_id')->nullable()->after('offer_sheet_id')->constrained('live_sheets')->onDelete('set null');
+            }
+        });
     }
 
     public function down(): void
     {
-        if ($this->columnExists('consignments', 'live_sheet_id')) {
-            DB::statement('ALTER TABLE consignments DROP FOREIGN KEY consignments_live_sheet_id_foreign');
-            DB::statement('ALTER TABLE consignments DROP COLUMN live_sheet_id');
-        }
+        Schema::table('consignments', function (Blueprint $table) {
+            if (Schema::hasColumn('consignments', 'live_sheet_id')) {
+                $table->dropForeign(['live_sheet_id']);
+                $table->dropColumn('live_sheet_id');
+            }
+        });
 
-        DB::statement('ALTER TABLE live_sheet_items DROP FOREIGN KEY live_sheet_items_consignment_id_foreign');
-        DB::statement('ALTER TABLE live_sheet_items DROP COLUMN consignment_id');
-        DB::statement('ALTER TABLE live_sheet_items ADD COLUMN consignment_id BIGINT UNSIGNED NOT NULL');
-        DB::statement('ALTER TABLE live_sheet_items ADD CONSTRAINT live_sheet_items_consignment_id_foreign FOREIGN KEY (consignment_id) REFERENCES consignments(id) ON DELETE CASCADE');
+        Schema::table('live_sheet_items', function (Blueprint $table) {
+            $table->dropForeign(['consignment_id']);
+            $table->unsignedBigInteger('consignment_id')->nullable(false)->change();
+            $table->foreign('consignment_id')->references('id')->on('consignments')->onDelete('cascade');
+        });
 
-        if ($this->columnExists('live_sheets', 'company_code')) {
-            DB::statement('ALTER TABLE live_sheets DROP COLUMN company_code');
-        }
-        if ($this->columnExists('live_sheets', 'vendor_id')) {
-            DB::statement('ALTER TABLE live_sheets DROP FOREIGN KEY live_sheets_vendor_id_foreign');
-            DB::statement('ALTER TABLE live_sheets DROP COLUMN vendor_id');
-        }
-        if ($this->columnExists('live_sheets', 'offer_sheet_id')) {
-            DB::statement('ALTER TABLE live_sheets DROP FOREIGN KEY live_sheets_offer_sheet_id_foreign');
-            DB::statement('ALTER TABLE live_sheets DROP COLUMN offer_sheet_id');
-        }
-
-        DB::statement('ALTER TABLE live_sheets DROP FOREIGN KEY live_sheets_consignment_id_foreign');
-        DB::statement('ALTER TABLE live_sheets DROP COLUMN consignment_id');
-        DB::statement('ALTER TABLE live_sheets ADD COLUMN consignment_id BIGINT UNSIGNED NOT NULL');
-        DB::statement('ALTER TABLE live_sheets ADD CONSTRAINT live_sheets_consignment_id_foreign FOREIGN KEY (consignment_id) REFERENCES consignments(id) ON DELETE CASCADE');
-    }
-
-    /**
-     * Check if column exists using SHOW COLUMNS — no information_schema query
-     */
-    private function columnExists(string $table, string $column): bool
-    {
-
-$result = DB::select("SHOW COLUMNS FROM `{$table}` WHERE Field = '{$column}'");
-        return count($result) > 0;
+        Schema::table('live_sheets', function (Blueprint $table) {
+            $table->dropForeign(['consignment_id']);
+            $table->dropForeign(['offer_sheet_id']);
+            $table->dropForeign(['vendor_id']);
+            $table->dropColumn(['offer_sheet_id', 'vendor_id', 'company_code']);
+            $table->unsignedBigInteger('consignment_id')->nullable(false)->change();
+            $table->foreign('consignment_id')->references('id')->on('consignments')->onDelete('cascade');
+        });
     }
 };

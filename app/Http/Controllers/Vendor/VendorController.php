@@ -967,9 +967,9 @@ class VendorController extends Controller
         if ($liveSheet->vendor_id !== $vendor->id) {
             abort(403);
         }
-        if ($liveSheet->is_locked) {
-            return back()->with('error', 'Live sheet is locked. Contact admin to unlock.');
-        }
+        // if ($liveSheet->is_locked) {
+        //    return back()->with('error', 'Live sheet is locked. Contact admin to unlock.');
+        // }
         return view('vendor.live-sheets.edit', compact('liveSheet', 'vendor'));
     }
 

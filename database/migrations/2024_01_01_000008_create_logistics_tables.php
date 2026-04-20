@@ -73,7 +73,7 @@ return new class extends Migration
             $table->foreignId('shipment_id')->constrained()->onDelete('cascade');
             $table->string('company_code');
             $table->enum('status', ['generated', 'pricing_pending', 'pricing_done', 'sent_to_warehouse'])->default('generated');
-            $table->text('items')->nullable();
+            $table->json('items')->nullable();
             $table->decimal('total_cbm', 12, 4)->default(0);
             $table->integer('total_items')->default(0);
             $table->foreignId('generated_by')->nullable()->constrained('users');
@@ -103,7 +103,7 @@ return new class extends Migration
 
         Schema::create('grn_items', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('grn_id')->constrained()->onDelete('cascade');
+            $table->foreignId('grn_id')->constrained('grn')->onDelete('cascade');
             $table->foreignId('product_id')->constrained();
             $table->foreignId('consignment_id')->nullable()->constrained();
             $table->integer('expected_quantity')->default(0);

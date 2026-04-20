@@ -36,13 +36,13 @@ return new class extends Migration
             $table->id();
             $table->foreignId('product_id')->constrained()->onDelete('cascade');
             $table->foreignId('sales_channel_id')->constrained()->onDelete('cascade');
-            $table->foreignId('platform_pricing_id')->nullable()->constrained()->onDelete('set null');
+            $table->foreignId('platform_pricing_id')->nullable()->constrained('platform_pricing')->onDelete('set null');
             $table->string('company_code');
             $table->string('listing_sku')->nullable();
             $table->string('listing_url')->nullable();
             $table->string('shopify_url')->nullable();
             $table->enum('listing_status', ['pending', 'listed', 'inactive', 'removed'])->default('pending');
-            $table->text('catalogue_details')->nullable();
+            $table->json('catalogue_details')->nullable();
             $table->foreignId('listed_by')->nullable()->constrained('users');
             $table->timestamp('listed_at')->nullable();
             $table->timestamps();
@@ -61,7 +61,7 @@ return new class extends Migration
             $table->integer('reserved_quantity')->default(0);
             $table->integer('available_quantity')->default(0);
             $table->date('received_date')->nullable();
-            $table->foreignId('grn_id')->nullable()->constrained()->onDelete('set null');
+            $table->foreignId('grn_id')->nullable()->constrained('grn')->onDelete('set null');
             $table->foreignId('consignment_id')->nullable()->constrained()->onDelete('set null');
             $table->timestamps();
 
