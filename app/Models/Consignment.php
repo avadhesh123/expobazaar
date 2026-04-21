@@ -11,21 +11,63 @@ class Consignment extends Model
     use HasFactory, SoftDeletes;
 
     protected $fillable = [
-        'consignment_number', 'vendor_id', 'offer_sheet_id', 'live_sheet_id',
-        'company_code', 'destination_country', 'status', 'total_cbm',
-        'total_items', 'total_value', 'currency', 'remarks', 'created_by',
+        'consignment_number',
+        'vendor_id',
+        'offer_sheet_id',
+        'live_sheet_id',
+        'company_code',
+        'destination_country',
+        'status',
+        'total_cbm',
+        'total_items',
+        'total_value',
+        'currency',
+        'remarks',
+        'created_by',
+        'commercial_invoice_file',
+        'commercial_invoice_number',
+        'commercial_invoice_upload_date',
+        'commercial_invoice_upload_by',
+        'packing_list_file',
+        'packing_list_number',
+        'packing_list_upload_date',
+        'packing_list_upload_by',
     ];
 
     protected $casts = [
         'total_cbm' => 'decimal:4',
         'total_value' => 'decimal:2',
+        'commercial_invoice_upload_date' => 'date',
+        'packing_list_upload_date' => 'date',
     ];
-
-    public function vendor() { return $this->belongsTo(Vendor::class); }
-    public function offerSheet() { return $this->belongsTo(OfferSheet::class); }
-    public function inspectionReports() { return $this->hasMany(InspectionReport::class); }
-    public function shipments() { return $this->belongsToMany(Shipment::class, 'shipment_consignments'); }
-    public function creator() { return $this->belongsTo(User::class, 'created_by'); }
+    public function commercialInvoiceUploader()
+    {
+        return $this->belongsTo(\App\Models\User::class, 'commercial_invoice_upload_by');
+    }
+    public function packingListUploader()
+    {
+        return $this->belongsTo(\App\Models\User::class, 'packing_list_upload_by');
+    }
+    public function vendor()
+    {
+        return $this->belongsTo(Vendor::class);
+    }
+    public function offerSheet()
+    {
+        return $this->belongsTo(OfferSheet::class);
+    }
+    public function inspectionReports()
+    {
+        return $this->hasMany(InspectionReport::class);
+    }
+    public function shipments()
+    {
+        return $this->belongsToMany(Shipment::class, 'shipment_consignments');
+    }
+    public function creator()
+    {
+        return $this->belongsTo(User::class, 'created_by');
+    }
 
     /**
      * Live sheet — try belongsTo first (consignments.live_sheet_id),
@@ -75,8 +117,14 @@ class Consignment extends Model
         return \App\Models\Grn::whereIn('shipment_id', $shipmentIds)->first();
     }
 
-    public function scopeByCompanyCode($query, $code) { return $query->where('company_code', $code); }
-    public function scopeReadyForShipment($query) { return $query->where('status', 'live_sheet_locked'); }
+    public function scopeByCompanyCode($query, $code)
+    {
+        return $query->where('company_code', $code);
+    }
+    public function scopeReadyForShipment($query)
+    {
+        return $query->where('status', 'live_sheet_locked');
+    }
 
     public static function generateNumber(string $companyCode, string $country): string
     {

@@ -951,6 +951,84 @@ class VendorController extends Controller
         return view('vendor.consignments.index', compact('consignments', 'vendor'));
     }
 
+    /**
+     * Upload Commercial Invoice for a consignment
+     */
+    public function uploadCommercialInvoice(Request $request, Consignment $consignment)
+    {
+        $vendor = auth()->user()->vendor;
+        if ($consignment->vendor_id !== $vendor->id) {
+            abort(403);
+        }
+
+        $request->validate([
+            'commercial_invoice_file'   => 'required|file|max:10240|mimes:pdf,jpg,jpeg,png',
+            'commercial_invoice_number' => 'required|string|max:100',
+        ], [
+            'commercial_invoice_file.required' => 'Please upload the Commercial Invoice file.',
+            'commercial_invoice_number.required' => 'Invoice number is required.',
+        ]);
+
+        try {
+            $path = $request->file('commercial_invoice_file')
+                ->store("consignments/{$consignment->id}/documents", 'public');
+
+            $consignment->update([
+                'commercial_invoice_file'        => $path,
+                'commercial_invoice_number'      => $request->commercial_invoice_number,
+                'commercial_invoice_upload_date'  => now()->toDateString(),
+                'commercial_invoice_upload_by'    => auth()->id(),
+            ]);
+
+            \App\Models\ActivityLog::log('uploaded', 'commercial_invoice', $consignment, null, [
+                'invoice_number' => $request->commercial_invoice_number,
+            ], "Commercial Invoice {$request->commercial_invoice_number} uploaded for {$consignment->consignment_number}");
+
+            return back()->with('success', 'Commercial Invoice uploaded successfully.');
+        } catch (\Exception $e) {
+            \Log::error('Commercial invoice upload failed: ' . $e->getMessage());
+            return back()->with('error', 'Upload failed: ' . $e->getMessage())->withInput();
+        }
+    }
+    /**
+     * Upload Packing List for a consignment
+     */
+    public function uploadPackingList(Request $request, Consignment $consignment)
+    {
+        $vendor = auth()->user()->vendor;
+        if ($consignment->vendor_id !== $vendor->id) {
+            abort(403);
+        }
+
+        $request->validate([
+            'packing_list_file'   => 'required|file|max:10240|mimes:pdf,jpg,jpeg,png,xlsx,xls,csv',
+            'packing_list_number' => 'required|string|max:100',
+        ], [
+            'packing_list_file.required' => 'Please upload the Packing List file.',
+            'packing_list_number.required' => 'Packing list number is required.',
+        ]);
+
+        try {
+            $path = $request->file('packing_list_file')
+                ->store("consignments/{$consignment->id}/documents", 'public');
+
+            $consignment->update([
+                'packing_list_file'        => $path,
+                'packing_list_number'      => $request->packing_list_number,
+                'packing_list_upload_date' => now()->toDateString(),
+                'packing_list_upload_by'   => auth()->id(),
+            ]);
+
+            \App\Models\ActivityLog::log('uploaded', 'packing_list', $consignment, null, [
+                'packing_list_number' => $request->packing_list_number,
+            ], "Packing List {$request->packing_list_number} uploaded for {$consignment->consignment_number}");
+
+            return back()->with('success', 'Packing List uploaded successfully.');
+        } catch (\Exception $e) {
+            \Log::error('Packing list upload failed: ' . $e->getMessage());
+            return back()->with('error', 'Upload failed: ' . $e->getMessage())->withInput();
+        }
+    }
     public function liveSheets()
     {
         $vendor = auth()->user()->vendor;
@@ -1564,7 +1642,7 @@ class VendorController extends Controller
         ]);
         return back()->with('success', 'Inspection report uploaded.');
     }
-    public function uploadCommercialInvoice(Request $request, Consignment $consignment)
+    public function uploadCommercialInvoiceBack(Request $request, Consignment $consignment)
     {
         $request->validate(['commercial_invoice' => 'nullable|file|max:20480', 'packing_list' => 'nullable|file|max:20480']);
         print_r($request->all());
@@ -1594,6 +1672,56 @@ class VendorController extends Controller
             ->latest('order_date')->paginate(25);
         $totalSales = Order::whereHas('items', fn($q) => $q->where('vendor_id', $vendor->id))->sum('total_amount');
         return view('vendor.sales.index', compact('orders', 'vendor', 'totalSales'));
+    }
+    public function grn(Request $request)
+    {
+        $vendor = auth()->user()->vendor;
+
+        // Get consignment IDs for this vendor
+        $consignmentIds = Consignment::where('vendor_id', $vendor->id)->pluck('id');
+
+        // Get shipment IDs linked to those consignments
+        $shipmentIds = \DB::table('shipment_consignments')
+            ->whereIn('consignment_id', $consignmentIds)
+            ->pluck('shipment_id');
+
+        $grns = \App\Models\Grn::with('shipment', 'warehouse', 'items')
+            ->whereIn('shipment_id', $shipmentIds)
+            ->latest('receipt_date')
+            ->paginate(20);
+
+        // Stats
+        $stats = [
+            'total_grns'       => $grns->total(),
+            'total_received'   => $grns->sum('total_items_received'),
+            'total_damaged'    => $grns->sum('damaged_items'),
+            'total_missing'    => $grns->sum('missing_items'),
+        ];
+
+        return view('vendor.grn.index', compact('grns', 'vendor', 'stats'));
+    }
+
+    public function inventory(Request $request)
+    {
+        $vendor = auth()->user()->vendor;
+
+        $inventory = \App\Models\Inventory::with('product', 'warehouse', 'grn')
+            ->whereHas('product', fn($q) => $q->where('vendor_id', $vendor->id))
+            ->when($request->warehouse_id, fn($q, $v) => $q->where('warehouse_id', $v))
+            ->latest('received_date')
+            ->paginate(30);
+
+        $warehouses = \App\Models\Warehouse::orderBy('name')->get(['id', 'name']);
+
+        // Stats
+        $stats = [
+            'total_skus'     => \App\Models\Inventory::whereHas('product', fn($q) => $q->where('vendor_id', $vendor->id))->distinct('product_id')->count('product_id'),
+            'total_qty'      => (int) \App\Models\Inventory::whereHas('product', fn($q) => $q->where('vendor_id', $vendor->id))->sum('quantity'),
+            'available_qty'  => (int) \App\Models\Inventory::whereHas('product', fn($q) => $q->where('vendor_id', $vendor->id))->sum('available_quantity'),
+            'reserved_qty'   => (int) \App\Models\Inventory::whereHas('product', fn($q) => $q->where('vendor_id', $vendor->id))->sum('reserved_quantity'),
+        ];
+
+        return view('vendor.inventory.index', compact('inventory', 'vendor', 'warehouses', 'stats'));
     }
 
     public function chargebacks()

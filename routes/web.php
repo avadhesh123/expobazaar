@@ -21,7 +21,7 @@ Route::prefix('auth')->name('auth.')->group(function () {
     Route::match(['get', 'post'], 'logout', [AuthController::class, 'logout'])->name('logout');
 });
 
-Route::get('/', fn () => redirect()->route('auth.login'));
+Route::get('/', fn() => redirect()->route('auth.login'));
 
 // Default 'login' route alias — Laravel's built-in middleware expects this name
 Route::redirect('/login', '/auth/login')->name('login');
@@ -95,7 +95,10 @@ Route::middleware(['auth'])->group(function () {
             Route::post('offer-sheet/upload-image', [VendorController::class, 'uploadImage'])->name('offer-sheet.upload-image');
             Route::get('consignments', [VendorController::class, 'consignments'])->name('consignments');
             Route::post('consignments/{consignment}/inspection', [VendorController::class, 'uploadInspection'])->name('inspections.upload');
+            // Route::post('consignments/{consignment}/commercial-invoice', [VendorController::class, 'uploadCommercialInvoice'])->name('commercial-invoices.upload');
+
             Route::post('consignments/{consignment}/commercial-invoice', [VendorController::class, 'uploadCommercialInvoice'])->name('commercial-invoices.upload');
+            Route::post('consignments/{consignment}/packing-list', [VendorController::class, 'uploadPackingList'])->name('packing-list.upload');
 
             Route::get('inspections', [VendorController::class, 'inspectionReports'])->name('inspections.index');
             Route::get('live-sheets', [VendorController::class, 'liveSheets'])->name('live-sheets');
@@ -109,6 +112,9 @@ Route::middleware(['auth'])->group(function () {
             Route::post('live-sheets/{liveSheet}/dates', [VendorController::class, 'saveLiveSheetDates'])->name('vendor.live-sheets.dates');
             Route::get('sales', [VendorController::class, 'salesReport'])->name('sales');
             Route::get('chargebacks', [VendorController::class, 'chargebacks'])->name('chargebacks');
+
+            Route::get('grn', [VendorController::class, 'grn'])->name('grn');
+            Route::get('inventory', [VendorController::class, 'inventory'])->name('inventory');
             Route::get('payouts', [VendorController::class, 'payouts'])->name('payouts');
             Route::post('payouts/{payout}/invoice', [VendorController::class, 'uploadInvoice'])->name('payouts.invoice');
         });
@@ -257,7 +263,7 @@ Route::middleware(['auth'])->group(function () {
     });
 
     // NOTIFICATIONS
-    Route::get('notifications', fn () => view('components.notifications', ['notifications' => auth()->user()->unreadNotifications()->take(50)->get()]))->name('notifications');
-    Route::post('notifications/{id}/read', fn ($id) => tap(back(), fn () => auth()->user()->notifications()->where('id', $id)->update(['read_at' => now()])))->name('notifications.read');
-    Route::post('notifications/mark-all-read', fn () => tap(back(), fn () => auth()->user()->unreadNotifications->markAsRead()))->name('notifications.mark-all-read');
+    Route::get('notifications', fn() => view('components.notifications', ['notifications' => auth()->user()->unreadNotifications()->take(50)->get()]))->name('notifications');
+    Route::post('notifications/{id}/read', fn($id) => tap(back(), fn() => auth()->user()->notifications()->where('id', $id)->update(['read_at' => now()])))->name('notifications.read');
+    Route::post('notifications/mark-all-read', fn() => tap(back(), fn() => auth()->user()->unreadNotifications->markAsRead()))->name('notifications.mark-all-read');
 });
