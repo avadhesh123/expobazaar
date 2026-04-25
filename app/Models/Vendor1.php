@@ -12,49 +12,16 @@ class Vendor extends Model
     use SoftDeletes;
 
     protected $fillable = [
-        'user_id',
-        'company_name',
-        'company_code',
-        'vendor_code',
-        'contact_person',
-        'email',
-        'phone',
-        'address',
-        'street_address',
-        'city',
-        'state',
-        'province_state',
-        'country',
-        'pincode',
-        'gst_number',
-        'pan_number',
-        'finance_contact_person',
-        'iec_code',
-        'msme_number',
-        'landline',
-        'official_website',
-        'bank_name',
-        'bank_account_number',
-        'bank_ifsc',
-        'bank_swift_code',
-        'kyc_status',
-        'kyc_submitted_at',
-        'kyc_approved_at',
-        'kyc_approved_by',
-        'kyc_rejection_reason',
-        'contract_status',
-        'docusign_envelope_id',
-        'contract_signed_at',
-        'contract_expiry_at',
-        'membership_fee',
-        'membership_fee_waived',
-        'membership_waived_by',
-        'membership_status',
-        'payout_rules',
-        'storage_rate',
-        'status',
-        'created_by',
-        'rex_number',
+        'user_id', 'company_name', 'company_code', 'vendor_code', 'contact_person',
+        'email', 'phone', 'address', 'street_address', 'city', 'state', 'province_state',
+        'country', 'pincode', 'gst_number', 'pan_number',
+        'finance_contact_person', 'iec_code', 'msme_number', 'landline', 'official_website',
+        'bank_name', 'bank_account_number', 'bank_ifsc', 'bank_swift_code',
+        'kyc_status', 'kyc_submitted_at', 'kyc_approved_at',
+        'kyc_approved_by', 'kyc_rejection_reason', 'contract_status', 'docusign_envelope_id',
+        'contract_signed_at', 'contract_expiry_at', 'membership_fee', 'membership_fee_waived',
+        'membership_waived_by', 'membership_status', 'payout_rules', 'storage_rate',
+        'status', 'created_by',
     ];
 
     protected $casts = [
@@ -139,9 +106,7 @@ class Vendor extends Model
     // Helpers
     public function isActive(): bool
     {
-        // return $this->status === 'active';
-
-        return in_array($this->status, ['active', 'pending_kyc', 'pending_contract']);
+        return $this->status === 'active';
     }
     public function isKycApproved(): bool
     {
@@ -154,7 +119,7 @@ class Vendor extends Model
 
     public static function generateVendorCode(string $companyCode): string
     {
-        $prefix = match ($companyCode) {
+        $prefix = match($companyCode) {
             '2000' => 'VIN',
             '2100' => 'VUS',
             '2200' => 'VNL',

@@ -44,7 +44,7 @@
             </div>
             <div style="padding:.5rem;background:#f8fafc;border-radius:8px;">
                 <div style="font-size:.62rem;color:#64748b;text-transform:uppercase;font-weight:600;">Total CBM</div>
-                <div style="font-weight:700;font-family:monospace;">{{ number_format($liveSheet->total_cbm, 3) }}</div>
+                <div style="font-weight:700;font-family:monospace;">{{ number_format(floatval($liveSheet->total_cbm ?? 0), 3) }}</div>
             </div>
         </div>
     </div>
@@ -128,19 +128,19 @@
                     @php
                     $d = $item->product_details ?? [];
                     $dis = $liveSheet->is_locked ? 'disabled' : '';
-                    $masterL = $d['master_length'] ?? 0;
-                    $masterW = $d['master_width'] ?? 0;
-                    $masterH = $d['master_height'] ?? 0;
+                    $masterL = floatval($d['master_length'] ?? 0);
+                    $masterW = floatval($d['master_width'] ?? 0);
+                    $masterH = floatval($d['master_height'] ?? 0);
                     $masterCbm = ($masterL && $masterW && $masterH) ? ($masterL * $masterW * $masterH) / 61023 : 0;
-                    $qtyMaster = $d['qty_master_pack'] ?? 1;
-                    $finalQty = $d['final_qty'] ?? $item->quantity;
+                    $qtyMaster = floatval($d['qty_master_pack'] ?? 1) ?: 1;
+                    $finalQty = floatval($d['final_qty'] ?? $item->quantity ?? 0);
                     $totalCartons = $qtyMaster > 0 ? ceil($finalQty / $qtyMaster) : 0;
                     $cbmShipment = $totalCartons * $masterCbm;
-                    $finalFob = $d['final_fob'] ?? $item->unit_price;
-                    $dutyAmt = $finalFob * (($d['duty_percent'] ?? 0) / 100);
-                    $freightAmt = ($d['freight_factor'] ?? 0) * $finalFob;
+                    $finalFob = floatval($d['final_fob'] ?? $item->unit_price ?? 0);
+                    $dutyAmt = $finalFob * (floatval($d['duty_percent'] ?? 0) / 100);
+                    $freightAmt = floatval($d['freight_factor'] ?? 0) * $finalFob;
                     $landedCost = $finalFob + $dutyAmt + $freightAmt;
-                    $wsp = $landedCost * ($d['wsp_factor'] ?? 0);
+                    $wsp = $landedCost * floatval($d['wsp_factor'] ?? 0);
                     @endphp
                     <tr>
                         <td style="text-align:center;position:sticky;left:0;background:#fff;z-index:1;">{{ $d['sno'] ?? $loop->iteration }}</td>
@@ -174,13 +174,13 @@
                         <td style="text-align:center;font-family:monospace;">{{ $d['master_height'] ?? '—' }}</td>
                         <td style="text-align:center;font-family:monospace;">{{ $d['master_weight_kg'] ?? '—' }}</td>
                         {{-- Editable fields --}}
-                        <td style="background:#eff6ff;"><input type="number" name="items[{{ $idx }}][quantity]" value="{{ $item->quantity }}" min="1" required onchange="calcRow({{ $idx }})" style="width:55px;padding:.2rem .3rem;border:1px solid #93c5fd;border-radius:4px;font-size:.78rem;text-align:center;background:#fff;" {{ $dis }}></td>
-                        <td style="background:#eff6ff;"><input type="number" step="0.01" name="items[{{ $idx }}][unit_price]" value="{{ $item->unit_price }}" min="0" required onchange="calcRow({{ $idx }})" style="width:65px;padding:.2rem .3rem;border:1px solid #93c5fd;border-radius:4px;font-size:.78rem;font-family:monospace;text-align:right;background:#fff;" {{ $dis }}></td>
+                        <td style="background:#eff6ff;"><input type="number" name="items[{{ $idx }}][quantity]" value="{{ $item->quantity ?? 0 }}" min="1" required onchange="calcRow({{ $idx }})" style="width:55px;padding:.2rem .3rem;border:1px solid #93c5fd;border-radius:4px;font-size:.78rem;text-align:center;background:#fff;" {{ $dis }}></td>
+                        <td style="background:#eff6ff;"><input type="number" step="0.01" name="items[{{ $idx }}][unit_price]" value="{{ $item->unit_price ?? 0 }}" min="0" required onchange="calcRow({{ $idx }})" style="width:65px;padding:.2rem .3rem;border:1px solid #93c5fd;border-radius:4px;font-size:.78rem;font-family:monospace;text-align:right;background:#fff;" {{ $dis }}></td>
                         <td style="font-family:monospace;color:#64748b;">{{ $d['target_fob'] ?? '—' }}</td>
                         <td style="font-family:monospace;font-weight:600;">{{ $d['final_qty'] ?? $item->quantity }}</td>
                         <td style="text-align:center;">{{ $d['total_master_cartons'] ?? '—' }}</td>
-                        <td style="font-family:monospace;">{{ isset($d['master_cbm']) ? number_format($d['master_cbm'], 4) : '—' }}</td>
-                        <td style="font-family:monospace;font-weight:600;color:#1e40af;">{{ isset($d['cbm_shipment']) ? number_format($d['cbm_shipment'], 4) : number_format($item->total_cbm, 4) }}</td>
+                        <td style="font-family:monospace;">{{ isset($d['master_cbm']) ? number_format(floatval($d['master_cbm']), 4) : '—' }}</td>
+                        <td style="font-family:monospace;font-weight:600;color:#1e40af;">{{ isset($d['cbm_shipment']) ? number_format(floatval($d['cbm_shipment']), 4) : number_format(floatval($item->total_cbm ?? 0), 4) }}</td>
                         <td style="font-family:monospace;">{{ $d['final_fob'] ?? '—' }}</td>
                         <td style="font-family:monospace;">{{ $dutyAmt > 0 ? '$'.number_format($dutyAmt, 2) : '—' }}</td>
                         <td>{{ $d['freight_factor'] ?? '' }}</td>
@@ -196,11 +196,11 @@
                         <td colspan="3" style="text-align:right;">TOTALS</td>
                         <td style="text-align:center;" id="grandQty">{{ $liveSheet->items->sum('quantity') }}</td>
                         <td></td>
-                        <td style="font-family:monospace;" id="grandPrice">${{ number_format($liveSheet->items->sum('total_price'), 2) }}</td>
+                        <td style="font-family:monospace;" id="grandPrice">${{ number_format(floatval($liveSheet->items->sum('total_price')), 2) }}</td>
                         <td></td>
-                        <td style="font-family:monospace;" id="grandCbm">{{ number_format($liveSheet->items->sum('total_cbm'), 3) }}</td>
+                        <td style="font-family:monospace;" id="grandCbm">{{ number_format(floatval($liveSheet->items->sum('total_cbm')), 3) }}</td>
                         <td></td>
-                        <td style="font-family:monospace;" id="grandWeight">{{ number_format($liveSheet->items->sum('total_weight'), 2) }} kg</td>
+                        <td style="font-family:monospace;" id="grandWeight">{{ number_format(floatval($liveSheet->items->sum('total_weight')), 2) }} kg</td>
                         <td></td>
                     </tr>
                 </tbody>

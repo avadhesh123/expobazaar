@@ -162,7 +162,7 @@ Route::middleware(['auth'])->group(function () {
         Route::post('chargebacks/{chargeback}/confirm', [SourcingController::class, 'confirmChargeback'])->name('chargebacks.confirm');
     });
     // LOGISTICS
-    Route::prefix('logistics')->name('logistics.')->middleware('user.type:internal,admin', 'department:logistics')->group(function () {
+ Route::prefix('logistics')->name('logistics.')->middleware('user.type:internal,admin', 'department:logistics')->group(function () {
         Route::get('dashboard', [LogisticsController::class, 'dashboard'])->name('dashboard');
         Route::get('container-planning', [LogisticsController::class, 'containerPlanning'])->name('container-planning');
         Route::post('shipments/create', [LogisticsController::class, 'createShipment'])->name('shipments.create');
@@ -184,9 +184,18 @@ Route::middleware(['auth'])->group(function () {
         Route::post('warehouse-charges/{charge}/receipt', [LogisticsController::class, 'uploadChargeReceipt'])->name('warehouse-charges.receipt');
         Route::post('warehouse-charges/calculate', [LogisticsController::class, 'calculateCharges'])->name('warehouse-charges.calculate');
         Route::post('warehouse-charges/bulk-calculate', [LogisticsController::class, 'bulkCalculateCharges'])->name('warehouse-charges.bulk-calculate');
+        Route::post('warehouse-charges/run', [LogisticsController::class, 'runMonthlyCharges'])->name('warehouse-charges.run');
+        Route::post('warehouse-charges/{charge}/invoice', [LogisticsController::class, 'uploadWarehouseInvoice'])->name('warehouse-charges.invoice');
+        Route::post('warehouse-charges/{charge}/approve', [LogisticsController::class, 'approveCharge'])->name('warehouse-charges.approve');
+        Route::get('warehouse-charges/variance', [LogisticsController::class, 'varianceReport'])->name('warehouse-charges.variance');
+        Route::get('warehouse-charges/download', [LogisticsController::class, 'downloadChargesReport'])->name('warehouse-charges.download');
+        Route::get('vendor-rate-cards', [LogisticsController::class, 'vendorRateCards'])->name('vendor-rate-cards');
+        Route::post('vendor-rate-cards', [LogisticsController::class, 'storeVendorRateCard'])->name('vendor-rate-cards.store');
+        Route::put('vendor-rate-cards/{vendorRateCard}', [LogisticsController::class, 'updateVendorRateCard'])->name('vendor-rate-cards.update');
         Route::get('rate-cards', [LogisticsController::class, 'rateCards'])->name('rate-cards');
         Route::put('rate-cards/{warehouse}', [LogisticsController::class, 'updateRateCard'])->name('rate-cards.update');
     });
+
 
     // CATALOGUING
     Route::prefix('cataloguing')->name('cataloguing.')->middleware('user.type:internal,admin', 'department:cataloguing')->group(function () {
