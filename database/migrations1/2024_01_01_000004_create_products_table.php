@@ -18,10 +18,10 @@ return new class extends Migration
             $table->string('company_code');
 
             // Dimensions & Physical
-            $table->decimal('length_cm', 10, 2)->nullable();
-            $table->decimal('width_cm', 10, 2)->nullable();
-            $table->decimal('height_cm', 10, 2)->nullable();
-            $table->decimal('weight_kg', 10, 3)->nullable();
+            $table->decimal('length', 10, 2)->nullable();
+            $table->decimal('width', 10, 2)->nullable();
+            $table->decimal('height', 10, 2)->nullable();
+            $table->decimal('weight', 10, 3)->nullable();
             $table->decimal('cbm', 10, 4)->nullable(); // Cubic meter
             $table->string('color')->nullable();
             $table->string('material')->nullable();

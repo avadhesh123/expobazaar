@@ -162,7 +162,7 @@ Route::middleware(['auth'])->group(function () {
         Route::post('chargebacks/{chargeback}/confirm', [SourcingController::class, 'confirmChargeback'])->name('chargebacks.confirm');
     });
     // LOGISTICS
- Route::prefix('logistics')->name('logistics.')->middleware('user.type:internal,admin', 'department:logistics')->group(function () {
+    Route::prefix('logistics')->name('logistics.')->middleware('user.type:internal,admin', 'department:logistics')->group(function () {
         Route::get('dashboard', [LogisticsController::class, 'dashboard'])->name('dashboard');
         Route::get('container-planning', [LogisticsController::class, 'containerPlanning'])->name('container-planning');
         Route::post('shipments/create', [LogisticsController::class, 'createShipment'])->name('shipments.create');
@@ -194,6 +194,19 @@ Route::middleware(['auth'])->group(function () {
         Route::put('vendor-rate-cards/{vendorRateCard}', [LogisticsController::class, 'updateVendorRateCard'])->name('vendor-rate-cards.update');
         Route::get('rate-cards', [LogisticsController::class, 'rateCards'])->name('rate-cards');
         Route::put('rate-cards/{warehouse}', [LogisticsController::class, 'updateRateCard'])->name('rate-cards.update');
+
+        // Warehouse Rate Cards (company-level)
+        Route::get('warehouse-rate-cards', [LogisticsController::class, 'warehouseRateCards'])->name('warehouse-rate-cards');
+        Route::post('warehouse-rate-cards', [LogisticsController::class, 'storeWarehouseRateCard'])->name('warehouse-rate-cards.store');
+        Route::post('warehouse-rate-cards/{warehouseRateCard}/submit', [LogisticsController::class, 'submitWarehouseRateCard'])->name('warehouse-rate-cards.submit');
+        Route::post('warehouse-rate-cards/{warehouseRateCard}/approve', [LogisticsController::class, 'approveWarehouseRateCard'])->name('warehouse-rate-cards.approve');
+
+        // Warehouse Monthly Charges (calculation + invoice + variance)
+        Route::get('warehouse-monthly-charges', [LogisticsController::class, 'warehouseMonthlyCharges'])->name('warehouse-monthly-charges');
+        Route::post('warehouse-monthly-charges/run', [LogisticsController::class, 'runWarehouseCharges'])->name('warehouse-monthly-charges.run');
+        Route::post('warehouse-monthly-charges/{warehouseMonthlyCharge}/invoice', [LogisticsController::class, 'enterWarehouseInvoice'])->name('warehouse-monthly-charges.invoice');
+        Route::post('warehouse-monthly-charges/{warehouseMonthlyCharge}/explanations', [LogisticsController::class, 'saveVarianceExplanations'])->name('warehouse-monthly-charges.explanations');
+        Route::post('warehouse-monthly-charges/{warehouseMonthlyCharge}/approve', [LogisticsController::class, 'approveWarehouseCharge'])->name('warehouse-monthly-charges.approve');
     });
 
 
@@ -245,17 +258,33 @@ Route::middleware(['auth'])->group(function () {
         Route::get('pricing-review', [FinanceController::class, 'pricingReview'])->name('pricing-review');
         Route::post('pricing/{asn}/approve', [FinanceController::class, 'approvePricing'])->name('pricing.approve');
 
+
+
+        // Vendor Rate Cards & Charges
+        Route::get('vendor-rate-cards', [FinanceController::class, 'vendorRateCards'])->name('vendor-rate-cards');
+        Route::post('vendor-rate-cards', [FinanceController::class, 'storeVendorRateCard'])->name('vendor-rate-cards.store');
+        Route::post('vendor-rate-cards/{vendorRateCard}/submit', [FinanceController::class, 'submitVendorRateCard'])->name('vendor-rate-cards.submit');
+        Route::post('vendor-rate-cards/{vendorRateCard}/approve', [FinanceController::class, 'approveVendorRateCard'])->name('vendor-rate-cards.approve');
+        Route::get('vendor-charges', [FinanceController::class, 'vendorCharges'])->name('vendor-charges');
+        Route::post('vendor-charges/run', [FinanceController::class, 'runVendorCharges'])->name('vendor-charges.run');
+        Route::post('vendor-charges/{vendorMonthlyCharge}/approve', [FinanceController::class, 'approveVendorCharge'])->name('vendor-charges.approve');
+        Route::get('vendor-charges/statement/{vendor}', [FinanceController::class, 'vendorStatement'])->name('vendor-charges.statement');
+        Route::get('vendor-charges/download', [FinanceController::class, 'downloadVendorCharges'])->name('vendor-charges.download');
+        Route::post('pricing/{asn}/approve', [FinanceController::class, 'approvePricing'])->name('pricing.approve');
+
+
+
         // Live Sheets — SAP Code Update
         Route::get('live-sheets', [FinanceController::class, 'liveSheets'])->name('live-sheets');
         Route::get('live-sheets/{liveSheet}', [FinanceController::class, 'showLiveSheet'])->name('live-sheets.show');
         Route::post('live-sheets/{liveSheet}/sap', [FinanceController::class, 'updateSapCodes'])->name('live-sheets.sap');
 
         // NEW — Download pre-filled SAP Excel template
-        Route::get('/live-sheets/{liveSheet}/sap-download', [FinanceController::class, 'downloadSapTemplate'])
+        Route::get('live-sheets/{liveSheet}/sap-download', [FinanceController::class, 'downloadSapTemplate'])
             ->name('live-sheets.sap-download');   // → finance.live-sheets.sap-download
 
         // NEW — Upload filled SAP Excel and apply codes
-        Route::post('/live-sheets/{liveSheet}/sap-upload', [FinanceController::class, 'uploadSapCodes'])
+        Route::post('live-sheets/{liveSheet}/sap-upload', [FinanceController::class, 'uploadSapCodes'])
             ->name('live-sheets.sap-upload');     // → finance.live-sheets.sap-upload
 
     });

@@ -63,15 +63,30 @@ class FinanceController extends Controller
     // ─── RECEIVABLES ─────────────────────────────────────────────
     public function receivables(Request $request)
     {
-        $receivables = FinanceReceivable::with('order.salesChannel', 'order.chargebacks')
+        $query = FinanceReceivable::with('order.salesChannel', 'order.chargebacks')
             ->when($request->company_code, fn($q, $v) => $q->where('company_code', $v))
-            ->when($request->status, fn($q, $v) => $q->where('payment_status', $v))
-            ->when($request->channel_id, fn($q, $v) => $q->where('channel_id', $v))
-            ->when($request->payment === 'unpaid', fn($q) => $q->where('payment_status', 'unpaid'))
+            // Fix: blade sends name="payment_status"
+            // default (empty) = exclude paid | 'all' = show everything | specific = filter exact
+            ->when(
+                $request->filled('payment_status') && $request->payment_status !== 'all',
+                fn($q) => $q->where('payment_status', $request->payment_status),
+                fn($q, $v = null) => $request->payment_status !== 'all'
+                    ? $q->where('payment_status', '!=', 'paid')
+                    : $q
+            )
+            // Fix: blade sends name="channel" not "channel_id"
+            ->when($request->channel, fn($q, $v) => $q->where('channel_id', $v))
+            // Fix: search filter was missing entirely
+            ->when($request->search, fn($q, $v) => $q->whereHas(
+                'order',
+                fn($oq) => $oq
+                    ->where('order_number', 'LIKE', "%{$v}%")
+                    ->orWhere('platform_order_id', 'LIKE', "%{$v}%")
+            ))
             ->orderByRaw("FIELD(payment_status, 'unpaid', 'partial', 'paid') ASC")
-            ->latest()->paginate(30);
+            ->latest();
 
-        $channels = SalesChannel::where('is_active', true)->get();
+        $receivables = $query->paginate(30)->withQueryString();
 
         // Fix: $summary was never built — blade was crashing with "Undefined variable: summary"
         $summary = [
@@ -85,6 +100,7 @@ class FinanceController extends Controller
                 + FinanceReceivable::sum('other_deductions'),
         ];
 
+        $channels = SalesChannel::where('is_active', true)->get();
         return view('finance.receivables.index', compact('receivables', 'channels', 'summary'));
     }
 
@@ -115,21 +131,36 @@ class FinanceController extends Controller
             'amount_received'    => 'required|numeric|min:0',
             'payment_date'       => 'required|date',
             'payment_reference'  => 'nullable|string|max:255',
+            // Fix: blade sends bank_reference but it was never validated or passed to service
+            'bank_reference'     => 'nullable|string|max:255',
         ]);
-        $this->financeService->recordPayment($receivable, $request->all());
+        $this->financeService->recordPayment($receivable, $request->only([
+            'amount_received',
+            'payment_date',
+            'payment_reference',
+            'bank_reference',
+        ]));
         return back()->with('success', 'Payment recorded. Order marked as paid.');
     }
 
     // ─── CHARGEBACKS ─────────────────────────────────────────────
     public function chargebacks(Request $request)
     {
-        $chargebacks = Chargeback::with('order.salesChannel', 'vendor')
+        $chargebacks = Chargeback::with([
+            'order.salesChannel',
+            'vendor',
+            // Fix #4: eager-load raiser & confirmer to avoid N+1 queries
+            'raiser',
+            'confirmer',
+        ])
             ->when($request->status, fn($q, $v) => $q->where('status', $v))
-            ->when($request->company_code, fn($q, $v) => $q->whereHas('order', fn($oq) => $oq->where('company_code', $v)))
+            // Fix #10: filter directly on chargebacks.company_code instead of joining via order
+            ->when($request->company_code, fn($q, $v) => $q->where('company_code', $v))
+            // Fix #3: vendor_id filter was missing entirely
+            ->when($request->vendor_id, fn($q, $v) => $q->where('vendor_id', $v))
             ->latest()->paginate(20);
 
-
-
+        // Fix #1: $stats was never built — blade KPI cards crashed with Undefined variable
         $stats = [
             'total'        => Chargeback::count(),
             'pending'      => Chargeback::where('status', 'pending_confirmation')->count(),
@@ -143,6 +174,15 @@ class FinanceController extends Controller
         return view('finance.chargebacks.index', compact('chargebacks', 'stats', 'vendors'));
     }
 
+    public function chargebacksBACK(Request $request)
+    {
+        $chargebacks = Chargeback::with('order.salesChannel', 'vendor')
+            ->when($request->status, fn($q, $v) => $q->where('status', $v))
+            ->when($request->company_code, fn($q, $v) => $q->whereHas('order', fn($oq) => $oq->where('company_code', $v)))
+            ->latest()->paginate(20);
+        return view('finance.chargebacks.index', compact('chargebacks'));
+    }
+
     public function raiseChargeback(Request $request, Order $order)
     {
         $request->validate([
@@ -152,8 +192,8 @@ class FinanceController extends Controller
         ]);
 
         try {
-            // ── Order validation guards ────────────────────────────────────
 
+            // ── Order validation guards ────────────────────────────────────
             // 1. Order must exist (Route Model Binding handles this, but double-check)
             if (!$order || !$order->exists) {
                 return back()->with('error', 'Order not found or invalid.');
@@ -201,6 +241,15 @@ class FinanceController extends Controller
             return back()->with('error', 'Failed to raise chargeback: ' . $e->getMessage())->withInput();
         }
     }
+    public function raiseChargebackBACK(Request $request, Order $order)
+    {
+        $request->validate([
+            'amount' => 'required|numeric|min:0.01',
+            'reason' => 'required|string|max:500',
+        ]);
+        $this->financeService->raiseChargeback($order, $request->all());
+        return back()->with('success', 'Chargeback raised. Sourcing team notified for confirmation.');
+    }
 
     // ─── VENDOR PAYOUTS ──────────────────────────────────────────
     public function payouts(Request $request)
@@ -238,6 +287,7 @@ class FinanceController extends Controller
 
         return view('finance.payouts.index', compact('payouts', 'vendors', 'summary'));
     }
+
 
     public function showPayout(VendorPayout $payout)
     {
@@ -365,6 +415,15 @@ class FinanceController extends Controller
 
     public function updateSapCodes(Request $request, \App\Models\LiveSheet $liveSheet)
     {
+
+
+        if ($liveSheet->status === 'locked' || $liveSheet->is_locked) {
+
+            \Log::error('Cannot update SAP codes. The sheet is locked.', ['live_sheet_id' => $liveSheet->id, 'user_id' => auth()->id()]);
+
+            return back()->with('error', 'Cannot update SAP codes. The sheet is locked.');
+        }
+
         $request->validate([
             'sap_codes'              => 'required|array',
             'sap_codes.*.item_id'    => 'required|exists:live_sheet_items,id',
@@ -379,7 +438,9 @@ class FinanceController extends Controller
 
         foreach ($request->sap_codes as $idx => $row) {
             $code = trim($row['sap_code'] ?? '');
-            if ($code === '') continue;
+            if ($code === '') {
+                continue;
+            }
 
             // Duplicate within current submission
             if (isset($seen[$code])) {
@@ -389,7 +450,9 @@ class FinanceController extends Controller
             $seen[$code] = true;
 
             $item = \App\Models\LiveSheetItem::find($row['item_id']);
-            if (!$item) continue;
+            if (!$item) {
+                continue;
+            }
 
             // Check products table — exclude the current product (re-saving same code is OK)
             $dup = \App\Models\Product::where('sap_code', $code)
@@ -437,135 +500,5 @@ class FinanceController extends Controller
         \App\Models\ActivityLog::log('updated', 'live_sheet', $liveSheet, null, ['sap_codes_updated' => $updated], 'SAP codes updated by Finance');
 
         return back()->with('success', "{$updated} SAP code(s) updated successfully.");
-    }
-
-    // ═══ VENDOR RATE CARDS ═══
-
-    public function vendorRateCards(Request $request)
-    {
-        $rateCards = \App\Models\VendorRateCard::with('vendor', 'creator', 'approver')
-            ->when($request->vendor_id, fn($q, $v) => $q->where('vendor_id', $v))
-            ->orderByDesc('created_at')->paginate(30)->withQueryString();
-        $vendors = \App\Models\Vendor::orderBy('company_name')->get();
-        return view('finance.vendor-rate-cards', compact('rateCards', 'vendors'));
-    }
-
-    public function storeVendorRateCard(Request $request)
-    {
-        $request->validate([
-            'vendor_id' => 'required|exists:vendors,id',
-            'inward_rate_per_carton' => 'required|numeric|min:0|max:500',
-            'storage_rate_per_cft' => 'required|numeric|min:0|max:100',
-            'fulfillment_rate_small' => 'required|numeric|min:0|max:50',
-            'fulfillment_rate_large' => 'required|numeric|min:0|max:50',
-            'fulfillment_qty_threshold' => 'required|integer|min:1|max:100',
-            'pick_pack_rate_per_unit' => 'required|numeric|min:0|max:50',
-            'effective_from' => 'required|date',
-        ]);
-        $vendor = \App\Models\Vendor::findOrFail($request->vendor_id);
-        $currency = $vendor->company_code === '2200' ? 'EUR' : 'USD';
-        $maxV = \App\Models\VendorRateCard::where('vendor_id', $vendor->id)->max('version') ?? 0;
-
-        \App\Models\VendorRateCard::where('vendor_id', $vendor->id)->where('status', 'approved')
-            ->whereNull('effective_to')->update(['effective_to' => now()->subDay()->toDateString(), 'status' => 'expired']);
-
-        $rc = \App\Models\VendorRateCard::create(array_merge($request->only([
-            'vendor_id',
-            'inward_rate_per_carton',
-            'storage_rate_per_cft',
-            'fulfillment_rate_small',
-            'fulfillment_rate_large',
-            'fulfillment_qty_threshold',
-            'pick_pack_rate_per_unit',
-            'effective_from',
-        ]), ['company_code' => $vendor->company_code, 'currency' => $currency, 'version' => $maxV + 1, 'status' => 'draft', 'created_by' => auth()->id()]));
-
-        \App\Models\ActivityLog::log('created', 'vendor_rate_card', $rc, null, $rc->toArray(), "Rate card v{$rc->version} for {$vendor->company_name}");
-        return back()->with('success', "Rate card v{$rc->version} created for {$vendor->company_name}.");
-    }
-
-    public function submitVendorRateCard(\App\Models\VendorRateCard $vendorRateCard)
-    {
-        if (!$vendorRateCard->isComplete()) return back()->with('error', 'All rate fields must be filled.');
-        $vendorRateCard->update(['status' => 'pending_approval']);
-        return back()->with('success', 'Submitted for approval.');
-    }
-
-    public function approveVendorRateCard(\App\Models\VendorRateCard $vendorRateCard)
-    {
-        $vendorRateCard->update(['status' => 'approved', 'approved_by' => auth()->id(), 'approved_at' => now()]);
-        \App\Models\ActivityLog::log('approved', 'vendor_rate_card', $vendorRateCard);
-        return back()->with('success', "Rate card approved.");
-    }
-
-    // ═══ VENDOR MONTHLY CHARGES ═══
-
-    public function vendorCharges(Request $request)
-    {
-        $month = $request->get('month', now()->month);
-        $year = $request->get('year', now()->year);
-        $charges = \App\Models\VendorMonthlyCharge::with('vendor', 'grn', 'warehouse')
-            ->byMonth($month, $year)->when($request->vendor_id, fn($q, $v) => $q->where('vendor_id', $v))
-            ->orderBy('vendor_id')->paginate(50)->withQueryString();
-        $vendors = \App\Models\Vendor::orderBy('company_name')->get();
-        $baseQ = \App\Models\VendorMonthlyCharge::byMonth($month, $year);
-        $stats = [
-            'total_charges' => (float)(clone $baseQ)->sum('total_charges'),
-            'total_inward' => (float)(clone $baseQ)->sum('inward_charge'),
-            'total_storage' => (float)(clone $baseQ)->sum('storage_charge'),
-            'total_fulfill' => (float)(clone $baseQ)->sum('fulfillment_charge'),
-            'total_pickpack' => (float)(clone $baseQ)->sum('pick_pack_charge'),
-            'total_material' => (float)(clone $baseQ)->sum('material_cost'),
-            'vendor_count' => (int)(clone $baseQ)->distinct('vendor_id')->count('vendor_id'),
-            'pending_count' => (int)(clone $baseQ)->where('status', 'calculated')->count(),
-        ];
-        return view('finance.vendor-charges.index', compact('charges', 'vendors', 'stats', 'month', 'year'));
-    }
-
-    public function runVendorCharges(Request $request)
-    {
-        
-        $request->validate(['month' => 'required|integer|min:1|max:12', 
-        'year' => 'required|integer|min:2024',
-        'vendor_id' => 'nullable|exists:vendors,id']);
-        $service = new \App\Services\WarehouseChargesService();
-        $results = $service->runMonthlyCharges($request->month, $request->year, $request->vendor_id, auth()->id(), (bool)$request->dry_run);
-     
-        $msg = ($request->dry_run ? "[DRY RUN] " : "") . "{$results['created']} created, {$results['skipped']} skipped.";
-        if (!empty($results['errors'])) $msg .= " Errors: " . implode('; ', array_slice($results['errors'], 0, 5));
-        return back()->with($results['created'] > 0 ? 'success' : 'error', $msg);
-    }
-
-    public function approveVendorCharge(\App\Models\VendorMonthlyCharge $vendorMonthlyCharge)
-    {
-        $vendorMonthlyCharge->update(['status' => 'approved', 'approved_by' => auth()->id(), 'approved_at' => now(), 'is_locked' => true]);
-        return back()->with('success', 'Charge approved.');
-    }
-
-    public function vendorStatement(Request $request, \App\Models\Vendor $vendor)
-    {
-        $month = $request->get('month', now()->month);
-        $year = $request->get('year', now()->year);
-        $service = new \App\Services\WarehouseChargesService();
-        $statement = $service->getVendorStatement($vendor->id, $month, $year);
-        return view('finance.vendor-charges.statement', compact('statement', 'month', 'year'));
-    }
-
-    public function downloadVendorCharges(Request $request)
-    {
-        $month = $request->get('month', now()->month);
-        $year = $request->get('year', now()->year);
-        $charges = \App\Models\VendorMonthlyCharge::with('vendor', 'grn')->byMonth($month, $year)->get();
-        $csv = "Vendor,GRN,Inward,Storage,Fulfillment,Pick&Pack,Material,Total,Currency,Status\n";
-        foreach ($charges as $c) {
-            $s = $c->getCurrencySymbol();
-            $csv .= '"' . ($c->vendor->company_name ?? '') . '",'
-                . ($c->grn->grn_number ?? '') . ',' . "{$s}" . number_format(floatval($c->inward_charge), 2)
-                . ",{$s}" . number_format(floatval($c->storage_charge), 2) . ",{$s}" . number_format(floatval($c->fulfillment_charge), 2)
-                . ",{$s}" . number_format(floatval($c->pick_pack_charge), 2) . ",{$s}" . number_format(floatval($c->material_cost), 2)
-                . ",{$s}" . number_format(floatval($c->total_charges), 2) . ",{$c->currency},{$c->status}\n";
-        }
-        $mn = date('M', mktime(0, 0, 0, $month, 1));
-        return response($csv, 200, ['Content-Type' => 'text/csv', 'Content-Disposition' => "attachment; filename=\"vendor-charges-{$mn}-{$year}.csv\""]);
     }
 }

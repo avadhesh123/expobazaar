@@ -13,7 +13,7 @@ class Product extends Model
 
     protected $fillable = [
         'sku', 'sap_code', 'name', 'description', 'category_id', 'vendor_id', 'company_code',
-        'length_cm', 'width_cm', 'height_cm', 'weight_kg', 'cbm', 'color', 'material',
+        'length', 'width', 'height', 'weight', 'cbm', 'color', 'material',
         'variations', 'vendor_price', 'fob_price', 'currency', 'thumbnail', 'images',
         'status', 'hsn_code', 'barcode', 'stock_quantity', 'reserved_quantity',
         'shopify_url', 'platform_listing_status',
@@ -72,8 +72,8 @@ class Product extends Model
 
     public function calculateCbm(): float
     {
-        if ($this->length_cm && $this->width_cm && $this->height_cm) {
-            return ($this->length_cm * $this->width_cm * $this->height_cm) / 1000000;
+        if ($this->length && $this->width && $this->height) {
+            return ($this->length * $this->width * $this->height) / 1000000;
         }
         return 0;
     }

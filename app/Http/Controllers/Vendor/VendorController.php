@@ -3,7 +3,7 @@
 namespace App\Http\Controllers\Vendor;
 
 use App\Http\Controllers\Controller;
-use App\Models\{Vendor, Consignment, VendorPayout, Chargeback, VendorDocument, Category, LiveSheet, OfferSheet, OfferSheetItem, Order, WarehouseCharge, Product};
+use App\Models\{Vendor, Consignment, VendorPayout, Chargeback,VendorMonthlyCharge, VendorDocument, Category, LiveSheet, OfferSheet, OfferSheetItem, Order, WarehouseCharge, Product};
 use App\Services\{DashboardService, VendorService, SourcingService};
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
@@ -422,10 +422,10 @@ class VendorController extends Controller
                     'vendor_id'    => $vendor->id,
                     'name'         => $p['product_name'],
                     'company_code' => $vendor->company_code,
-                    'length_cm'   => isset($p['length']) ? round($p['length'] * 2.54, 2) : null,
-                    'width_cm'    => isset($p['width']) ? round($p['width'] * 2.54, 2) : null,
-                    'height_cm'   => isset($p['height']) ? round($p['height'] * 2.54, 2) : null,
-                    'weight_grams' => isset($p['weight']) ? round($p['weight'] * 453.592, 2) : null,
+                    'length'        => $p['length'] ?? null,
+                    'width'         => $p['width'] ?? null,
+                    'height'        => $p['height'] ?? null,
+                    'weight_grams' => $p['weight'] ?? null,
                     'vendor_price'   => $p['vendor_fob'] ?? 0,
                     'status'       => 'draft',
                 ]);
@@ -1736,7 +1736,9 @@ class VendorController extends Controller
         $vendor = auth()->user()->vendor;
         $payouts = VendorPayout::where('vendor_id', $vendor->id)->orderByDesc('payout_year')->orderByDesc('payout_month')->paginate(12);
         $warehouseCharges = WarehouseCharge::where('vendor_id', $vendor->id)->latest()->take(10)->get();
-        return view('vendor.payouts.index', compact('payouts', 'vendor', 'warehouseCharges'));
+        $vendorMonthlyCharges = VendorMonthlyCharge::where('vendor_id', $vendor->id)->latest()->take(10)->get();
+
+        return view('vendor.payouts.index', compact('payouts', 'vendor', 'warehouseCharges', 'vendorMonthlyCharges'));
     }
 
     public function uploadInvoice(Request $request, VendorPayout $payout)

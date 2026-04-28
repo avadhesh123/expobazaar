@@ -82,55 +82,65 @@
 {{-- Warehouse Charges Summary --}}
 <div class="card">
     <div class="card-header">
-        <h3><i class="fas fa-warehouse" style="margin-right:.5rem;color:#e8a838;"></i>Warehouse Charges</h3>
+        <h3><i class="fas fa-warehouse" style="margin-right:.5rem;color:#e8a838;"></i> Recent Warehouse Charges</h3>
     </div>
-    <div class="card-body" style="padding:0;overflow-x:auto;">
+    <div class="card-body" style="padding:0;">
         <table class="data-table">
             <thead>
                 <tr>
-                    <th>Vendor</th>
+                    <th>Warehouse</th>                   
                     <th>GRN</th>
-                    <th>Inward</th>
-                    <th>Storage</th>
-                    <th>Fulfillment</th>
-                    <th>Pick & Pack</th>
-                    <th>Material</th>
-                    <th>Total</th>
+                    <th>Company Code</th>
+                    <th>Currency</th>
+                    <th>Charge Month</th>
+                    <th>Charge Year</th>
+                     <th>Inward Charge</th>
+                    <th>Storage Remaining Qty</th>
+                    <th>Storage CFT</th>
+                    <th>Storage Charge</th>
+                    <th>Fulfillment Orders Small</th>
+                    <th>Fulfillment Orders Large</th>
+                    <th>Fulfillment Charge</th>
+                    <th>Pick Pack Units</th>
+                    <th>Pick Pack Charge</th>
+                    <th>Material Cost</th>
+                    <th>Total Charges</th>
                     <th>Status</th>
-                 </tr>
+                </tr>
             </thead>
             <tbody>
-                @forelse($vendorMonthlyCharges as $c)
-                @php $sym = $c->getCurrencySymbol(); @endphp
-                <tr>
-                    <td>
-                        <div style="font-weight:600;font-size:.82rem;">{{ $c->vendor->company_name ?? '—' }}</div>
-                        <div style="font-size:.6rem;color:#94a3b8;">{{ $c->vendor->vendor_code ?? '' }}</div>
-                    </td>
-                    <td style="font-family:monospace;font-size:.78rem;">{{ $c->grn->grn_number ?? '—' }}</td>
-                    <td style="font-family:monospace;">{{ $sym }}{{ number_format(floatval($c->inward_charge), 2) }}
-                        <div style="font-size:.58rem;color:#94a3b8;">{{ $c->inward_cartons }} cartons</div>
-                    </td>
-                    <td style="font-family:monospace;">{{ $sym }}{{ number_format(floatval($c->storage_charge), 2) }}
-                        <div style="font-size:.58rem;color:#94a3b8;">{{ number_format(floatval($c->storage_cft), 1) }} CFT</div>
-                    </td>
-                    <td style="font-family:monospace;">{{ $sym }}{{ number_format(floatval($c->fulfillment_charge), 2) }}
-                        <div style="font-size:.58rem;color:#94a3b8;">{{ $c->fulfillment_orders_small }}s + {{ $c->fulfillment_orders_large }}l</div>
-                    </td>
-                    <td style="font-family:monospace;">{{ $sym }}{{ number_format(floatval($c->pick_pack_charge), 2) }}
-                        <div style="font-size:.58rem;color:#94a3b8;">{{ $c->pick_pack_units }} units</div>
-                    </td>
-                    <td style="font-family:monospace;">{{ $sym }}{{ number_format(floatval($c->material_cost), 2) }}</td>
-                    <td style="font-family:monospace;font-weight:800;color:#dc2626;">{{ $sym }}{{ number_format(floatval($c->total_charges), 2) }}</td>
-                    <td>
-                        @php $sc = ['calculated'=>'badge-warning','approved'=>'badge-success','deducted'=>'badge-info','disputed'=>'badge-danger']; @endphp
-                        <span class="badge {{ $sc[$c->status] ?? 'badge-gray' }}">{{ ucfirst($c->status) }}</span>
-                    </td>
 
-                </tr>
+                @forelse($vendorMonthlyCharges as $wc)
+                <tr>
+                   
+                    <td>
+                        {{ $wc->warehouse_id     }}
+                    </td>
+                     <td>
+                        {{$wc->grn_id}}
+                    </td>
+                    <td>{{ $wc->company_code     }}</td>
+                    <td>{{ $wc->currency     }}</td>
+                    <td>{{ $wc->charge_month     }}</td>
+                    <td>{{ $wc->charge_year     }}</td>
+            <td>{{ $wc->inward_charge     }}</td>
+            <td>{{ $wc->storage_remaining_qty     }}</td>
+            <td>{{ $wc->storage_cft     }}</td>
+            <td>{{ $wc->storage_charge     }}</td>
+            <td>{{ $wc->fulfillment_orders_small     }}</td>
+            <td>{{ $wc->fulfillment_orders_large     }}</td>
+            <td>{{ $wc->fulfillment_charge     }}</td>
+            <td>{{ $wc->pick_pack_units     }}</td>
+            <td>{{ $wc->pick_pack_charge     }}</td>
+            <td>{{ $wc->material_cost     }}</td>
+            <td>{{ $wc->total_charges     }}</td>
+            <td>{{ $wc->status     }}</td>
+
+                    
+                   </tr>
                 @empty
                 <tr>
-                    <td colspan="10" style="text-align:center;padding:3rem;color:#94a3b8;">No charges for this period. Click "Run Charges" to calculate.</td>
+                    <td colspan="5" style="text-align:center;color:#94a3b8;padding:1.5rem;">No charges yet.</td>
                 </tr>
                 @endforelse
             </tbody>

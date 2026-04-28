@@ -7,13 +7,13 @@ use App\Models\{Shipment, Consignment, Vendor, Grn, GrnItem, Inventory, Inventor
 use App\Services\{DashboardService, LogisticsService};
 use Illuminate\Http\Request;
 use App\Models\ActivityLog;
+
 class LogisticsController extends Controller
 {
     public function __construct(
         protected DashboardService $dashboardService,
         protected LogisticsService $logisticsService
-    ) {
-    }
+    ) {}
 
     public function dashboard(Request $request)
     {
@@ -28,7 +28,7 @@ class LogisticsController extends Controller
         $consignments = Consignment::with('vendor', 'liveSheet')
             ->where('status', 'created')
             ->whereDoesntHave('shipments')
-            ->when($request->company_code, fn ($q, $v) => $q->where('company_code', $v))
+            ->when($request->company_code, fn($q, $v) => $q->where('company_code', $v))
             ->get();
         $totalCbm = $consignments->sum('total_cbm');
         return view('logistics.container-planning', compact('consignments', 'totalCbm'));
@@ -55,9 +55,9 @@ class LogisticsController extends Controller
     public function shipments(Request $request)
     {
         $shipments = Shipment::with('consignments.vendor')
-            ->when($request->status, fn ($q, $v) => $q->where('status', $v))
-            ->when($request->company_code, fn ($q, $v) => $q->where('company_code', $v))
-            ->when($request->type, fn ($q, $v) => $q->where('shipment_type', $v))
+            ->when($request->status, fn($q, $v) => $q->where('status', $v))
+            ->when($request->company_code, fn($q, $v) => $q->where('company_code', $v))
+            ->when($request->type, fn($q, $v) => $q->where('shipment_type', $v))
             ->latest()->paginate(20);
         return view('logistics.shipments.index', compact('shipments'));
     }
@@ -81,9 +81,9 @@ class LogisticsController extends Controller
     public function grnList(Request $request)
     {
         $grns = Grn::with('shipment', 'warehouse')
-            ->when($request->status, fn ($q, $v) => $q->where('status', $v))
-            ->when($request->company_code, fn ($q, $v) => $q->where('company_code', $v))
-            ->when($request->warehouse_id, fn ($q, $v) => $q->where('warehouse_id', $v))
+            ->when($request->status, fn($q, $v) => $q->where('status', $v))
+            ->when($request->company_code, fn($q, $v) => $q->where('company_code', $v))
+            ->when($request->warehouse_id, fn($q, $v) => $q->where('warehouse_id', $v))
             ->latest()->paginate(20);
 
         $pendingShipments = Shipment::whereIn('status', ['arrived', 'grn_pending', 'locked', 'asn_generated', 'in_transit', 'consolidated'])
@@ -168,10 +168,10 @@ class LogisticsController extends Controller
     public function inventory(Request $request)
     {
         $query = Inventory::with('product.vendor', 'product.category', 'warehouse')
-            ->when($request->company_code, fn ($q, $v) => $q->where('company_code', $v))
-            ->when($request->warehouse_id, fn ($q, $v) => $q->where('warehouse_id', $v))
-            ->when($request->vendor_id, fn ($q, $v) => $q->whereHas('product', fn ($pq) => $pq->where('vendor_id', $v)))
-            ->when($request->search, fn ($q, $v) => $q->whereHas('product', fn ($pq) => $pq->where('sku', 'like', "%{$v}%")->orWhere('name', 'like', "%{$v}%")))
+            ->when($request->company_code, fn($q, $v) => $q->where('company_code', $v))
+            ->when($request->warehouse_id, fn($q, $v) => $q->where('warehouse_id', $v))
+            ->when($request->vendor_id, fn($q, $v) => $q->whereHas('product', fn($pq) => $pq->where('vendor_id', $v)))
+            ->when($request->search, fn($q, $v) => $q->whereHas('product', fn($pq) => $pq->where('sku', 'like', "%{$v}%")->orWhere('name', 'like', "%{$v}%")))
             ->where('quantity', '>', 0);
 
         $inventory = $query->paginate(50)->appends($request->query());
@@ -186,10 +186,10 @@ class LogisticsController extends Controller
         $vendors = \App\Models\Vendor::active()->orderBy('company_name')->get();
 
         $stats = [
-            'total_skus'  => Inventory::when($request->company_code, fn ($q, $v) => $q->where('company_code', $v))->where('quantity', '>', 0)->count(),
-            'total_units' => Inventory::when($request->company_code, fn ($q, $v) => $q->where('company_code', $v))->sum('quantity'),
-            'available'   => Inventory::when($request->company_code, fn ($q, $v) => $q->where('company_code', $v))->sum('available_quantity'),
-            'reserved'    => Inventory::when($request->company_code, fn ($q, $v) => $q->where('company_code', $v))->sum('reserved_quantity'),
+            'total_skus'  => Inventory::when($request->company_code, fn($q, $v) => $q->where('company_code', $v))->where('quantity', '>', 0)->count(),
+            'total_units' => Inventory::when($request->company_code, fn($q, $v) => $q->where('company_code', $v))->sum('quantity'),
+            'available'   => Inventory::when($request->company_code, fn($q, $v) => $q->where('company_code', $v))->sum('available_quantity'),
+            'reserved'    => Inventory::when($request->company_code, fn($q, $v) => $q->where('company_code', $v))->sum('reserved_quantity'),
         ];
 
         return view('logistics.inventory.index', compact('inventory', 'warehouses', 'vendors', 'stats'));
@@ -198,19 +198,25 @@ class LogisticsController extends Controller
     public function downloadInventory(Request $request)
     {
         $items = Inventory::with('product.vendor', 'product.category', 'warehouse')
-            ->when($request->company_code, fn ($q, $v) => $q->where('company_code', $v))
-            ->when($request->warehouse_id, fn ($q, $v) => $q->where('warehouse_id', $v))
+            ->when($request->company_code, fn($q, $v) => $q->where('company_code', $v))
+            ->when($request->warehouse_id, fn($q, $v) => $q->where('warehouse_id', $v))
             ->where('quantity', '>', 0)->get();
 
         $csv = "SKU,Product Name,Category,Vendor,Warehouse,Company,Quantity,Available,Reserved,Received Date,Ageing (Days)\n";
         foreach ($items as $inv) {
             $ageing = $inv->received_date ? now()->diffInDays($inv->received_date) : 0;
             $csv .= implode(',', [
-                $inv->product->sku ?? '', '"' . str_replace('"', '""', $inv->product->name ?? '') . '"',
-                '"' . ($inv->product->category->name ?? '') . '"', '"' . ($inv->product->vendor->company_name ?? '') . '"',
-                '"' . ($inv->warehouse->name ?? '') . '"', $inv->company_code,
-                $inv->quantity, $inv->available_quantity, $inv->reserved_quantity,
-                $inv->received_date?->format('Y-m-d') ?? '', $ageing,
+                $inv->product->sku ?? '',
+                '"' . str_replace('"', '""', $inv->product->name ?? '') . '"',
+                '"' . ($inv->product->category->name ?? '') . '"',
+                '"' . ($inv->product->vendor->company_name ?? '') . '"',
+                '"' . ($inv->warehouse->name ?? '') . '"',
+                $inv->company_code,
+                $inv->quantity,
+                $inv->available_quantity,
+                $inv->reserved_quantity,
+                $inv->received_date?->format('Y-m-d') ?? '',
+                $ageing,
             ]) . "\n";
         }
         return response($csv, 200, ['Content-Type' => 'text/csv', 'Content-Disposition' => 'attachment; filename="inventory-' . date('Y-m-d') . '.csv"']);
@@ -221,7 +227,7 @@ class LogisticsController extends Controller
         $companyCode = $request->get('company_code');
 
         // Build flat ageing summary for KPI cards
-        $allInventory = Inventory::when($companyCode, fn ($q, $v) => $q->where('company_code', $v))
+        $allInventory = Inventory::when($companyCode, fn($q, $v) => $q->where('company_code', $v))
             ->where('quantity', '>', 0)
             ->whereNotNull('received_date')
             ->get()
@@ -240,7 +246,7 @@ class LogisticsController extends Controller
 
         // Ageing by warehouse
         $byWarehouse = Inventory::with('warehouse')
-            ->when($companyCode, fn ($q, $v) => $q->where('company_code', $v))
+            ->when($companyCode, fn($q, $v) => $q->where('company_code', $v))
             ->where('quantity', '>', 0)
             ->whereNotNull('received_date')
             ->get()
@@ -261,7 +267,7 @@ class LogisticsController extends Controller
 
         // GRN ageing
         $grnAgeing = Grn::with('shipment', 'warehouse')
-            ->when($companyCode, fn ($q, $v) => $q->where('company_code', $v))
+            ->when($companyCode, fn($q, $v) => $q->where('company_code', $v))
             ->latest()->get()->map(function ($grn) {
                 $grn->ageing_days = $grn->receipt_date ? now()->diffInDays($grn->receipt_date) : 0;
                 return $grn;
@@ -273,10 +279,10 @@ class LogisticsController extends Controller
     public function warehouseAllocation(Request $request)
     {
         $inventoryByWarehouse = Warehouse::active()
-            ->when($request->company_code, fn ($q, $v) => $q->where('company_code', $v))
-            ->withCount(['inventory' => fn ($q) => $q->where('quantity', '>', 0)])
-            ->withSum(['inventory' => fn ($q) => $q->where('quantity', '>', 0)], 'quantity')
-            ->withSum(['inventory' => fn ($q) => $q->where('quantity', '>', 0)], 'available_quantity')
+            ->when($request->company_code, fn($q, $v) => $q->where('company_code', $v))
+            ->withCount(['inventory' => fn($q) => $q->where('quantity', '>', 0)])
+            ->withSum(['inventory' => fn($q) => $q->where('quantity', '>', 0)], 'quantity')
+            ->withSum(['inventory' => fn($q) => $q->where('quantity', '>', 0)], 'available_quantity')
             ->with(['subWarehouses', 'subLocations'])
             ->get();
 
@@ -309,9 +315,9 @@ class LogisticsController extends Controller
 
         $charges = WarehouseCharge::with('warehouse', 'vendor', 'items')
             ->byMonth($month, $year)
-            ->when($category, fn ($q, $v) => $q->where('charge_category', $v))
-            ->when($request->warehouse_id, fn ($q, $v) => $q->where('warehouse_id', $v))
-            ->when($request->vendor_id, fn ($q, $v) => $q->where('vendor_id', $v))
+            ->when($category, fn($q, $v) => $q->where('charge_category', $v))
+            ->when($request->warehouse_id, fn($q, $v) => $q->where('warehouse_id', $v))
+            ->when($request->vendor_id, fn($q, $v) => $q->where('vendor_id', $v))
             ->latest()
             ->paginate(30)->withQueryString();
 
@@ -352,7 +358,7 @@ class LogisticsController extends Controller
             ->where('quantity', '>', 0)
             ->get();
 
-        $vendorGroups = $inventoryItems->groupBy(fn ($inv) => $inv->product->vendor_id ?? 0);
+        $vendorGroups = $inventoryItems->groupBy(fn($inv) => $inv->product->vendor_id ?? 0);
         $created = 0;
 
         try {
@@ -367,10 +373,15 @@ class LogisticsController extends Controller
                 $totalQty = $inventoryItems->sum('quantity');
 
                 $payableCharge = WarehouseCharge::create([
-                    'warehouse_id' => $warehouse->id, 'company_code' => $warehouse->company_code,
-                    'charge_month' => $month, 'charge_year' => $year,
-                    'charge_type' => 'monthly', 'charge_category' => 'payable',
-                    'calculated_amount' => 0, 'status' => 'calculated', 'uploaded_by' => auth()->id(),
+                    'warehouse_id' => $warehouse->id,
+                    'company_code' => $warehouse->company_code,
+                    'charge_month' => $month,
+                    'charge_year' => $year,
+                    'charge_type' => 'monthly',
+                    'charge_category' => 'payable',
+                    'calculated_amount' => 0,
+                    'status' => 'calculated',
+                    'uploaded_by' => auth()->id(),
                 ]);
 
                 $payableTotal = 0;
@@ -389,7 +400,9 @@ class LogisticsController extends Controller
                         'charge_key' => $line['key'],
                         'charge_label' => $whRates[$line['key'] . '_label'] ?? $line['key'],
                         'uom' => $whRates[$line['key'] . '_uom'] ?? '',
-                        'quantity' => $line['qty'], 'rate' => $rate, 'amount' => $amount,
+                        'quantity' => $line['qty'],
+                        'rate' => $rate,
+                        'amount' => $amount,
                     ]);
                     $payableTotal += $amount;
                 }
@@ -411,18 +424,23 @@ class LogisticsController extends Controller
                 }
 
                 $vendorRates = \App\Models\VendorRateCard::where('vendor_id', $vendorId)
-                    ->where(fn ($q) => $q->where('warehouse_id', $warehouse->id)->orWhereNull('warehouse_id'))
+                    ->where(fn($q) => $q->where('warehouse_id', $warehouse->id)->orWhereNull('warehouse_id'))
                     ->active()->effectiveOn(now()->startOfMonth()->toDateString())
                     ->get()->keyBy('charge_key');
 
                 $vendorQty = $vendorItems->sum('quantity');
 
                 $recoveryCharge = WarehouseCharge::create([
-                    'warehouse_id' => $warehouse->id, 'vendor_id' => $vendorId,
+                    'warehouse_id' => $warehouse->id,
+                    'vendor_id' => $vendorId,
                     'company_code' => $warehouse->company_code,
-                    'charge_month' => $month, 'charge_year' => $year,
-                    'charge_type' => 'monthly', 'charge_category' => 'receivable',
-                    'calculated_amount' => 0, 'status' => 'calculated', 'uploaded_by' => auth()->id(),
+                    'charge_month' => $month,
+                    'charge_year' => $year,
+                    'charge_type' => 'monthly',
+                    'charge_category' => 'receivable',
+                    'calculated_amount' => 0,
+                    'status' => 'calculated',
+                    'uploaded_by' => auth()->id(),
                 ]);
 
                 $recoveryTotal = 0;
@@ -442,7 +460,9 @@ class LogisticsController extends Controller
                         'charge_key' => $line['key'],
                         'charge_label' => $vr ? $vr->charge_label : ($whRates[$line['key'] . '_label'] ?? $line['key']),
                         'uom' => $vr ? $vr->uom : ($whRates[$line['key'] . '_uom'] ?? ''),
-                        'quantity' => $line['qty'], 'rate' => $rate, 'amount' => $amount,
+                        'quantity' => $line['qty'],
+                        'rate' => $rate,
+                        'amount' => $amount,
                     ]);
                     $recoveryTotal += $amount;
                 }
@@ -508,25 +528,56 @@ class LogisticsController extends Controller
         ];
         return view('logistics.warehouse-charges.variance', compact('charges', 'warehouses', 'totals', 'month', 'year'));
     }
-
     public function vendorRateCards(Request $request)
     {
         $rateCards = \App\Models\VendorRateCard::with('vendor', 'warehouse')
-            ->when($request->vendor_id, fn ($q, $v) => $q->where('vendor_id', $v))
-            ->active()->orderBy('vendor_id')->orderBy('charge_key')
+            ->when($request->vendor_id, fn($q, $v) => $q->where('vendor_id', $v))
+            ->orderBy('vendor_id')
             ->paginate(50)->withQueryString();
-      //  $vendors =  Vendor::active()->orderBy('company_name')->get();
-        
-$vendors =  Vendor::orderBy('company_name')->get();
-
-       // print_r($vendors->toArray());exit;
+        $vendors = \App\Models\Vendor::orderBy('company_name')->get();
         $warehouses = Warehouse::active()->orderBy('name')->get();
         $chargeKeys = [
-            'inward_unloading' => 'Unloading', 'inward_putaway' => 'Put Away', 'inward_checkin' => 'Check In',
-            'storage_pallet' => 'Pallet/Week', 'storage_cft' => 'CFT/Month',
-            'outward_order' => 'Order Processing', 'outward_pickpack' => 'Pick Pack',
-            'outward_label' => 'Label', 'outward_material' => 'Material Cost',
-            'others_vas' => 'VAS', 'others_setup' => 'Setup', 'others_wms' => 'WMS Monthly',
+            'inward_unloading' => 'Unloading',
+            'inward_putaway' => 'Put Away',
+            'inward_checkin' => 'Check In',
+            'storage_pallet' => 'Pallet/Week',
+            'storage_cft' => 'CFT/Month',
+            'outward_order' => 'Order Processing',
+            'outward_pickpack' => 'Pick Pack',
+            'outward_label' => 'Label',
+            'outward_material' => 'Material Cost',
+            'others_vas' => 'VAS',
+            'others_setup' => 'Setup',
+            'others_wms' => 'WMS Monthly',
+        ];
+        return view('logistics.warehouse-charges.vendor-rate-cards', compact('rateCards', 'vendors', 'warehouses', 'chargeKeys'));
+    }
+    public function vendorRateCardsOLD(Request $request)
+    {
+        $rateCards = \App\Models\VendorRateCard::with('vendor', 'warehouse')
+            ->when($request->vendor_id, fn($q, $v) => $q->where('vendor_id', $v))
+            ->orderBy('vendor_id')
+            ->orderBy('created_at', 'desc')
+            ->paginate(50)->withQueryString();
+        //  $vendors =  Vendor::active()->orderBy('company_name')->get();
+
+        $vendors =  Vendor::orderBy('company_name')->get();
+
+        // print_r($vendors->toArray());exit;
+        $warehouses = Warehouse::active()->orderBy('name')->get();
+        $chargeKeys = [
+            'inward_unloading' => 'Unloading',
+            'inward_putaway' => 'Put Away',
+            'inward_checkin' => 'Check In',
+            'storage_pallet' => 'Pallet/Week',
+            'storage_cft' => 'CFT/Month',
+            'outward_order' => 'Order Processing',
+            'outward_pickpack' => 'Pick Pack',
+            'outward_label' => 'Label',
+            'outward_material' => 'Material Cost',
+            'others_vas' => 'VAS',
+            'others_setup' => 'Setup',
+            'others_wms' => 'WMS Monthly',
         ];
         return view('logistics.warehouse-charges.vendor-rate-cards', compact('rateCards', 'vendors', 'warehouses', 'chargeKeys'));
     }
@@ -535,14 +586,11 @@ $vendors =  Vendor::orderBy('company_name')->get();
     {
         $request->validate([
             'vendor_id' => 'required|exists:vendors,id',
-            'charge_key' => 'required|string|max:100',
-            'charge_label' => 'required|string|max:200',
-            'rate' => 'required|numeric|min:0',
             'effective_from' => 'nullable|date',
             'effective_to' => 'nullable|date|after_or_equal:effective_from',
         ]);
         \App\Models\VendorRateCard::create(array_merge(
-            $request->only(['vendor_id', 'warehouse_id', 'charge_key', 'charge_label', 'charge_type', 'uom', 'rate', 'effective_from', 'effective_to']),
+            $request->only(['vendor_id', 'warehouse_id', 'charge_label', 'charge_type', 'uom', 'rate', 'effective_from', 'effective_to']),
             ['is_active' => true, 'created_by' => auth()->id()]
         ));
         return back()->with('success', 'Vendor rate card created.');
@@ -563,11 +611,16 @@ $vendors =  Vendor::orderBy('company_name')->get();
         $csv = "Category,Warehouse,Vendor,Period,Calculated,Actual,Variance,Invoice #,Status\n";
         foreach ($charges as $c) {
             $csv .= implode(',', [
-                $c->charge_category, '"'.($c->warehouse->name ?? '').'"', '"'.($c->vendor->company_name ?? 'N/A').'"',
-                $c->period, number_format(floatval($c->calculated_amount), 2),
-                number_format(floatval($c->actual_amount ?? 0), 2), number_format(floatval($c->variance ?? 0), 2),
-                $c->invoice_number ?? '', $c->status,
-            ])."\n";
+                $c->charge_category,
+                '"' . ($c->warehouse->name ?? '') . '"',
+                '"' . ($c->vendor->company_name ?? 'N/A') . '"',
+                $c->period,
+                number_format(floatval($c->calculated_amount), 2),
+                number_format(floatval($c->actual_amount ?? 0), 2),
+                number_format(floatval($c->variance ?? 0), 2),
+                $c->invoice_number ?? '',
+                $c->status,
+            ]) . "\n";
         }
         return response($csv, 200, ['Content-Type' => 'text/csv', 'Content-Disposition' => "attachment; filename=\"charges-{$month}-{$year}.csv\""]);
     }
@@ -581,7 +634,7 @@ $vendors =  Vendor::orderBy('company_name')->get();
         $charges = WarehouseCharge::with('vendor', 'warehouse')
             ->where('charge_month', $month)
             ->where('charge_year', $year)
-            ->when($companyCode, fn ($q, $v) => $q->where('company_code', $v))
+            ->when($companyCode, fn($q, $v) => $q->where('company_code', $v))
             ->get();
 
         $allocations = $charges->groupBy('vendor_id')->map(function ($group) {
@@ -612,9 +665,11 @@ $vendors =  Vendor::orderBy('company_name')->get();
         $request->validate(['receipt' => 'required|file|max:10240', 'actual_amount' => 'required|numeric']);
         $path = $request->file('receipt')->store('warehouse-receipts', 'public');
         $charge->update([
-            'receipt_file' => $path, 'actual_amount' => $request->actual_amount,
+            'receipt_file' => $path,
+            'actual_amount' => $request->actual_amount,
             'variance' => $request->actual_amount - $charge->calculated_amount,
-            'variance_comment' => $request->variance_comment, 'status' => 'receipt_uploaded',
+            'variance_comment' => $request->variance_comment,
+            'status' => 'receipt_uploaded',
         ]);
         return back()->with('success', 'Receipt uploaded.');
     }
@@ -646,12 +701,93 @@ $vendors =  Vendor::orderBy('company_name')->get();
         return redirect()->route('logistics.warehouse-charges.vendor-allocation', ['month' => $request->month, 'year' => $request->year])
             ->with('success', "Charges calculated for {$count} vendors.");
     }
+    // ─── RATE CARDS ──────────────────────────────────────────────
+    // ═══ WAREHOUSE RATE CARD (Company pays Warehouse) ═══
 
+    public function warehouseRateCards(Request $request)
+    {
+        $rateCards = \App\Models\WarehouseRateCard::with('warehouse', 'creator', 'approver')
+            ->when($request->warehouse_id, fn($q, $v) => $q->where('warehouse_id', $v))
+            ->orderByDesc('created_at')->paginate(30)->withQueryString();
+        $warehouses = Warehouse::active()->orderBy('name')->get();
+        return view('logistics.warehouse-rate-cards.index', compact('rateCards', 'warehouses'));
+    }
+
+    public function storeWarehouseRateCard(Request $request)
+    {
+        $request->validate([
+            'warehouse_id' => 'required|exists:warehouses,id',
+            'wh_inward_rate_per_carton' => 'required|numeric|min:0',
+            'wh_storage_rate_per_cft' => 'required|numeric|min:0',
+            'wh_fulfillment_rate_small' => 'required|numeric|min:0',
+            'wh_fulfillment_rate_large' => 'required|numeric|min:0',
+            'wh_fulfillment_qty_threshold' => 'required|integer|min:1',
+            'wh_pick_pack_rate_per_unit' => 'required|numeric|min:0',
+            'effective_from' => 'required|date',
+        ]);
+        $wh = Warehouse::findOrFail($request->warehouse_id);
+        $currency = $wh->company_code === '2200' ? 'EUR' : 'USD';
+        $maxV = \App\Models\WarehouseRateCard::where('warehouse_id', $wh->id)->max('version') ?? 0;
+
+        \App\Models\WarehouseRateCard::where('warehouse_id', $wh->id)->where('status', 'approved')
+            ->whereNull('effective_to')->update(['effective_to' => now()->subDay()->toDateString(), 'status' => 'expired']);
+
+        $rc = \App\Models\WarehouseRateCard::create(array_merge($request->only([
+            'warehouse_id',
+            'wh_inward_rate_per_carton',
+            'wh_storage_rate_per_cft',
+            'wh_fulfillment_rate_small',
+            'wh_fulfillment_rate_large',
+            'wh_fulfillment_qty_threshold',
+            'wh_pick_pack_rate_per_unit',
+            'effective_from',
+        ]), ['company_code' => $wh->company_code, 'currency' => $currency, 'version' => $maxV + 1, 'status' => 'draft', 'created_by' => auth()->id()]));
+
+        ActivityLog::log('created', 'warehouse_rate_card', $rc, null, $rc->toArray(), "WH Rate card v{$rc->version} for {$wh->name}");
+        return back()->with('success', "Rate card v{$rc->version} created for {$wh->name}.");
+    }
+
+    public function submitWarehouseRateCard(\App\Models\WarehouseRateCard $warehouseRateCard)
+    {
+        if (!$warehouseRateCard->isComplete()) return back()->with('error', 'All rate fields must be filled.');
+        $warehouseRateCard->update(['status' => 'pending_approval']);
+        return back()->with('success', 'Submitted for approval.');
+    }
+
+    public function approveWarehouseRateCard(\App\Models\WarehouseRateCard $warehouseRateCard)
+    {
+        $warehouseRateCard->update(['status' => 'approved', 'approved_by' => auth()->id(), 'approved_at' => now()]);
+        ActivityLog::log('approved', 'warehouse_rate_card', $warehouseRateCard);
+        return back()->with('success', 'Rate card approved and active.');
+    }
+
+    // ═══ WAREHOUSE MONTHLY CHARGES (Calculation + Invoice + Variance) ═══
+
+    public function warehouseMonthlyCharges(Request $request)
+    {
+        $month = $request->get('month', now()->month);
+        $year = $request->get('year', now()->year);
+        $charges = \App\Models\WarehouseMonthlyCharge::with('warehouse', 'grnDetails.grn', 'rateCard')
+            ->byMonth($month, $year)->orderBy('warehouse_id')->get();
+        $warehouses = Warehouse::active()->orderBy('name')->get();
+        return view('logistics.warehouse-monthly-charges.index', compact('charges', 'warehouses', 'month', 'year'));
+    }
+
+    public function runWarehouseCharges(Request $request)
+    {
+        $request->validate(['month' => 'required|integer|min:1|max:12', 'year' => 'required|integer|min:2024', 'warehouse_id' => 'required|exists:warehouses,id']);
+        $service = new \App\Services\WarehouseChargeCalculationService();
+        $result = $service->calculateMonthlyCharges($request->warehouse_id, $request->month, $request->year, auth()->id(), (bool)$request->dry_run);
+        if ($result['success']) {
+            return back()->with('success', "Calculated. Expected total: \$" . number_format($result['expected_total'], 2) . " across {$result['grn_count']} GRNs.");
+        }
+        return back()->with('error', $result['error']);
+    }
     // ─── RATE CARDS ──────────────────────────────────────────────
     public function rateCards(Request $request)
     {
         $companyCode = $request->get('company_code');
-        $warehouses = Warehouse::when($companyCode, fn ($q, $v) => $q->where('company_code', $v))
+        $warehouses = Warehouse::when($companyCode, fn($q, $v) => $q->where('company_code', $v))
             ->where('is_active', true)
             ->get();
 
@@ -694,7 +830,7 @@ $vendors =  Vendor::orderBy('company_name')->get();
         if (is_string($currentRates)) {
             $currentRates = json_decode($currentRates, true) ?? [];
         }
-        $newRates = array_merge($currentRates, array_filter($request->rates, fn ($v) => $v !== null && $v !== ''));
+        $newRates = array_merge($currentRates, array_filter($request->rates, fn($v) => $v !== null && $v !== ''));
 
         $warehouse->update(['rate_card' => $newRates]);
 

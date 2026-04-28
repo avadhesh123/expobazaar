@@ -5,9 +5,19 @@
 @section('content')
 {{-- KPIs --}}
 <div class="grid-kpi" style="grid-template-columns:repeat(3,1fr);">
-    <div class="kpi-card" style="border-left:3px solid #dc2626;"><div class="kpi-label">Payable (to Warehouse)</div><div class="kpi-value" style="color:#dc2626;">${{ number_format($stats['total_payable'], 2) }}</div></div>
-    <div class="kpi-card" style="border-left:3px solid #16a34a;"><div class="kpi-label">Receivable (from Vendors)</div><div class="kpi-value" style="color:#16a34a;">${{ number_format($stats['total_receivable'], 2) }}</div></div>
-    <div class="kpi-card" style="border-left:3px solid #e8a838;"><div class="kpi-label">Variance (Payable)</div><div class="kpi-value" style="color:#e8a838;">${{ number_format(abs($stats['total_variance']), 2) }} {{ $stats['total_variance'] > 0 ? '(over)' : ($stats['total_variance'] < 0 ? '(under)' : '') }}</div><div style="font-size:.65rem;color:#94a3b8;">{{ $stats['pending_invoices'] }} pending invoices</div></div>
+    <div class="kpi-card" style="border-left:3px solid #dc2626;">
+        <div class="kpi-label">Payable (to Warehouse)</div>
+        <div class="kpi-value" style="color:#dc2626;">${{ number_format($stats['total_payable'], 2) }}</div>
+    </div>
+    <div class="kpi-card" style="border-left:3px solid #16a34a;">
+        <div class="kpi-label">Receivable (from Vendors)</div>
+        <div class="kpi-value" style="color:#16a34a;">${{ number_format($stats['total_receivable'], 2) }}</div>
+    </div>
+    <div class="kpi-card" style="border-left:3px solid #e8a838;">
+        <div class="kpi-label">Variance (Payable)</div>
+        <div class="kpi-value" style="color:#e8a838;">${{ number_format(abs($stats['total_variance']), 2) }} {{ $stats['total_variance'] > 0 ? '(over)' : ($stats['total_variance'] < 0 ? '(under)' : '') }}</div>
+        <div style="font-size:.65rem;color:#94a3b8;">{{ $stats['pending_invoices'] }} pending invoices</div>
+    </div>
 </div>
 
 {{-- Filters + Run Charges --}}
@@ -16,8 +26,14 @@
         <form method="GET" action="{{ route('logistics.warehouse-charges') }}" style="display:flex;flex-wrap:wrap;gap:.6rem;align-items:flex-end;">
             <div style="min-width:80px;"><label style="font-size:.7rem;font-weight:600;color:#64748b;display:block;margin-bottom:.25rem;">Month</label><select name="month" style="width:100%;padding:.4rem .5rem;border:1px solid #d1d5db;border-radius:8px;font-size:.82rem;">@for($m=1;$m<=12;$m++)<option value="{{ $m }}" {{ $month==$m?'selected':'' }}>{{ date('M',mktime(0,0,0,$m,1)) }}</option>@endfor</select></div>
             <div style="min-width:80px;"><label style="font-size:.7rem;font-weight:600;color:#64748b;display:block;margin-bottom:.25rem;">Year</label><select name="year" style="width:100%;padding:.4rem .5rem;border:1px solid #d1d5db;border-radius:8px;font-size:.82rem;">@for($y=date('Y');$y>=date('Y')-2;$y--)<option value="{{ $y }}" {{ $year==$y?'selected':'' }}>{{ $y }}</option>@endfor</select></div>
-            <div style="min-width:110px;"><label style="font-size:.7rem;font-weight:600;color:#64748b;display:block;margin-bottom:.25rem;">Category</label><select name="category" style="width:100%;padding:.4rem .5rem;border:1px solid #d1d5db;border-radius:8px;font-size:.82rem;"><option value="">All</option><option value="payable" {{ $category==='payable'?'selected':'' }}>Payable</option><option value="receivable" {{ $category==='receivable'?'selected':'' }}>Receivable</option></select></div>
-            <div style="min-width:140px;"><label style="font-size:.7rem;font-weight:600;color:#64748b;display:block;margin-bottom:.25rem;">Warehouse</label><select name="warehouse_id" style="width:100%;padding:.4rem .5rem;border:1px solid #d1d5db;border-radius:8px;font-size:.82rem;"><option value="">All</option>@foreach($warehouses as $w)<option value="{{ $w->id }}" {{ request('warehouse_id')==(string)$w->id?'selected':'' }}>{{ $w->name }}</option>@endforeach</select></div>
+            <div style="min-width:110px;"><label style="font-size:.7rem;font-weight:600;color:#64748b;display:block;margin-bottom:.25rem;">Category</label><select name="category" style="width:100%;padding:.4rem .5rem;border:1px solid #d1d5db;border-radius:8px;font-size:.82rem;">
+                    <option value="">All</option>
+                    <option value="payable" {{ $category==='payable'?'selected':'' }}>Payable</option>
+                    <option value="receivable" {{ $category==='receivable'?'selected':'' }}>Receivable</option>
+                </select></div>
+            <div style="min-width:140px;"><label style="font-size:.7rem;font-weight:600;color:#64748b;display:block;margin-bottom:.25rem;">Warehouse</label><select name="warehouse_id" style="width:100%;padding:.4rem .5rem;border:1px solid #d1d5db;border-radius:8px;font-size:.82rem;">
+                    <option value="">All</option>@foreach($warehouses as $w)<option value="{{ $w->id }}" {{ request('warehouse_id')==(string)$w->id?'selected':'' }}>{{ $w->name }}</option>@endforeach
+                </select></div>
             <button type="submit" class="btn btn-primary btn-sm"><i class="fas fa-filter"></i></button>
             <a href="{{ route('logistics.warehouse-charges') }}" class="btn btn-outline btn-sm"><i class="fas fa-times"></i></a>
             <a href="{{ route('logistics.warehouse-charges.variance', ['month'=>$month,'year'=>$year]) }}" class="btn btn-outline btn-sm" style="margin-left:auto;"><i class="fas fa-chart-bar"></i> Variance</a>
@@ -45,28 +61,43 @@
 
 {{-- Charges Table --}}
 <div class="card">
-    <div class="card-header"><h3><i class="fas fa-calculator" style="margin-right:.5rem;color:#1e3a5f;"></i> Charges — {{ date('M', mktime(0,0,0,$month,1)) }} {{ $year }}</h3><span style="font-size:.78rem;color:#64748b;">{{ $charges->total() }} records</span></div>
+    <div class="card-header">
+        <h3><i class="fas fa-calculator" style="margin-right:.5rem;color:#1e3a5f;"></i> Charges — {{ date('M', mktime(0,0,0,$month,1)) }} {{ $year }}</h3><span style="font-size:.78rem;color:#64748b;">{{ $charges->total() }} records</span>
+    </div>
     <div class="card-body" style="padding:0;overflow-x:auto;">
         <table class="data-table">
-            <thead><tr><th>Warehouse</th><th>Vendor</th><th>Category</th><th>Calculated</th><th>Actual Invoice</th><th>Variance</th><th>Status</th><th style="width:200px;">Actions</th></tr></thead>
+            <thead>
+                <tr>
+                    <th>Warehouse</th>
+                    <th>Vendor</th>
+                    <th>Category</th>
+                    <th>Calculated</th>
+                    <th>Actual Invoice</th>
+                    <th>Variance</th>
+                    <th>Status</th>
+                    <th style="width:200px;">Actions</th>
+                </tr>
+            </thead>
             <tbody>
                 @forelse($charges as $c)
                 <tr style="{{ $c->charge_category==='receivable'?'background:#f0fdf4;':'' }}">
                     <td style="font-size:.82rem;font-weight:600;">{{ $c->warehouse->name ?? '—' }}</td>
-                    <td style="font-size:.82rem;">{{ $c->vendor->company_name ?? '—' }}<div style="font-size:.62rem;color:#94a3b8;">{{ $c->vendor->vendor_code ?? '' }}</div></td>
+                    <td style="font-size:.82rem;">{{ $c->vendor->company_name ?? '—' }}
+                        <div style="font-size:.62rem;color:#94a3b8;">{{ $c->vendor->vendor_code ?? '' }}</div>
+                    </td>
                     <td><span class="badge {{ $c->charge_category==='payable'?'badge-danger':'badge-success' }}">{{ ucfirst($c->charge_category) }}</span></td>
                     <td style="font-family:monospace;font-weight:700;">${{ number_format(floatval($c->calculated_amount), 2) }}</td>
                     <td style="font-family:monospace;">
                         @if($c->actual_amount !== null)
-                            ${{ number_format(floatval($c->actual_amount), 2) }}
-                            @if($c->invoice_number)<div style="font-size:.62rem;color:#94a3b8;">#{{ $c->invoice_number }}</div>@endif
+                        ${{ number_format(floatval($c->actual_amount), 2) }}
+                        @if($c->invoice_number)<div style="font-size:.62rem;color:#94a3b8;">#{{ $c->invoice_number }}</div>@endif
                         @else
-                            <span style="color:#94a3b8;">—</span>
+                        <span style="color:#94a3b8;">—</span>
                         @endif
                     </td>
                     <td style="font-family:monospace;font-weight:700;color:{{ floatval($c->variance ?? 0) > 0 ? '#dc2626' : (floatval($c->variance ?? 0) < 0 ? '#16a34a' : '#64748b') }};">
                         @if($c->variance !== null)
-                            {{ floatval($c->variance) > 0 ? '+' : '' }}${{ number_format(floatval($c->variance), 2) }}
+                        {{ floatval($c->variance) > 0 ? '+' : '' }}${{ number_format(floatval($c->variance), 2) }}
                         @else — @endif
                     </td>
                     <td>
@@ -90,7 +121,13 @@
                     <td colspan="8" style="padding:.75rem;">
                         <div style="font-size:.72rem;font-weight:700;color:#64748b;margin-bottom:.3rem;">CHARGE BREAKDOWN</div>
                         <table style="width:100%;border-collapse:collapse;font-size:.78rem;">
-                            <tr style="background:#e8ecf1;"><th style="padding:.3rem .5rem;text-align:left;">Charge</th><th style="text-align:left;">UOM</th><th style="text-align:right;">Qty</th><th style="text-align:right;">Rate</th><th style="text-align:right;">Amount</th></tr>
+                            <tr style="background:#e8ecf1;">
+                                <th style="padding:.3rem .5rem;text-align:left;">Charge</th>
+                                <th style="text-align:left;">UOM</th>
+                                <th style="text-align:right;">Qty</th>
+                                <th style="text-align:right;">Rate</th>
+                                <th style="text-align:right;">Amount</th>
+                            </tr>
                             @foreach($c->items as $item)
                             <tr style="border-bottom:1px solid #f1f5f9;">
                                 <td style="padding:.3rem .5rem;">{{ $item->charge_label }}</td>
@@ -100,7 +137,10 @@
                                 <td style="text-align:right;font-family:monospace;font-weight:600;">${{ number_format(floatval($item->amount), 2) }}</td>
                             </tr>
                             @endforeach
-                            <tr style="background:#f0f4f8;font-weight:700;"><td colspan="4" style="padding:.3rem .5rem;">Total</td><td style="text-align:right;font-family:monospace;">${{ number_format(floatval($c->calculated_amount), 2) }}</td></tr>
+                            <tr style="background:#f0f4f8;font-weight:700;">
+                                <td colspan="4" style="padding:.3rem .5rem;">Total</td>
+                                <td style="text-align:right;font-family:monospace;">${{ number_format(floatval($c->calculated_amount), 2) }}</td>
+                            </tr>
                         </table>
                     </td>
                 </tr>
@@ -120,7 +160,9 @@
                 </tr>
                 @endif
                 @empty
-                <tr><td colspan="8" style="text-align:center;padding:3rem;color:#94a3b8;"><i class="fas fa-calculator" style="font-size:2rem;display:block;margin-bottom:.5rem;"></i>No charges for this period. Click "Run Charges" to calculate.</td></tr>
+                <tr>
+                    <td colspan="8" style="text-align:center;padding:3rem;color:#94a3b8;"><i class="fas fa-calculator" style="font-size:2rem;display:block;margin-bottom:.5rem;"></i>No charges for this period. Click "Run Charges" to calculate.</td>
+                </tr>
                 @endforelse
             </tbody>
         </table>

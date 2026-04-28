@@ -41,8 +41,8 @@ class Product extends Model
 
     public function calculateCbm(): float
     {
-        if ($this->length_cm && $this->width_cm && $this->height_cm) {
-            return ($this->length_cm * $this->width_cm * $this->height_cm) / 1000000;
+        if ($this->length && $this->width && $this->height) {
+            return ($this->length * $this->width * $this->height) / 1000000;
         }
         return 0;
     }

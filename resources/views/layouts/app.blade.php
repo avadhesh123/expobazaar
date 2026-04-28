@@ -475,8 +475,12 @@
         <a href="{{ route('logistics.warehouse-charges') }}" class="{{ request()->routeIs('logistics.warehouse-charges*') ? 'active' : '' }}"><i class="fas fa-calculator"></i> Warehouse Charges</a>
       
        <a href="{{ route('logistics.rate-cards') }}" class="{{ request()->routeIs('logistics.rate-cards*') ? 'active' : '' }}"><i class="fas fa-file-invoice-dollar"></i> Rate Cards</a>
-       <a href="{{ route('logistics.vendor-rate-cards') }}" class="{{ request()->routeIs('logistics.vendor-rate-cards*') ? 'active' : '' }}"><i class="fas fa-users-cog"></i> Vendor Rate Cards</a>
                     
+      <a href="{{ route('logistics.warehouse-rate-cards') }}" class="{{ request()->routeIs('logistics.warehouse-rate-cards*') ? 'active' : '' }}"><i class="fas fa-file-contract"></i> WH Rate Card</a>
+       <a href="{{ route('logistics.warehouse-monthly-charges') }}" class="{{ request()->routeIs('logistics.warehouse-monthly*') ? 'active' : '' }}"><i class="fas fa-receipt"></i> WH Charges & Recon</a>
+       <a href="{{ route('logistics.vendor-rate-cards') }}" class="{{ request()->routeIs('logistics.vendor-rate-cards*') ? 'active' : '' }}"><i class="fas fa-users-cog"></i> Vendor Rate Cards</a>
+
+
         @elseif(auth()->user()->department === 'cataloguing')
         <div class="section-title">Cataloguing</div>
         <a href="{{ route('cataloguing.dashboard') }}" class="{{ request()->routeIs('cataloguing.dashboard') ? 'active' : '' }}"><i class="fas fa-tachometer-alt"></i> Dashboard</a>
