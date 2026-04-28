@@ -27,6 +27,10 @@
                         Goods Ready Date
                         <span style="display:block;font-size:.62rem;font-weight:400;color:#94a3b8;">Within next 75 days</span>
                     </th>
+                    <th style="min-width:180px;">
+                        Factory Location
+                        <span style="display:block;font-size:.62rem;font-weight:400;color:#94a3b8;">City, Country</span>
+                    </th>
                     <th style="min-width:160px;">
                         Final Inspection Date
                         <span style="display:block;font-size:.62rem;font-weight:400;color:#94a3b8;">Within 7 days of Goods Ready Date</span>
@@ -44,6 +48,7 @@
                 $maxExFactory = now()->addDays(75)->toDateString();
                 $exFactory = $ls->ex_factory_date?->toDateString() ?? '';
                 $finalInsp = $ls->final_inspection_date?->toDateString() ?? '';
+                $factoryLoc = $ls->factory_location ?? '';
                 // Max inspection = Goods Ready Date + 7 days (or today + 100 as fallback before Goods Ready Date is set)
                 $maxInspection = $exFactory ? \Carbon\Carbon::parse($exFactory)->addDays(7)->toDateString() : '';
                 @endphp
@@ -103,7 +108,24 @@
 
                         @endif
                     </td>
+                    {{-- Factory Location --}}
+                    <td>
+                        @if(!$ls->consignment_id && $ls->is_locked)
+                        <input type="text"
+                            class="factory-location-input"
+                            data-id="{{ $ls->id }}"
+                            value="{{ $factoryLoc }}"
+                            placeholder="e.g. Moradabad, India"
+                            maxlength="500"
+                            style="width:100%;padding:.32rem .45rem;border:1px solid {{ $factoryLoc ? '#86efac' : '#d1d5db' }};border-radius:6px;font-size:.8rem;color:#0d1b2a;background:{{ $factoryLoc ? '#f0fdf4' : '#fff' }};">
+                        <div style="font-size:.6rem;color:#94a3b8;margin-top:.1rem;">City, Country</div>
+                        @elseif($ls->consignment_id)
+                        <span style="font-size:.82rem;color:#475569;">{{ $factoryLoc ?: '—' }}</span>
+                        @else
+                        <span style="font-size:.72rem;color:#94a3b8;"><i class="fas fa-lock-open"></i> Available after approval</span>
 
+                        @endif
+                    </td>
                     {{-- Final Inspection Date --}}
                     <td>
                         @if(!$ls->consignment_id && $ls->is_locked)
@@ -276,7 +298,20 @@
                 });
             });
         });
+        // ── Factory Location inputs ──────────────────────────────────────────────
+        document.querySelectorAll('.factory-location-input').forEach(function(input) {
+            input.addEventListener('change', function() {
+                var lsId = this.getAttribute('data-id');
+                var val = this.value.trim();
+                var inputEl = this;
+                if (!val) return;
 
+                saveDate(lsId, 'factory_location', val, function() {
+                    inputEl.style.borderColor = '#86efac';
+                    inputEl.style.background = '#f0fdf4';
+                });
+            });
+        });
         // ── Final Inspection inputs ───────────────────────────────────────────────
         document.querySelectorAll('.inspection-input').forEach(function(input) {
             input.addEventListener('change', function() {

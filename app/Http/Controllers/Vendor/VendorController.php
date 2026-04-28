@@ -3,7 +3,7 @@
 namespace App\Http\Controllers\Vendor;
 
 use App\Http\Controllers\Controller;
-use App\Models\{Vendor, Consignment, VendorPayout, Chargeback,VendorMonthlyCharge, VendorDocument, Category, LiveSheet, OfferSheet, OfferSheetItem, Order, WarehouseCharge, Product};
+use App\Models\{Vendor, Consignment, VendorPayout, Chargeback, VendorMonthlyCharge, VendorDocument, Category, LiveSheet, OfferSheet, OfferSheetItem, Order, WarehouseCharge, Product};
 use App\Services\{DashboardService, VendorService, SourcingService};
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
@@ -1785,6 +1785,7 @@ class VendorController extends Controller
         $request->validate([
             'ex_factory_date'        => "nullable|date|after_or_equal:{$today}|before_or_equal:{$maxExFactory}",
             'final_inspection_date'  => 'nullable|date',
+            'factory_location'       => 'nullable|string|max:500',
         ]);
 
         $data = [];
@@ -1814,6 +1815,11 @@ class VendorController extends Controller
             $data['final_inspection_date'] = $inspDate ?: null;
         }
 
+        // ── Factory Location ──────────────────────────────────────────────────────
+        if ($request->has('factory_location')) {
+            $data['factory_location'] = $request->factory_location ?: null;
+        }
+        file_put_contents("storage/logs/LiveSheetDates.log" . date("Y-m-d") . ".log", print_r($data, true) . "\n", FILE_APPEND);
         if (!empty($data)) {
             $liveSheet->update($data);
             $data['test'] = 'dates updated';

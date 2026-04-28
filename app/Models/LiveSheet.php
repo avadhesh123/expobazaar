@@ -23,7 +23,8 @@ class LiveSheet extends Model
         'approved_at',
         'remarks',
         'ex_factory_date',
-        'final_inspection_date'
+        'final_inspection_date',
+         'factory_location',
     ];
 
     protected $casts = [
@@ -34,6 +35,7 @@ class LiveSheet extends Model
         'total_cbm' => 'decimal:4',
         'ex_factory_date' => 'date',
         'final_inspection_date' => 'date',
+       
     ];
 
     public function consignment()
