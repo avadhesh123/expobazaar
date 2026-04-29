@@ -8,7 +8,7 @@ use App\Services\{DashboardService, VendorService, SourcingService};
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
 use Illuminate\Support\Facades\Log;
-
+use App\Models\ActivityLog;
 class VendorController extends Controller
 {
     public function __construct(
@@ -1029,6 +1029,122 @@ class VendorController extends Controller
             return back()->with('error', 'Upload failed: ' . $e->getMessage())->withInput();
         }
     }
+     /**
+     * Upload Shipping Bill Copy
+     */
+    public function uploadShippingBill(Request $request, Consignment $consignment)
+    {
+        $vendor = auth()->user()->vendor;
+        if ($consignment->vendor_id !== $vendor->id) abort(403);
+
+        $request->validate([
+            'shipping_bill_file'   => 'required|file|max:10240|mimes:pdf,jpg,jpeg,png',
+            'shipping_bill_number' => 'required|string|max:100',
+        ]);
+
+        try {
+            $path = $request->file('shipping_bill_file')->store("consignments/{$consignment->id}/documents", 'public');
+            $consignment->update([
+                'shipping_bill_file'        => $path,
+                'shipping_bill_number'      => $request->shipping_bill_number,
+                'shipping_bill_upload_date' => now()->toDateString(),
+                'shipping_bill_upload_by'   => auth()->id(),
+            ]);
+            ActivityLog::log('uploaded', 'shipping_bill', $consignment, null, ['number' => $request->shipping_bill_number], "Shipping Bill uploaded for {$consignment->consignment_number}");
+            return back()->with('success', 'Shipping Bill uploaded successfully.');
+        } catch (\Exception $e) {
+            \Log::error('Shipping bill upload failed: ' . $e->getMessage());
+            return back()->with('error', 'Upload failed: ' . $e->getMessage())->withInput();
+        }
+    }
+
+    /**
+     * Upload Measurement Copy
+     */
+    public function uploadMeasurement(Request $request, Consignment $consignment)
+    {
+        $vendor = auth()->user()->vendor;
+        if ($consignment->vendor_id !== $vendor->id) abort(403);
+
+        $request->validate([
+            'measurement_file'   => 'required|file|max:10240|mimes:pdf,jpg,jpeg,png,xlsx,xls',
+            'measurement_number' => 'required|string|max:100',
+        ]);
+
+        try {
+            $path = $request->file('measurement_file')->store("consignments/{$consignment->id}/documents", 'public');
+            $consignment->update([
+                'measurement_file'        => $path,
+                'measurement_number'      => $request->measurement_number,
+                'measurement_upload_date' => now()->toDateString(),
+                'measurement_upload_by'   => auth()->id(),
+            ]);
+            ActivityLog::log('uploaded', 'measurement', $consignment, null, ['number' => $request->measurement_number], "Measurement copy uploaded for {$consignment->consignment_number}");
+            return back()->with('success', 'Measurement Copy uploaded successfully.');
+        } catch (\Exception $e) {
+            \Log::error('Measurement upload failed: ' . $e->getMessage());
+            return back()->with('error', 'Upload failed: ' . $e->getMessage())->withInput();
+        }
+    }
+
+    /**
+     * Upload HBL (House Bill of Lading) Copy
+     */
+    public function uploadHbl(Request $request, Consignment $consignment)
+    {
+        $vendor = auth()->user()->vendor;
+        if ($consignment->vendor_id !== $vendor->id) abort(403);
+
+        $request->validate([
+            'hbl_file'   => 'required|file|max:10240|mimes:pdf,jpg,jpeg,png',
+            'hbl_number' => 'required|string|max:100',
+        ]);
+
+        try {
+            $path = $request->file('hbl_file')->store("consignments/{$consignment->id}/documents", 'public');
+            $consignment->update([
+                'hbl_file'        => $path,
+                'hbl_number'      => $request->hbl_number,
+                'hbl_upload_date' => now()->toDateString(),
+                'hbl_upload_by'   => auth()->id(),
+            ]);
+            ActivityLog::log('uploaded', 'hbl', $consignment, null, ['number' => $request->hbl_number], "HBL uploaded for {$consignment->consignment_number}");
+            return back()->with('success', 'HBL Copy uploaded successfully.');
+        } catch (\Exception $e) {
+            \Log::error('HBL upload failed: ' . $e->getMessage());
+            return back()->with('error', 'Upload failed: ' . $e->getMessage())->withInput();
+        }
+    }
+
+    /**
+     * Upload Other Document
+     */
+    public function uploadOtherDoc(Request $request, Consignment $consignment)
+    {
+        $vendor = auth()->user()->vendor;
+        if ($consignment->vendor_id !== $vendor->id) abort(403);
+
+        $request->validate([
+            'other_doc_file' => 'required|file|max:10240|mimes:pdf,jpg,jpeg,png,xlsx,xls,doc,docx',
+            'other_doc_name' => 'required|string|max:200',
+        ]);
+
+        try {
+            $path = $request->file('other_doc_file')->store("consignments/{$consignment->id}/documents", 'public');
+            $consignment->update([
+                'other_doc_file'        => $path,
+                'other_doc_name'        => $request->other_doc_name,
+                'other_doc_upload_date' => now()->toDateString(),
+                'other_doc_upload_by'   => auth()->id(),
+            ]);
+            ActivityLog::log('uploaded', 'other_document', $consignment, null, ['name' => $request->other_doc_name], "Other doc uploaded for {$consignment->consignment_number}");
+            return back()->with('success', 'Document uploaded successfully.');
+        } catch (\Exception $e) {
+            \Log::error('Other doc upload failed: ' . $e->getMessage());
+            return back()->with('error', 'Upload failed: ' . $e->getMessage())->withInput();
+        }
+    }
+
     public function liveSheets()
     {
         $vendor = auth()->user()->vendor;

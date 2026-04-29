@@ -32,6 +32,22 @@ class Consignment extends Model
         'packing_list_number',
         'packing_list_upload_date',
         'packing_list_upload_by',
+        'shipping_bill_file',
+        'shipping_bill_number',
+        'shipping_bill_upload_date',
+        'shipping_bill_upload_by',
+        'measurement_file',
+        'measurement_number',
+        'measurement_upload_date',
+        'measurement_upload_by',
+        'hbl_file',
+        'hbl_number',
+        'hbl_upload_date',
+        'hbl_upload_by',
+        'other_doc_file',
+        'other_doc_name',
+        'other_doc_upload_date',
+        'other_doc_upload_by',
     ];
 
     protected $casts = [
@@ -39,6 +55,10 @@ class Consignment extends Model
         'total_value' => 'decimal:2',
         'commercial_invoice_upload_date' => 'date',
         'packing_list_upload_date' => 'date',
+        'shipping_bill_upload_date' => 'date',
+        'measurement_upload_date' => 'date',
+        'hbl_upload_date' => 'date',
+        'other_doc_upload_date' => 'date',
     ];
     public function commercialInvoiceUploader()
     {

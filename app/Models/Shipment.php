@@ -11,12 +11,37 @@ class Shipment extends Model
     use HasFactory, SoftDeletes;
 
     protected $fillable = [
-        'shipment_code', 'company_code', 'destination_country', 'shipment_type',
-        'status', 'container_number', 'container_size', 'total_cbm', 'capacity_cbm',
-        'total_weight', 'total_items', 'total_value', 'shipping_line', 'vessel_name',
-        'voyage_number', 'bill_of_lading', 'sailing_date', 'eta_date', 'arrival_date',
-        'port_of_loading', 'port_of_discharge', 'destination_warehouse_id',
-        'locked_by', 'locked_at', 'created_by', 'remarks',
+        'shipment_code',
+        'company_code',
+        'destination_country',
+        'shipment_type',
+        'status',
+        'container_number',
+        'container_size',
+        'total_cbm',
+        'capacity_cbm',
+        'total_weight',
+        'total_items',
+        'total_value',
+        'shipping_line',
+        'vessel_name',
+        'voyage_number',
+        'bill_of_lading',
+        'sailing_date',
+        'eta_date',
+        'arrival_date',
+        'port_of_loading',
+        'port_of_discharge',
+        'destination_warehouse_id',
+        'locked_by',
+        'locked_at',
+        'created_by',
+        'remarks',
+        'entry_summary_file',
+        'entry_summary_number',
+        'entry_summary_date',
+        'entry_summary_upload_by',
+        'entry_summary_upload_date',
     ];
 
     protected $casts = [
@@ -26,16 +51,39 @@ class Shipment extends Model
         'locked_at' => 'datetime',
         'total_cbm' => 'decimal:4',
         'capacity_cbm' => 'decimal:2',
+        'entry_summary_date' => 'date',
+        'entry_summary_upload_date' => 'date',
     ];
 
-    public function consignments() { return $this->belongsToMany(Consignment::class, 'shipment_consignments')->withPivot('cbm', 'items'); }
-    public function asn() { return $this->hasOne(Asn::class); }
-    public function grn() { return $this->hasOne(Grn::class); }
-    public function warehouse() { return $this->belongsTo(Warehouse::class, 'destination_warehouse_id'); }
-    public function creator() { return $this->belongsTo(User::class, 'created_by'); }
+    public function consignments()
+    {
+        return $this->belongsToMany(Consignment::class, 'shipment_consignments')->withPivot('cbm', 'items');
+    }
+    public function asn()
+    {
+        return $this->hasOne(Asn::class);
+    }
+    public function grn()
+    {
+        return $this->hasOne(Grn::class);
+    }
+    public function warehouse()
+    {
+        return $this->belongsTo(Warehouse::class, 'destination_warehouse_id');
+    }
+    public function creator()
+    {
+        return $this->belongsTo(User::class, 'created_by');
+    }
 
-    public function scopeByCompanyCode($query, $code) { return $query->where('company_code', $code); }
-    public function scopeInTransit($query) { return $query->where('status', 'in_transit'); }
+    public function scopeByCompanyCode($query, $code)
+    {
+        return $query->where('company_code', $code);
+    }
+    public function scopeInTransit($query)
+    {
+        return $query->where('status', 'in_transit');
+    }
 
     public function isOverCapacity(): bool
     {

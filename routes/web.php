@@ -100,6 +100,11 @@ Route::middleware(['auth'])->group(function () {
             Route::post('consignments/{consignment}/commercial-invoice', [VendorController::class, 'uploadCommercialInvoice'])->name('commercial-invoices.upload');
             Route::post('consignments/{consignment}/packing-list', [VendorController::class, 'uploadPackingList'])->name('packing-list.upload');
 
+            Route::post('consignments/{consignment}/shipping-bill', [VendorController::class, 'uploadShippingBill'])->name('shipping-bill.upload');
+            Route::post('consignments/{consignment}/measurement', [VendorController::class, 'uploadMeasurement'])->name('measurement.upload');
+            Route::post('consignments/{consignment}/hbl', [VendorController::class, 'uploadHbl'])->name('hbl.upload');
+            Route::post('consignments/{consignment}/other-doc', [VendorController::class, 'uploadOtherDoc'])->name('other-doc.upload');
+
             Route::get('inspections', [VendorController::class, 'inspectionReports'])->name('inspections.index');
             Route::get('live-sheets', [VendorController::class, 'liveSheets'])->name('live-sheets');
             Route::get('live-sheets/blank-template', [VendorController::class, 'downloadLiveSheetBlankTemplate'])->name('live-sheets.blank-template');
@@ -169,6 +174,8 @@ Route::middleware(['auth'])->group(function () {
         Route::get('shipments', [LogisticsController::class, 'shipments'])->name('shipments');
         Route::get('shipments/{shipment}', [LogisticsController::class, 'showShipment'])->name('shipments.show');
         Route::post('shipments/{shipment}/lock', [LogisticsController::class, 'lockShipment'])->name('shipments.lock');
+
+        Route::post('shipments/{shipment}/entry-summary', [LogisticsController::class, 'uploadEntrySummary'])->name('shipments.entry-summary');
         Route::get('grn', [LogisticsController::class, 'grnList'])->name('grn');
         Route::get('grn/{grn}/show', [LogisticsController::class, 'showGrn'])->name('grn.show');
         Route::get('grn/{shipment}/upload', [LogisticsController::class, 'uploadGrn'])->name('grn.upload');
