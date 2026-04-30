@@ -305,7 +305,13 @@ Route::middleware(['auth'])->group(function () {
         Route::get('pricing/{asn}/status', [HodController::class, 'pricingStatus'])->name('pricing.status');
         Route::post('pricing/{asn}', [HodController::class, 'storePricing'])->name('pricing.store');
         Route::post('pricing/{asn}/finalize', [HodController::class, 'finalizePricing'])->name('pricing.finalize');
-    });
+    
+    
+        
+ 
+Route::get('pricing/{asn}/download', [HodController::class, 'downloadPricing'])->name('pricing.download'); 
+    
+        });
 
     // NOTIFICATIONS
     Route::get('notifications', fn() => view('components.notifications', ['notifications' => auth()->user()->unreadNotifications()->take(50)->get()]))->name('notifications');

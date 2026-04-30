@@ -9,7 +9,7 @@ class SalesChannel extends Model
 {
     use HasFactory;
 
-    protected $fillable = ['name', 'slug', 'type', 'platform_url', 'is_active', 'company_codes', 'commission_rules'];
+    protected $fillable = ['name', 'slug', 'type', 'platform_url', 'is_active', 'company_codes', 'commission_rules','pricing_factors'];
 
     protected $casts = [
         'is_active' => 'boolean',
