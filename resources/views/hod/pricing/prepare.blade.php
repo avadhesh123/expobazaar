@@ -3,12 +3,32 @@
 @section('page-title', 'Pricing — ' . $asn->asn_number)
 
 @section('content')
-<div style="display:flex;gap:.5rem;margin-bottom:1.25rem;">
+<div style="display:flex;gap:.5rem;margin-bottom:1.25rem;flex-wrap:wrap;">
     <a href="{{ route('hod.asn-list') }}" class="btn btn-outline btn-sm"><i class="fas fa-arrow-left"></i> ASN List</a>
     <a href="{{ route('hod.pricing.download', $asn) }}" class="btn btn-secondary btn-sm"><i class="fas fa-download"></i> Download Pricing CSV</a>
-    <a href="{{ route('hod.pricing.status', $asn) }}" class="btn btn-outline btn-sm"><i class="fas fa-chart-bar"></i> Pricing Status</a>
+    <a href="{{ route('hod.pricing.last-mile-template', $asn) }}" class="btn btn-outline btn-sm"><i class="fas fa-file-csv"></i> Last Mile Template</a>
+    <button type="button" class="btn btn-secondary btn-sm" onclick="document.getElementById('lmUploadPanel').style.display=document.getElementById('lmUploadPanel').style.display==='none'?'block':'none'"><i class="fas fa-upload"></i> Upload Last Mile CSV</button>
+    <a href="{{ route('hod.pricing.status', $asn) }}" class="btn btn-outline btn-sm" style="margin-left:auto;"><i class="fas fa-chart-bar"></i> Pricing Status</a>
 </div>
-
+{{-- Last Mile CSV Upload Panel --}}
+<div id="lmUploadPanel" style="display:none;margin-bottom:1.25rem;">
+    <div class="card" style="border-color:#e8a838;">
+        <div class="card-body" style="padding:.85rem 1.4rem;">
+            <div style="font-size:.88rem;font-weight:700;color:#854d0e;margin-bottom:.5rem;"><i class="fas fa-upload"></i> Bulk Update Last Mile from CSV</div>
+            <div style="font-size:.72rem;color:#64748b;margin-bottom:.5rem;">
+                <strong>Steps:</strong> 1) Download the <a href="{{ route('hod.pricing.last-mile-template', $asn) }}" style="color:#1e40af;">Last Mile Template</a> →
+                2) Fill the "Last Mile" column for each SKU → 3) Upload the file below.
+                <br>CSV must have columns: <strong>SKU</strong> and <strong>Last Mile</strong>. SKUs are matched case-insensitively.
+            </div>
+            <form method="POST" action="{{ route('hod.pricing.last-mile-upload', $asn) }}" enctype="multipart/form-data" style="display:flex;gap:.6rem;align-items:flex-end;">
+                @csrf
+                <div><label style="font-size:.68rem;font-weight:600;color:#854d0e;">CSV / XLSX File *</label><input type="file" name="last_mile_file" required accept=".csv,.xlsx,.txt" style="font-size:.78rem;"></div>
+                <button type="submit" class="btn btn-secondary btn-sm" onclick="return confirm('Upload and update Last Mile values for all matching SKUs?')"><i class="fas fa-upload"></i> Upload & Update</button>
+                <button type="button" class="btn btn-outline btn-sm" onclick="document.getElementById('lmUploadPanel').style.display='none'">Cancel</button>
+            </form>
+        </div>
+    </div>
+</div>
 <!-- <div style="padding:.6rem 1rem;background:#eff6ff;border-radius:8px;border:1px solid #bfdbfe;margin-bottom:1rem;font-size:.78rem;color:#1e40af;">
     <i class="fas fa-info-circle" style="margin-right:.3rem;"></i>
     SKU, SAP, Vendor, Qty, FOB, WSP come from consignments. Enter <strong>Last Mile</strong> manually. <strong>Retail Price</strong> = WSP + Last Mile. Channel prices = WSP × Pricing Factor (auto-calculated). Click <strong>Save Pricing</strong> to submit.

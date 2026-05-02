@@ -117,8 +117,8 @@ Route::middleware(['auth'])->group(function () {
             Route::post('live-sheets/{liveSheet}/dates', [VendorController::class, 'saveLiveSheetDates'])->name('vendor.live-sheets.dates');
             Route::get('sales', [VendorController::class, 'salesReport'])->name('sales');
             Route::get('chargebacks', [VendorController::class, 'chargebacks'])->name('chargebacks');
-
             Route::get('grn', [VendorController::class, 'grn'])->name('grn');
+            Route::get('grn/{grn}', [VendorController::class, 'showGrn'])->name('grn.show');
             Route::get('inventory', [VendorController::class, 'inventory'])->name('inventory');
             Route::get('payouts', [VendorController::class, 'payouts'])->name('payouts');
             Route::post('payouts/{payout}/invoice', [VendorController::class, 'uploadInvoice'])->name('payouts.invoice');
@@ -305,13 +305,10 @@ Route::middleware(['auth'])->group(function () {
         Route::get('pricing/{asn}/status', [HodController::class, 'pricingStatus'])->name('pricing.status');
         Route::post('pricing/{asn}', [HodController::class, 'storePricing'])->name('pricing.store');
         Route::post('pricing/{asn}/finalize', [HodController::class, 'finalizePricing'])->name('pricing.finalize');
-    
-    
-        
- 
-Route::get('pricing/{asn}/download', [HodController::class, 'downloadPricing'])->name('pricing.download'); 
-    
-        });
+        Route::get('pricing/{asn}/download', [HodController::class, 'downloadPricing'])->name('pricing.download');
+        Route::get('pricing/{asn}/last-mile-template', [HodController::class, 'downloadLastMileTemplate'])->name('pricing.last-mile-template');
+        Route::post('pricing/{asn}/last-mile-upload', [HodController::class, 'uploadLastMile'])->name('pricing.last-mile-upload');
+    });
 
     // NOTIFICATIONS
     Route::get('notifications', fn() => view('components.notifications', ['notifications' => auth()->user()->unreadNotifications()->take(50)->get()]))->name('notifications');

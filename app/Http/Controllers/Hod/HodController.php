@@ -93,12 +93,12 @@ class HodController extends Controller
 
     public function storePricing(Request $request, Asn $asn)
     {
- 
+
 
         $request->validate([
             'pricing'                    => 'required|array|min:1',
             'pricing.*.product_id'       => 'required|exists:products,id',
-'pricing.*.channels.*.sales_channel_id' => 'required|exists:sales_channels,id',
+            'pricing.*.channels.*.sales_channel_id' => 'required|exists:sales_channels,id',
             'pricing.*.last_mile'                   => 'nullable|numeric|min:0',
         ]);
 
@@ -201,7 +201,211 @@ class HodController extends Controller
             'Content-Disposition' => "attachment; filename=\"Pricing-{$asn->asn_number}.csv\"",
         ]);
     }
+    /**
+     * Download Last Mile template CSV (SKU + Last Mile columns only)
+     */
+    public function downloadLastMileTemplate(Asn $asn)
+    {
+        $asn->load('shipment.consignments.vendor', 'shipment.consignments.liveSheet.items.product');
+        $existingPricing = PlatformPricing::where('asn_id', $asn->id)->get()->keyBy('product_id');
 
+        $csv = "SKU,Vendor Name,WSP,Inner Length,Inner Width,Inner Height,Weight (kg),Last Mile\n";
+
+        if ($asn->shipment && $asn->shipment->consignments) {
+            foreach ($asn->shipment->consignments as $consignment) {
+                if (!$consignment->liveSheet) continue;
+                foreach ($consignment->liveSheet->items as $lsItem) {
+                    if (!$lsItem->product) continue;
+                    $d = $lsItem->product_details ?? [];
+                    $wsp = floatval($d['wsp'] ?? 0);
+                    $ex = $existingPricing->get($lsItem->product_id);
+
+                    $csv .= '"' . ($lsItem->product->sku ?? '') . '"';
+                    $csv .= ',"' . ($consignment->vendor->company_name ?? '') . '"';
+                    $csv .= ',' . number_format($wsp, 2);
+                    $csv .= ',' . ($d['inner_length'] ?? $d['product_length'] ?? '');
+                    $csv .= ',' . ($d['inner_width'] ?? $d['product_width'] ?? '');
+                    $csv .= ',' . ($d['inner_height'] ?? $d['product_height'] ?? '');
+                    $csv .= ',' . ($d['weight_per_unit'] ?? $d['product_weight'] ?? '');
+                    $csv .= ',' . ($ex ? number_format(floatval($ex->last_mile ?? 0), 2) : '');
+                    $csv .= "\n";
+                }
+            }
+        }
+
+        return response($csv, 200, [
+            'Content-Type' => 'text/csv',
+            'Content-Disposition' => "attachment; filename=\"LastMile-Template-{$asn->asn_number}.csv\"",
+        ]);
+    }
+
+    /**
+     * Upload CSV to bulk update Last Mile values
+     * CSV format: SKU, SAP Code, Product Name, Last Mile
+     */
+    public function uploadLastMile(Request $request, Asn $asn)
+    {
+        $request->validate([
+            'last_mile_file' => 'required|file|max:5120',
+        ], [
+            'last_mile_file.required' => 'Please select a CSV file to upload.',
+        ]);
+
+        $file = $request->file('last_mile_file');
+        $ext = strtolower($file->getClientOriginalExtension());
+        if (!in_array($ext, ['csv', 'txt', 'xlsx'])) {
+            return back()->with('error', 'File must be CSV or XLSX format.');
+        }
+
+        try {
+            $asn->load('shipment.consignments.liveSheet.items.product');
+            $channels = SalesChannel::active()->orderBy('name')->get();
+
+            // Build SKU → product_id map from this ASN
+            $skuMap = [];
+            if ($asn->shipment && $asn->shipment->consignments) {
+                foreach ($asn->shipment->consignments as $consignment) {
+                    if (!$consignment->liveSheet) continue;
+                    foreach ($consignment->liveSheet->items as $lsItem) {
+                        if (!$lsItem->product) continue;
+                        $skuMap[strtolower(trim($lsItem->product->sku))] = [
+                            'product_id' => $lsItem->product_id,
+                            'wsp' => floatval(($lsItem->product_details ?? [])['wsp'] ?? 0),
+                            'fob' => floatval(($lsItem->product_details ?? [])['final_fob'] ?? $lsItem->unit_price ?? 0),
+                        ];
+                    }
+                }
+            }
+
+            // Parse CSV
+            $filePath = $file->store('temp', 'local');
+            $fullPath = storage_path('app/' . $filePath);
+
+            if ($ext === 'xlsx') {
+                $reader = new \PhpOffice\PhpSpreadsheet\Reader\Xlsx();
+                $reader->setReadDataOnly(true);
+                $spreadsheet = $reader->load($fullPath);
+                $rows = $spreadsheet->getActiveSheet()->toArray();
+            } else {
+                $rows = [];
+                if (($handle = fopen($fullPath, 'r')) !== false) {
+                    while (($row = fgetcsv($handle)) !== false) {
+                        $rows[] = $row;
+                    }
+                    fclose($handle);
+                }
+            }
+
+            @unlink($fullPath);
+
+            if (count($rows) < 2) {
+                return back()->with('error', 'CSV file is empty or has no data rows.');
+            }
+
+            // Find SKU and Last Mile column indexes from header
+            $header = array_map(fn($h) => strtolower(trim($h ?? '')), $rows[0]);
+            $skuCol = null;
+            $lmCol = null;
+            foreach ($header as $i => $h) {
+                if (in_array($h, ['sku', 'vendor sku', 'product sku'])) $skuCol = $i;
+                if (in_array($h, ['last mile', 'last_mile', 'lastmile'])) $lmCol = $i;
+            }
+
+            if ($skuCol === null) return back()->with('error', 'CSV must have a "SKU" column.');
+            if ($lmCol === null) return back()->with('error', 'CSV must have a "Last Mile" column.');
+
+            $updated = 0;
+            $skipped = 0;
+            $errors = [];
+
+            for ($i = 1; $i < count($rows); $i++) {
+                $row = $rows[$i];
+                $sku = strtolower(trim($row[$skuCol] ?? ''));
+                $lastMile = trim($row[$lmCol] ?? '');
+
+                if (!$sku || $lastMile === '') {
+                    $skipped++;
+                    continue;
+                }
+
+                if (!is_numeric($lastMile)) {
+                    $errors[] = "Row " . ($i + 1) . ": Last Mile '{$lastMile}' is not a number for SKU '{$row[$skuCol]}'.";
+                    continue;
+                }
+
+                $lastMile = floatval($lastMile);
+                $productData = $skuMap[$sku] ?? null;
+
+                if (!$productData) {
+                    $skipped++;
+                    continue;
+                }
+
+                $wsp = $productData['wsp'];
+                $fob = $productData['fob'];
+                $retailPrice = $wsp + $lastMile;
+
+                // Update all PlatformPricing records for this product in this ASN
+                $existingRecords = PlatformPricing::where('asn_id', $asn->id)
+                    ->where('product_id', $productData['product_id'])
+                    ->get();
+
+                if ($existingRecords->isEmpty()) {
+                    // Create per channel if no records exist yet
+                    foreach ($channels as $ch) {
+                        $factor = floatval(($ch->pricing_factors ?? [])['pricing_factor'] ?? 1.0);
+                        $channelPrice = round($wsp * $factor, 2);
+                        PlatformPricing::create([
+                            'asn_id'          => $asn->id,
+                            'product_id'      => $productData['product_id'],
+                            'sales_channel_id' => $ch->id,
+                            'company_code'    => $asn->company_code,
+                            'cost_price'      => $fob,
+                            'fob_price'       => $fob,
+                            'wsp_price'       => $wsp,
+                            'last_mile'       => $lastMile,
+                            'retail_price'    => $retailPrice,
+                            'pricing_factor'  => $factor,
+                            'channel_price'   => $channelPrice,
+                            'platform_price'  => $channelPrice,
+                            'selling_price'   => $channelPrice,
+                            'margin_percent'  => $channelPrice > 0 ? round((($channelPrice - $fob) / $channelPrice) * 100, 2) : 0,
+                            'status'          => 'submitted',
+                            'prepared_by'     => auth()->id(),
+                        ]);
+                    }
+                } else {
+                    // Update existing records
+                    foreach ($existingRecords as $rec) {
+                        $factor = floatval($rec->pricing_factor ?: 1.0);
+                        $channelPrice = round($wsp * $factor, 2);
+                        $rec->update([
+                            'last_mile'     => $lastMile,
+                            'retail_price'  => $retailPrice,
+                            'channel_price' => $channelPrice,
+                            'selling_price' => $channelPrice,
+                            'margin_percent' => $channelPrice > 0 ? round((($channelPrice - $fob) / $channelPrice) * 100, 2) : 0,
+                        ]);
+                    }
+                }
+                $updated++;
+            }
+
+            \App\Models\ActivityLog::log('uploaded', 'last_mile_bulk', $asn, null, [
+                'updated' => $updated,
+                'skipped' => $skipped,
+            ], "Last Mile CSV uploaded: {$updated} updated, {$skipped} skipped");
+
+            $msg = "{$updated} SKU(s) updated.";
+            if ($skipped > 0) $msg .= " {$skipped} skipped (no match or empty).";
+            if (!empty($errors)) $msg .= " Errors: " . implode('; ', array_slice($errors, 0, 3));
+
+            return back()->with($updated > 0 ? 'success' : 'error', $msg);
+        } catch (\Exception $e) {
+            \Log::error('Last Mile upload failed: ' . $e->getMessage());
+            return back()->with('error', 'Upload failed: ' . $e->getMessage());
+        }
+    }
     public function finalizePricing(Asn $asn)
     {
         $pending = PlatformPricing::where('asn_id', $asn->id)

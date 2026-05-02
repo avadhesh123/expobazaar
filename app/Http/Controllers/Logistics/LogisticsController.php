@@ -145,7 +145,11 @@ class LogisticsController extends Controller
             'items.*.product_id'       => 'required|exists:products,id',
             'items.*.expected_quantity' => 'required|integer|min:0',
             'items.*.received_quantity' => 'required|integer|min:0',
+            'items.*.damaged_quantity' => 'required|integer|min:0',
+            'items.*.missing_quantity' => 'required|integer|min:0',
+            'items.*.excess_quantity' => 'required|integer|min:0',
         ]);
+
         $this->logisticsService->uploadGrn($shipment, $request->all(), $request->items);
         return redirect()->route('logistics.grn')->with('success', 'GRN uploaded. Inventory updated automatically.');
     }

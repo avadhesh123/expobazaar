@@ -157,6 +157,7 @@ class LogisticsService
                 'total_items_received' => collect($items)->sum('received_quantity'),
                 'damaged_items' => collect($items)->sum('damaged_quantity'),
                 'missing_items' => collect($items)->sum('missing_quantity'),
+                'excess_items' => collect($items)->sum('excess_quantity'),
                 'grn_file' => $data['grn_file'] ?? null,
                 'remarks' => $data['remarks'] ?? null,
                 'uploaded_by' => auth()->id(),
@@ -171,6 +172,7 @@ class LogisticsService
                     'received_quantity' => $item['received_quantity'],
                     'damaged_quantity' => $item['damaged_quantity'] ?? 0,
                     'missing_quantity' => $item['missing_quantity'] ?? 0,
+                    'excess_quantity' => $item['excess_quantity'] ?? 0,
                     'remarks' => $item['remarks'] ?? null,
                 ]);
 

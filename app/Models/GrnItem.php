@@ -8,7 +8,7 @@ class GrnItem extends Model
 {
     protected $fillable = [
         'grn_id', 'product_id', 'consignment_id', 'expected_quantity',
-        'received_quantity', 'damaged_quantity', 'missing_quantity', 'remarks',
+        'received_quantity', 'damaged_quantity', 'missing_quantity','excess_quantity', 'remarks',
     ];
 
     public function grn() { return $this->belongsTo(Grn::class); }

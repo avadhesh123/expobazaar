@@ -11,7 +11,7 @@ class Grn extends Model
     protected $fillable = [
         'grn_number', 'shipment_id', 'warehouse_id', 'company_code',
         'receipt_date', 'status', 'total_items_expected', 'total_items_received',
-        'damaged_items', 'missing_items', 'grn_file', 'remarks',
+        'damaged_items', 'missing_items','excess_items', 'grn_file', 'remarks',
         'uploaded_by', 'verified_by',
     ];
 

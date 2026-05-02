@@ -1817,6 +1817,37 @@ class VendorController extends Controller
         return view('vendor.grn.index', compact('grns', 'vendor', 'stats'));
     }
 
+    public function showGrn(\App\Models\Grn $grn)
+    {
+        $vendor = auth()->user()->vendor;
+
+        // Verify this GRN belongs to this vendor's consignments
+        $consignmentIds = Consignment::where('vendor_id', $vendor->id)->pluck('id');
+        $shipmentIds = \DB::table('shipment_consignments')
+            ->whereIn('consignment_id', $consignmentIds)
+            ->pluck('shipment_id');
+
+        if (!$shipmentIds->contains($grn->shipment_id)) {
+            abort(403, 'You do not have access to this GRN.');
+        }
+
+        $grn->load('shipment', 'warehouse', 'uploader', 'items.product', 'items.consignment');
+
+        // Filter items to show only this vendor's products
+        $vendorProductIds = $vendor->products()->pluck('id')->toArray();
+        $vendorItems = $grn->items->filter(fn($item) => in_array($item->product_id, $vendorProductIds));
+
+        $itemStats = [
+            'total_expected' => $vendorItems->sum('expected_quantity'),
+            'total_received' => $vendorItems->sum('received_quantity'),
+            'total_damaged'  => $vendorItems->sum('damaged_quantity'),
+            'total_missing'  => $vendorItems->sum('missing_quantity'),
+            'total_excess'   => $vendorItems->sum('excess_quantity'),
+        ];
+
+        return view('vendor.grn.show', compact('grn', 'vendor', 'vendorItems', 'itemStats'));
+    }
+
     public function inventory(Request $request)
     {
         $vendor = auth()->user()->vendor;

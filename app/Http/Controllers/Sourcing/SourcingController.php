@@ -193,9 +193,45 @@ class SourcingController extends Controller
      */
     public function approveLiveSheet(LiveSheet $liveSheet)
     {
-        $this->sourcingService->approveLiveSheet($liveSheet, auth()->user());
-        return redirect()->route('sourcing.live-sheets')
-            ->with('success', 'Live sheet approved and locked. You can now create a Consignment.');
+        try {
+            // Step 1: Validate at least one item is selected
+            $selectedCount = $liveSheet->items()->where('is_selected', 1)->count();
+            if ($selectedCount === 0) {
+                return back()->with('error', 'Cannot approve: No items are selected. Please select at least one item before approving.');
+            }
+
+            // Step 2: Validate WSP for all selected items
+            $selectedItems = $liveSheet->items()->where('is_selected', 1)->get();
+            $missingWsp = [];
+            foreach ($selectedItems as $item) {
+                $d = $item->product_details ?? [];
+                $wsp = floatval($d['wsp'] ?? 0);
+                $wspFactor = floatval($d['wsp_factor'] ?? 0);
+                $landedCost = floatval($d['landed_cost'] ?? 0);
+
+                // WSP can be directly set or calculated from landed_cost × wsp_factor
+                if ($wsp <= 0 && ($wspFactor <= 0 || $landedCost <= 0)) {
+                    $sku = $item->product->sku ?? "Item #{$item->id}";
+                    $missingWsp[] = $sku;
+                }
+            }
+
+            if (!empty($missingWsp)) {
+                $skuList = implode(', ', array_slice($missingWsp, 0, 10));
+                $more = count($missingWsp) > 10 ? ' and ' . (count($missingWsp) - 10) . ' more' : '';
+                return back()->with('error', "Cannot approve: WSP is missing or zero for " . count($missingWsp) . " item(s): {$skuList}{$more}. Please set WSP Factor and ensure Landed Cost is calculated for all selected items.");
+            }
+
+
+            // Step 3: Approve and lock the live sheet
+            $this->sourcingService->approveLiveSheet($liveSheet, auth()->user());
+
+            return redirect()->route('sourcing.live-sheets')
+                ->with('success', 'Live sheet approved and locked. You can now create a Consignment.');
+                
+        } catch (\Exception $e) {
+            return back()->with('error', 'Error approving live sheet: ' . $e->getMessage());
+        }
     }
     /**
      * Sourcing team updates: Target FOB, Final Qty, Final FOB, Freight Factor, WSP Factor, Comments
