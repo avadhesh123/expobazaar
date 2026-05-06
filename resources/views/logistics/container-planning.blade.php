@@ -98,7 +98,7 @@
                 </thead>
                 <tbody>
                     @forelse($consignments as $con)
-                    <tr>
+                   <tr class="consignment-row" data-company-code="{{ $con->company_code }}">
                         <td style="text-align:center;"><input type="checkbox" name="consignment_ids[]" value="{{ $con->id }}" class="con-check" data-cbm="{{ $con->total_cbm }}" onchange="updateCbm()" style="width:16px;height:16px;accent-color:#16a34a;"></td>
                         <td style="font-weight:700;font-family:monospace;font-size:.82rem;">{{ $con->consignment_number }}</td>
                         <td>
@@ -162,4 +162,14 @@
     }
 </script>
 @endpush
+
+<script>
+document.querySelector('select[name="company_code"]').addEventListener('change', function() {
+    var selected = this.value;
+    document.querySelectorAll('.consignment-row').forEach(function(row) {
+        var cc = row.getAttribute('data-company-code');
+        row.style.display = (cc === selected) ? '' : 'none';
+    });
+});
+</script>
 @endsection
