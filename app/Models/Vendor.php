@@ -117,7 +117,12 @@ class Vendor extends Model
     // Scopes
     public function scopeActive($query)
     {
-        return $query->where('status', 'active');
+        // return $query->where('status', 'active');
+        return $query->whereIn('status', [
+            'active',
+            'pending_kyc',
+            'pending_contract'
+        ]);
     }
     public function scopeByCompanyCode($query, $code)
     {

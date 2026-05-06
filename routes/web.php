@@ -303,11 +303,14 @@ Route::middleware(['auth'])->group(function () {
         Route::get('asn', [HodController::class, 'asnList'])->name('asn-list');
         Route::get('pricing/{asn}/prepare', [HodController::class, 'preparePricing'])->name('pricing.prepare');
         Route::get('pricing/{asn}/status', [HodController::class, 'pricingStatus'])->name('pricing.status');
-        Route::post('pricing/{asn}', [HodController::class, 'storePricing'])->name('pricing.store');
-        Route::post('pricing/{asn}/finalize', [HodController::class, 'finalizePricing'])->name('pricing.finalize');
         Route::get('pricing/{asn}/download', [HodController::class, 'downloadPricing'])->name('pricing.download');
         Route::get('pricing/{asn}/last-mile-template', [HodController::class, 'downloadLastMileTemplate'])->name('pricing.last-mile-template');
+
+        Route::post('pricing/{asn}/finalize', [HodController::class, 'finalizePricing'])->name('pricing.finalize');
         Route::post('pricing/{asn}/last-mile-upload', [HodController::class, 'uploadLastMile'])->name('pricing.last-mile-upload');
+        Route::post('pricing/{asn}/update-channel-factor', [HodController::class, 'updateChannelFactor'])->name('pricing.update-channel-factor');
+
+        Route::post('pricing/{asn}', [HodController::class, 'storePricing'])->name('pricing.store');
     });
 
     // NOTIFICATIONS

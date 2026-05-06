@@ -157,16 +157,13 @@ class LogisticsController extends Controller
     // ─── ASN ─────────────────────────────────────────────────────
     public function downloadAsn(\App\Models\Asn $asn)
     {
-        $asn->load('shipment.consignments.vendor');
-        $items = $asn->items ?? [];
+        $asn->load('shipment.consignments.vendor', 'shipment.consignments.liveSheet.items.product');
+        $shipment = $asn->shipment;
 
-        //print_r($asn->shipment);
-
-        // print_r($asn->consignments-);  
-        //  exit;
         $spreadsheet = new \PhpOffice\PhpSpreadsheet\Spreadsheet();
         $sheet = $spreadsheet->getActiveSheet();
         $sheet->setTitle('ASN');
+
         $headers = [
             'Row#',
             'Invoice #',
@@ -192,35 +189,39 @@ class LogisticsController extends Controller
         }
 
         $row = 2;
-        foreach ($items as $item) {
-            //   echo '<pre>' . print_r($item, true) . '</pre>';
-            $vendorName = $item['vendor_name'] ?? '';
-            if (empty($vendorName) && isset($item['vendor_id'])) {
-                $vendorName = \App\Models\Vendor::find($item['vendor_id'])->company_name ?? '';
-            }
-            $consignmentNumber = '';
-            if (isset($item['consignment_id'])) {
-                $consignmentNumber = \App\Models\Consignment::find($item['consignment_id'])->consignment_number ?? '';
-            }
+        if ($shipment && $shipment->consignments) {
+            foreach ($shipment->consignments as $consignment) {
+                if (!$consignment->liveSheet) continue;
+                $vendorName = $consignment->vendor->company_name ?? '';
 
-            $sheet->setCellValue("A{$row}", $row - 1);
-            $sheet->setCellValue("B{$row}", $consignmentNumber);
-            $sheet->setCellValue("C{$row}", $item['sku'] ?? '');
-            $sheet->setCellValue("D{$row}", $item['quantity'] ?? '');
-            $sheet->setCellValue("E{$row}", '');
-            $sheet->setCellValue("F{$row}", '');
-            $sheet->setCellValue("G{$row}", $item['name'] ?? '');
-            $sheet->setCellValue("H{$row}", ($asn->asn_number ?? ''));
-            $sheet->setCellValue("I{$row}", $item['received_qty'] ?? 0);
-            $sheet->setCellValue("J{$row}", $item['extra'] ?? 0);
-            $sheet->setCellValue("K{$row}", '');
-            $sheet->setCellValue("L{$row}", '');
-            $sheet->setCellValue("M{$row}", '');
-            $sheet->setCellValue("N{$row}", '');
-            $sheet->setCellValue("O{$row}", '');
-            $sheet->setCellValue("P{$row}", $vendorName);
+                foreach ($consignment->liveSheet->items as $lsItem) {
+                    if (!$lsItem->product) continue;
+                    $d = $lsItem->product_details ?? [];
 
-            $row++;
+                    $qty = intval($lsItem->quantity ?? 0);
+                    $qtyPerCarton = intval($d['qty_master_pack'] ?? $d['qty_per_carton'] ?? 0);
+                    $totalCartons = intval($d['total_master_cartons'] ?? ($qtyPerCarton > 0 ? ceil($qty / $qtyPerCarton) : 0));
+
+                    $sheet->setCellValue("A{$row}", $row - 1);
+                    $sheet->setCellValue("B{$row}", $consignment->consignment_number ?? '');
+                    $sheet->setCellValue("C{$row}", $lsItem->product->sku ?? '');
+                    $sheet->setCellValue("D{$row}", $qty);
+                    $sheet->setCellValue("E{$row}", $totalCartons);
+                    $sheet->setCellValue("F{$row}", $qtyPerCarton);
+                    $sheet->setCellValue("G{$row}", $lsItem->product->name ?? '');
+                    $sheet->setCellValue("H{$row}", $asn->asn_number ?? '');
+                    $sheet->setCellValue("I{$row}", $shipment->container_number ?? '');
+                    $sheet->setCellValue("J{$row}", $shipment->bill_of_lading ?? '');
+                    $sheet->setCellValue("K{$row}", $shipment->shipment_type ?? '');
+                    $sheet->setCellValue("L{$row}", $shipment->shipping_line ?? '');
+                    $sheet->setCellValue("M{$row}", $shipment->sailing_date?->format('d M Y') ?? '');
+                    $sheet->setCellValue("N{$row}", $shipment->eta_date?->format('d M Y') ?? '');
+                    $sheet->setCellValue("O{$row}", '');
+                    $sheet->setCellValue("P{$row}", $vendorName);
+
+                    $row++;
+                }
+            }
         }
 
         $filename = "ASN-{$asn->asn_number}.xlsx";
@@ -229,7 +230,6 @@ class LogisticsController extends Controller
         $writer->save($tempPath);
         return response()->download($tempPath, $filename)->deleteFileAfterSend(true);
     }
-
     // ─── INVENTORY ───────────────────────────────────────────────
     public function inventory(Request $request)
     {

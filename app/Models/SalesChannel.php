@@ -15,6 +15,7 @@ class SalesChannel extends Model
         'is_active' => 'boolean',
         'company_codes' => 'array',
         'commission_rules' => 'array',
+        'pricing_factors' => 'array',
     ];
 
     public function orders() { return $this->hasMany(Order::class); }

@@ -406,6 +406,60 @@ class HodController extends Controller
             return back()->with('error', 'Upload failed: ' . $e->getMessage());
         }
     }
+
+
+    /**
+     * AJAX: Update a sales channel's pricing factor
+     */
+    public function updateChannelFactor(Request $request)
+    {
+        $request->validate([
+            'channel_id' => 'required|exists:sales_channels,id',
+            'factor'     => 'required|numeric|min:0.01|max:10',
+        ]);
+
+        $channel = SalesChannel::findOrFail($request->channel_id);
+
+        // Safely handle pricing_factors (could be null, string, or array)
+        $pricingFactors = $channel->pricing_factors;
+
+        if (is_string($pricingFactors)) {
+            $oldFactors = json_decode($pricingFactors, true) ?? [];
+        } elseif (is_array($pricingFactors)) {
+            $oldFactors = $pricingFactors;
+        } else {
+            $oldFactors = [];
+        }
+
+        $oldFactor = $oldFactors['pricing_factor'] ?? 1.0;
+
+        // Update the factor
+        $oldFactors['pricing_factor'] = floatval($request->factor);
+
+        // Save back as JSON
+        $channel->update([
+            'pricing_factors' => $oldFactors
+        ]);
+
+        // Logging
+        file_put_contents(
+            storage_path('logs/pricing_factors.log'),
+            "Channel {$channel->name} factor updated from {$oldFactor} to {$request->factor}\t" . now() . "\t " . auth()->user()->name . "\n",
+            FILE_APPEND
+        );
+
+        \App\Models\ActivityLog::log('updated', 'sales_channel_factor', $channel, null, [
+            'old_factor' => $oldFactor,
+            'new_factor' => $request->factor,
+        ], "Pricing factor updated: {$channel->name} {$oldFactor} → {$request->factor}");
+
+        return response()->json([
+            'success' => true,
+            'factor' => floatval($request->factor),
+            'channel' => $channel->name
+        ]);
+    }
+
     public function finalizePricing(Asn $asn)
     {
         $pending = PlatformPricing::where('asn_id', $asn->id)

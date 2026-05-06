@@ -205,12 +205,20 @@ class SourcingController extends Controller
             $missingWsp = [];
             foreach ($selectedItems as $item) {
                 $d = $item->product_details ?? [];
-                $wsp = floatval($d['wsp'] ?? 0);
-                $wspFactor = floatval($d['wsp_factor'] ?? 0);
-                $landedCost = floatval($d['landed_cost'] ?? 0);
+                file_put_contents('storage/logs/sourcing.approve.livesheet.log', "Debug: Item ID {$item->id}, Product ID {$item->product_id}, Details: " . json_encode($d) . "\n", FILE_APPEND);
+
+                $finalFob = (float)($d['final_fob'] ?? $item->unit_price);
+                $dutyPercent = (float)($d['duty_percent'] ?? 0);
+                $freightFactor = (float)($d['freight_factor'] ?? 0);
+                $wspFactor = (float)($d['wsp_factor'] ?? 0);
+
+                $dutyAmt = $finalFob * ($dutyPercent / 100);
+                $freightAmt = $freightFactor * $finalFob;
+                $landedCost = $finalFob + $dutyAmt + $freightAmt;
+                $wsp = $landedCost * $wspFactor;
 
                 // WSP can be directly set or calculated from landed_cost × wsp_factor
-                if ($wsp <= 0 && ($wspFactor <= 0 || $landedCost <= 0)) {
+                if ($wsp <= 0 || $wspFactor <= 0 || $landedCost <= 0) {
                     $sku = $item->product->sku ?? "Item #{$item->id}";
                     $missingWsp[] = $sku;
                 }
@@ -228,7 +236,6 @@ class SourcingController extends Controller
 
             return redirect()->route('sourcing.live-sheets')
                 ->with('success', 'Live sheet approved and locked. You can now create a Consignment.');
-                
         } catch (\Exception $e) {
             return back()->with('error', 'Error approving live sheet: ' . $e->getMessage());
         }

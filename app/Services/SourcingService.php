@@ -192,7 +192,7 @@ class SourcingService
                 Product::where('id', $item['product_id'])->update([
                     'vendor_price' => $unitPrice,
                     'cbm'          => $cbmPerUnit,
-                    'weight_kg'    => $weightPerUnit,
+                    'weight'    => $weightPerUnit,
                 ]);
             }
 

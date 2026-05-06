@@ -65,9 +65,10 @@
                         <option value="AIR">AIR (10 CBM)</option>
                     </select></div>
                 <div><label style="font-size:.7rem;font-weight:600;color:#64748b;display:block;margin-bottom:.25rem;">Company</label><select name="company_code" required style="padding:.4rem .5rem;border:1px solid #d1d5db;border-radius:8px;font-size:.82rem;font-family:inherit;">
-                        <option value="2000">🇮🇳 2000</option>
-                        <option value="2100" selected>🇺🇸 2100</option>
-                        <option value="2200">🇳🇱 2200</option>
+                        <option value="2000" {{ request('company_code')==='2000'?'selected':'' }}>🇮🇳 2000</option>
+                        <option value="2100" {{ request('company_code')==='2100'?'selected':'' }}>🇺🇸 2100</option>
+                        <option value="2200" {{ request('company_code')==='2200'?'selected':'' }}>🇳🇱 2200</option>
+
                     </select></div>
                 <div><label style="font-size:.7rem;font-weight:600;color:#64748b;display:block;margin-bottom:.25rem;">Container #</label><input type="text" name="container_number" placeholder="Optional" style="width:120px;padding:.4rem .5rem;border:1px solid #d1d5db;border-radius:8px;font-size:.82rem;"></div>
                 <button type="submit" class="btn btn-primary"><i class="fas fa-ship" style="margin-right:.3rem;"></i> Create Shipment</button>
@@ -86,7 +87,7 @@
                         <th style="width:40px;text-align:center;"><input type="checkbox" id="selectAll" onchange="toggleAll(this)" style="width:16px;height:16px;"></th>
                         <th>Consignment #</th>
                         <th>Vendor</th>
-                         <th>Factory Location</th>
+                        <th>Factory Location</th>
                         <th>Goods Ready Date</th>
                         <th>Country</th>
                         <th>Items</th>
@@ -105,7 +106,7 @@
                             <div style="font-size:.68rem;color:#94a3b8;">{{ $con->vendor->vendor_code ?? '' }}</div>
                         </td>
                         <td>{{ $con->factory_location ?? '—' }}</td>
-                        <td>{{ $con->goods_ready_date ? date('d M Y', strtotime($con->goods_ready_date)) : '—' }}</td>  
+                        <td>{{ $con->goods_ready_date ? date('d M Y', strtotime($con->goods_ready_date)) : '—' }}</td>
                         <td>@php $fl=['US'=>'🇺🇸','NL'=>'🇳🇱','IN'=>'🇮🇳']; @endphp {{ $fl[$con->destination_country] ?? '' }} {{ $con->destination_country }}</td>
                         <td style="text-align:center;font-weight:600;">{{ $con->total_items }}</td>
                         <td style="font-family:monospace;font-weight:700;">{{ number_format($con->total_cbm, 2) }} <span style="font-size:.65rem;color:#94a3b8;">CBM</span></td>

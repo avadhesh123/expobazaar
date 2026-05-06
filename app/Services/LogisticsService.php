@@ -127,6 +127,11 @@ class LogisticsService
             }
         }
 
+        $existingAsn = Asn::where('shipment_id', $shipment->id)->first();
+        if ($existingAsn) {
+            return back()->with('error', "ASN already exists for this shipment: {$existingAsn->asn_number}. Cannot generate a duplicate.");
+        }
+
         return Asn::create([
             'asn_number'   => Asn::generateNumber($shipment->shipment_code),
             'shipment_id'  => $shipment->id,
@@ -268,10 +273,10 @@ class LogisticsService
     {
         $warehouse = Warehouse::findOrFail($warehouseId);
         $inventory = Inventory::where('warehouse_id', $warehouseId)
-            ->whereHas('product', fn ($q) => $q->where('vendor_id', $vendorId))
+            ->whereHas('product', fn($q) => $q->where('vendor_id', $vendorId))
             ->get();
 
-        $totalCbm = $inventory->sum(fn ($inv) => $inv->product->cbm * $inv->quantity);
+        $totalCbm = $inventory->sum(fn($inv) => $inv->product->cbm * $inv->quantity);
 
         $charges = [];
 

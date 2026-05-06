@@ -10,7 +10,6 @@
     <button type="button" class="btn btn-secondary btn-sm" onclick="document.getElementById('lmUploadPanel').style.display=document.getElementById('lmUploadPanel').style.display==='none'?'block':'none'"><i class="fas fa-upload"></i> Upload Last Mile CSV</button>
     <a href="{{ route('hod.pricing.status', $asn) }}" class="btn btn-outline btn-sm" style="margin-left:auto;"><i class="fas fa-chart-bar"></i> Pricing Status</a>
 </div>
-
 {{-- Last Mile CSV Upload Panel --}}
 <div id="lmUploadPanel" style="display:none;margin-bottom:1.25rem;">
     <div class="card" style="border-color:#e8a838;">
@@ -30,6 +29,10 @@
         </div>
     </div>
 </div>
+<!-- <div style="padding:.6rem 1rem;background:#eff6ff;border-radius:8px;border:1px solid #bfdbfe;margin-bottom:1rem;font-size:.78rem;color:#1e40af;">
+    <i class="fas fa-info-circle" style="margin-right:.3rem;"></i>
+    SKU, SAP, Vendor, Qty, FOB, WSP come from consignments. Enter <strong>Last Mile</strong> manually. <strong>Retail Price</strong> = WSP + Last Mile. Channel prices = WSP × Pricing Factor (auto-calculated). Click <strong>Save Pricing</strong> to submit.
+</div> -->
 
 <form method="POST" action="{{ route('hod.pricing.store', $asn) }}">
     @csrf
@@ -44,6 +47,8 @@
         <div class="card-body" style="padding:0;overflow-x:auto;">
             <table class="data-table" style="margin:0;font-size:.75rem;">
                 <thead>
+                   
+                    {{-- Row 1: Column headers --}}
                     <tr style="background:#f0f4f8;">
                         <th style="min-width:110px;">SKU</th>
                         <th style="min-width:80px;">SAP</th>
@@ -54,16 +59,10 @@
                         <th style="min-width:80px;text-align:right;background:#fff7ed;">Last Mile</th>
                         <th style="min-width:90px;text-align:right;background:#f0fdf4;border-right:2px solid #bbf7d0;">Retail Price</th>
                         @foreach($channels as $ch)
-                        @php $factor = floatval($channelFactors[$ch->id]['factor'] ?? 1.0); @endphp
-                        <th style="min-width:100px;text-align:center;font-size:.68rem;padding:.4rem .3rem;">
-                            <div style="font-size:.65rem;color:#64748b;margin-bottom:.15rem;">{{ $ch->name }}</div>
-                            <input type="number" step="0.01" min="0.01" max="10"
-                                value="{{ $factor }}"
-                                class="factor-input"
-                                data-channel-id="{{ $ch->id }}"
-                                style="width:60px;padding:.15rem .25rem;border:1px solid #d1d5db;border-radius:4px;font-size:.78rem;font-family:monospace;text-align:center;font-weight:700;color:#854d0e;background:#fefce8;"
-                                title="Pricing factor for {{ $ch->name }} — editable, auto-saves">
-                            <div class="factor-status-{{ $ch->id }}" style="font-size:.5rem;margin-top:.1rem;height:.7rem;color:#94a3b8;"></div>
+                        <th style="min-width:90px;text-align:center;font-size:.68rem;">
+                            <i class="fas fa-store" style="color:#e8a838;font-size:.6rem;display:block;margin-bottom:.1rem;"></i>
+                            {{ $ch->name }}
+                            ({{ $channelFactors[$ch->id]['factor'] ?? 1.0 }})
                         </th>
                         @endforeach
                     </tr>
@@ -93,10 +92,10 @@
                                 name="pricing[{{ $idx }}][last_mile]"
                                 value="{{ $lastMile ?: '' }}"
                                 placeholder="0.00"
+                                class="last-mile-input"
                                 data-idx="{{ $idx }}"
                                 data-wsp="{{ $wsp }}"
                                 onchange="updateRow({{ $idx }}, {{ $wsp }})"
-                                oninput="updateRow({{ $idx }}, {{ $wsp }})"
                                 style="width:70px;padding:.2rem .3rem;border:1px solid #fed7aa;border-radius:4px;font-size:.78rem;font-family:monospace;text-align:right;background:#fff;">
                         </td>
                         <td style="text-align:right;font-family:monospace;font-weight:700;color:#166534;background:#f0fdf4;border-right:2px solid #bbf7d0;" id="retail-{{ $idx }}">
@@ -111,7 +110,7 @@
                         <td style="text-align:right;font-family:monospace;font-size:.78rem;" id="ch-{{ $idx }}-{{ $ch->id }}">
                             ${{ number_format($channelPrice, 2) }}
                             <input type="hidden" name="pricing[{{ $idx }}][channels][{{ $ch->id }}][sales_channel_id]" value="{{ $ch->id }}">
-                            <input type="hidden" name="pricing[{{ $idx }}][channels][{{ $ch->id }}][pricing_factor]" id="factor-hidden-{{ $idx }}-{{ $ch->id }}" value="{{ $factor }}">
+                            <input type="hidden" name="pricing[{{ $idx }}][channels][{{ $ch->id }}][pricing_factor]" value="{{ $factor }}">
                             <input type="hidden" name="pricing[{{ $idx }}][channels][{{ $ch->id }}][channel_price]" id="ch-val-{{ $idx }}-{{ $ch->id }}" value="{{ $channelPrice }}">
                         </td>
                         @endforeach
@@ -127,91 +126,39 @@
     </div>
 </form>
 
+{{-- Legend --}}
 <div style="margin-top:.75rem;display:flex;gap:1.5rem;font-size:.72rem;color:#64748b;">
     <span style="padding:.2rem .5rem;background:#fff7ed;border-radius:4px;">🟠 Last Mile = manual entry</span>
     <span style="padding:.2rem .5rem;background:#f0fdf4;border-radius:4px;">🟢 Retail Price = WSP + Last Mile</span>
-    <span style="padding:.2rem .5rem;background:#fefce8;border-radius:4px;">🟡 Channel Price = WSP × Factor (editable in header, auto-saved)</span>
+    <span style="padding:.2rem .5rem;background:#fefce8;border-radius:4px;">🟡 Channel Price = WSP × Pricing Factor</span>
 </div>
 
+@push('scripts')
 <script>
+// Channel factors keyed by channel id
 var channelFactors = @json(collect($channelFactors)->mapWithKeys(fn($v, $k) => [$k => $v['factor']]));
-var totalRows = {{ $items->count() }};
-var csrfToken = '{{ csrf_token() }}';
-var factorSaveUrl = "{{ route('hod.pricing.update-channel-factor', $asn) }}";
+
 function updateRow(idx, wsp) {
     var lastMile = parseFloat(document.querySelector('[name="pricing[' + idx + '][last_mile]"]').value) || 0;
     var retail = (wsp + lastMile).toFixed(2);
-    document.getElementById('retail-' + idx).innerHTML =
-        '$' + retail + '<input type="hidden" name="pricing[' + idx + '][retail_price]" id="retail-val-' + idx + '" value="' + retail + '">';
+
+    // Update retail price display
+    document.getElementById('retail-' + idx).innerHTML = '$' + retail + '<input type="hidden" name="pricing[' + idx + '][retail_price]" id="retail-val-' + idx + '" value="' + retail + '">';
+
+    // Channel prices are WSP * factor (not affected by last mile)
+    // But recalc in case we want to show updated values
     Object.keys(channelFactors).forEach(function(chId) {
-        rebuildChannelCell(idx, chId, wsp);
+        var factor = channelFactors[chId];
+        var chPrice = (wsp * factor).toFixed(2);
+        var el = document.getElementById('ch-' + idx + '-' + chId);
+        if (el) {
+            el.innerHTML = '$' + chPrice +
+                '<input type="hidden" name="pricing[' + idx + '][channels][' + chId + '][sales_channel_id]" value="' + chId + '">' +
+                '<input type="hidden" name="pricing[' + idx + '][channels][' + chId + '][pricing_factor]" value="' + factor + '">' +
+                '<input type="hidden" name="pricing[' + idx + '][channels][' + chId + '][channel_price]" id="ch-val-' + idx + '-' + chId + '" value="' + chPrice + '">';
+        }
     });
 }
-
-function rebuildChannelCell(idx, chId, wsp) {
-    var factor = channelFactors[chId];
-    var chPrice = (wsp * factor).toFixed(2);
-    var el = document.getElementById('ch-' + idx + '-' + chId);
-    if (el) {
-        el.innerHTML = '$' + chPrice +
-            '<input type="hidden" name="pricing[' + idx + '][channels][' + chId + '][sales_channel_id]" value="' + chId + '">' +
-            '<input type="hidden" name="pricing[' + idx + '][channels][' + chId + '][pricing_factor]" id="factor-hidden-' + idx + '-' + chId + '" value="' + factor + '">' +
-            '<input type="hidden" name="pricing[' + idx + '][channels][' + chId + '][channel_price]" id="ch-val-' + idx + '-' + chId + '" value="' + chPrice + '">';
-    }
-}
-
-function recalcChannel(chId, newFactor) {
-    channelFactors[chId] = newFactor;
-    for (var idx = 0; idx < totalRows; idx++) {
-        var wspInput = document.querySelector('[name="pricing[' + idx + '][wsp]"]');
-        if (!wspInput) continue;
-        rebuildChannelCell(idx, chId, parseFloat(wspInput.value) || 0);
-    }
-}
-
-// ── Debounced AJAX auto-save for factor inputs ──
-var factorTimers = {};
-
-document.querySelectorAll('.factor-input').forEach(function(input) {
-    input.addEventListener('input', function() {
-        var chId = this.getAttribute('data-channel-id');
-        var newFactor = parseFloat(this.value);
-        if (!newFactor || newFactor <= 0) return;
-
-        // Instantly recalculate all rows
-        recalcChannel(chId, newFactor);
-
-        var statusEl = document.querySelector('.factor-status-' + chId);
-        if (statusEl) { statusEl.textContent = 'saving...'; statusEl.style.color = '#e8a838'; }
-
-        // Debounce AJAX save (500ms after last keystroke)
-        clearTimeout(factorTimers[chId]);
-        factorTimers[chId] = setTimeout(function() {
-            fetch(factorSaveUrl, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': csrfToken, 'Accept': 'application/json' },
-                body: JSON.stringify({ channel_id: chId, factor: newFactor })
-            })
-            .then(function(r) { return r.json(); })
-            .then(function(data) {
-                if (statusEl) {
-                    if (data.success) {
-                        statusEl.textContent = '✓ saved';
-                        statusEl.style.color = '#16a34a';
-                        input.style.borderColor = '#86efac';
-                        input.style.background = '#f0fdf4';
-                        setTimeout(function() { statusEl.textContent = ''; input.style.borderColor = '#d1d5db'; input.style.background = '#fefce8'; }, 2000);
-                    } else {
-                        statusEl.textContent = '✗ failed';
-                        statusEl.style.color = '#dc2626';
-                    }
-                }
-            })
-            .catch(function() {
-                if (statusEl) { statusEl.textContent = '✗ error'; statusEl.style.color = '#dc2626'; }
-            });
-        }, 500);
-    });
-});
 </script>
+@endpush
 @endsection

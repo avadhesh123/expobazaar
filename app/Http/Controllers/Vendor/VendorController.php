@@ -1525,7 +1525,7 @@ class VendorController extends Controller
             $item->product->update(array_filter([
                 'vendor_price' => $finalFob ?: $unitPrice,
                 'cbm'          => $qtyMaster > 0 ? round($masterCbm / $qtyMaster, 6) : null,
-                'weight_kg'    => $weightPerUnit ?: null,
+                'weight'    => $weightPerUnit ?: null,
             ]));
 
             $updated++;

@@ -216,22 +216,34 @@ $disabled = $liveSheet->is_locked ? 'disabled' : '';
                 </thead>
                 <tbody>
                     @foreach($liveSheet->items as $idx => $item)
+                    
                     @php
                     $d = $item->product_details ?? [];
-                    $masterL = $d['master_length'] ?? 0;
-                    $masterW = $d['master_width'] ?? 0;
-                    $masterH = $d['master_height'] ?? 0;
-                    $masterCbm = ($masterL && $masterW && $masterH) ? ($masterL * $masterW * $masterH) / 61023 : 0;
-                    $qtyMaster = $d['qty_master_pack'] ?? 1;
-                    $finalQty = $d['final_qty'] ?? $item->quantity;
+
+                    $masterL = (float)($d['master_length'] ?? 0);
+                    $masterW = (float)($d['master_width'] ?? 0);
+                    $masterH = (float)($d['master_height'] ?? 0);
+                    $qtyMaster = (int)($d['qty_master_pack'] ?? 1);
+                    $finalQty = (int)($d['final_qty'] ?? $item->quantity);
+
+                    $masterCbm = ($masterL > 0 && $masterW > 0 && $masterH > 0)
+                    ? ($masterL * $masterW * $masterH) / 61023
+                    : 0;
+
                     $totalCartons = $qtyMaster > 0 ? ceil($finalQty / $qtyMaster) : 0;
                     $cbmShipment = $totalCartons * $masterCbm;
-                    $finalFob = $d['final_fob'] ?? $item->unit_price;
-                    $dutyAmt = $finalFob * (($d['duty_percent'] ?? 0) / 100);
-                    $freightAmt = ($d['freight_factor'] ?? 0) * $finalFob;
+
+                    $finalFob = (float)($d['final_fob'] ?? $item->unit_price);
+                    $dutyPercent = (float)($d['duty_percent'] ?? 0);
+                    $freightFactor = (float)($d['freight_factor'] ?? 0);
+                    $wspFactor = (float)($d['wsp_factor'] ?? 0);
+
+                    $dutyAmt = $finalFob * ($dutyPercent / 100);
+                    $freightAmt = $freightFactor * $finalFob;
                     $landedCost = $finalFob + $dutyAmt + $freightAmt;
-                    $wsp = $landedCost * ($d['wsp_factor'] ?? 0);
+                    $wsp = $landedCost * $wspFactor;
                     @endphp
+                    
                     <tr id="ls-row-{{ $idx }}" style="{{ ($item->is_selected ?? 1) ? 'background:#f0fdf4;' : 'background:#fef2f2;opacity:.7;' }}">
                         <td style="text-align:center;position:sticky;left:0;background:{{ ($item->is_selected ?? 1) ? '#f0fdf4' : '#fef2f2' }};z-index:1;">
                             <input type="hidden" name="items[{{ $idx }}][is_selected]" value="0">
