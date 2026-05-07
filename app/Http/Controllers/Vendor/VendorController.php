@@ -1792,6 +1792,7 @@ class VendorController extends Controller
     public function grn(Request $request)
     {
         $vendor = auth()->user()->vendor;
+        $vendorProductIds = $vendor->products()->pluck('id')->toArray();
 
         // Get consignment IDs for this vendor
         $consignmentIds = Consignment::where('vendor_id', $vendor->id)->pluck('id');
@@ -1801,17 +1802,36 @@ class VendorController extends Controller
             ->whereIn('consignment_id', $consignmentIds)
             ->pluck('shipment_id');
 
-        $grns = \App\Models\Grn::with('shipment', 'warehouse', 'items')
+        $grns = \App\Models\Grn::with('shipment', 'warehouse', 'items.product')
             ->whereIn('shipment_id', $shipmentIds)
             ->latest('receipt_date')
             ->paginate(20);
 
-        // Stats
+        // Calculate vendor-specific stats per GRN
+        $totalExpected = 0; $totalReceived = 0; $totalDamaged = 0; $totalMissing = 0; $totalExcess = 0;
+
+        $grns->getCollection()->transform(function ($grn) use ($vendorProductIds, &$totalExpected, &$totalReceived, &$totalDamaged, &$totalMissing, &$totalExcess) {
+            $myItems = $grn->items->filter(fn($i) => in_array($i->product_id, $vendorProductIds));
+            $grn->vendor_expected = $myItems->sum('expected_quantity');
+            $grn->vendor_received = $myItems->sum('received_quantity');
+            $grn->vendor_damaged  = $myItems->sum('damaged_quantity');
+            $grn->vendor_missing  = $myItems->sum('missing_quantity');
+            $grn->vendor_excess   = $myItems->sum('excess_quantity');
+            $totalExpected += $grn->vendor_expected;
+            $totalReceived += $grn->vendor_received;
+            $totalDamaged  += $grn->vendor_damaged;
+            $totalMissing  += $grn->vendor_missing;
+            $totalExcess   += $grn->vendor_excess;
+            return $grn;
+        });
+
         $stats = [
-            'total_grns'       => $grns->total(),
-            'total_received'   => $grns->sum('total_items_received'),
-            'total_damaged'    => $grns->sum('damaged_items'),
-            'total_missing'    => $grns->sum('missing_items'),
+            'total_grns'     => $grns->total(),
+            'total_expected' => $totalExpected,
+            'total_received' => $totalReceived,
+            'total_damaged'  => $totalDamaged,
+            'total_missing'  => $totalMissing,
+            'total_excess'   => $totalExcess,
         ];
 
         return view('vendor.grn.index', compact('grns', 'vendor', 'stats'));

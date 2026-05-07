@@ -24,7 +24,10 @@ class Inventory extends Model
 
     public function getAgeingDays(): int
     {
-        return $this->received_date ? now()->diffInDays($this->received_date) : 0;
+       // return $this->received_date ? now()->diffInDays($this->received_date) : 0;
+        return $this->received_date
+            ? round(abs(now()->diffInRealHours($this->received_date) / 24), 1)
+            : 0;
     }
 
     public function scopeByCompanyCode($query, $code) { return $query->where('company_code', $code); }

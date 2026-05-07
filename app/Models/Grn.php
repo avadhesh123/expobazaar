@@ -9,23 +9,54 @@ class Grn extends Model
     protected $table = 'grn';
 
     protected $fillable = [
-        'grn_number', 'shipment_id', 'warehouse_id', 'company_code',
-        'receipt_date', 'status', 'total_items_expected', 'total_items_received',
-        'damaged_items', 'missing_items','excess_items', 'grn_file', 'remarks',
-        'uploaded_by', 'verified_by',
+        'grn_number',
+        'shipment_id',
+        'warehouse_id',
+        'company_code',
+        'receipt_date',
+        'status',
+        'total_items_expected',
+        'total_items_received',
+        'damaged_items',
+        'missing_items',
+        'excess_items',
+        'grn_file',
+        'remarks',
+        'uploaded_by',
+        'verified_by',
     ];
 
     protected $casts = ['receipt_date' => 'date'];
 
-    public function shipment() { return $this->belongsTo(Shipment::class); }
-    public function warehouse() { return $this->belongsTo(Warehouse::class); }
-    public function items() { return $this->hasMany(GrnItem::class); }
-    public function inventoryRecords() { return $this->hasMany(Inventory::class); }
-    public function uploader() { return $this->belongsTo(User::class, 'uploaded_by'); }
+    public function shipment()
+    {
+        return $this->belongsTo(Shipment::class);
+    }
+    public function warehouse()
+    {
+        return $this->belongsTo(Warehouse::class);
+    }
+    public function items()
+    {
+        return $this->hasMany(GrnItem::class);
+    }
+    public function inventoryRecords()
+    {
+        return $this->hasMany(Inventory::class);
+    }
+    public function uploader()
+    {
+        return $this->belongsTo(User::class, 'uploaded_by');
+    }
 
     public function getAgeingDays(): int
     {
-        return $this->receipt_date ? now()->diffInDays($this->receipt_date) : 0;
+
+        return $this->receipt_date
+            ? round(abs(now()->diffInRealHours($this->receipt_date) / 24), 1)
+            : 0;
+
+        // return $this->receipt_date ? abs(now()->diffInDays($this->receipt_date)) : 0;
     }
 
     public static function generateNumber(string $shipmentCode): string

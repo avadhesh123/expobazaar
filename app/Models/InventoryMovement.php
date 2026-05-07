@@ -8,7 +8,7 @@ class InventoryMovement extends Model
 {
     protected $fillable = [
         'product_id', 'movement_type', 'from_warehouse_id', 'to_warehouse_id',
-        'from_sub_location_id', 'to_sub_location_id', 'quantity',
+        'from_sub_location_id', 'to_sub_location_id', 'quantity', 'transportation_cost',
         'reference_type', 'reference_id', 'remarks', 'performed_by',
     ];
 

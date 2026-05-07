@@ -129,7 +129,8 @@ class LogisticsService
 
         $existingAsn = Asn::where('shipment_id', $shipment->id)->first();
         if ($existingAsn) {
-            return back()->with('error', "ASN already exists for this shipment: {$existingAsn->asn_number}. Cannot generate a duplicate.");
+            return $existingAsn;
+            //  return back()->with('error', "ASN already exists for this shipment: {$existingAsn->asn_number}. Cannot generate a duplicate.");
         }
 
         return Asn::create([
@@ -233,11 +234,31 @@ class LogisticsService
     /**
      * Transfer inventory between warehouses/sub-locations
      */
-    public function transferInventory(int $productId, int $fromWarehouseId, int $toWarehouseId, int $quantity, ?int $fromSubId = null, ?int $toSubId = null): void
+    public function transferInventory(int $productId, int $fromWarehouseId, int $toWarehouseId, int $quantity, ?int $fromSubId = null, ?int $toSubId = null, ?float $transportationCost = null): void
     {
-        DB::transaction(function () use ($productId, $fromWarehouseId, $toWarehouseId, $quantity, $fromSubId, $toSubId) {
+        DB::transaction(function () use ($productId, $fromWarehouseId, $toWarehouseId, $quantity, $fromSubId, $toSubId, $transportationCost) {
             // Decrease from source
-            $source = Inventory::where('product_id', $productId)->where('warehouse_id', $fromWarehouseId)->firstOrFail();
+            //  $source = Inventory::where('product_id', $productId)->where('warehouse_id', $fromWarehouseId)->firstOrFail();
+
+            $source = Inventory::where('product_id', $productId)
+                ->where('warehouse_id', $fromWarehouseId)
+                ->first();
+
+            if (!$source) {
+                \Log::error("Inventory transfer failed: No inventory found for product_id {$productId} in warehouse_id {$fromWarehouseId}");
+                return  back()->with('error', 'No inventory found for this product in the source warehouse.');
+            }
+
+            if ($source->available_quantity < $quantity) {
+                \Log::error("Inventory transfer failed: Insufficient stock", [
+                    'product_id' => $productId,
+                    'from_warehouse_id' => $fromWarehouseId,
+                    'available' => $source->available_quantity,
+                    'requested' => $quantity
+                ]);
+                return back()->with('error', "Insufficient stock. Available: {$source->available_quantity}, Requested: {$quantity}");
+                // throw new \Exception("Insufficient stock. Available: {$source->available_quantity}, Requested: {$quantity}");
+            }
             $source->decrement('quantity', $quantity);
             $source->decrement('available_quantity', $quantity);
 
@@ -257,12 +278,20 @@ class LogisticsService
                 'movement_type' => 'transfer',
                 'from_warehouse_id' => $fromWarehouseId,
                 'to_warehouse_id' => $toWarehouseId,
-                'from_sub_location_id' => $fromSubId,
-                'to_sub_location_id' => $toSubId,
+                'from_sub_location_id' => $fromSubId ?: null,
+                'to_sub_location_id' => $toSubId ?: null,
                 'quantity' => $quantity,
+                'transportation_cost' => $transportationCost,
                 'reference_type' => 'transfer',
                 'performed_by' => auth()->id(),
             ]);
+
+            ActivityLog::log('transferred', 'inventory', $source, null, [
+                'from' => $fromWarehouseId,
+                'to' => $toWarehouseId,
+                'qty' => $quantity,
+                'cost' => $transportationCost,
+            ], "Transferred {$quantity} units");
         });
     }
 

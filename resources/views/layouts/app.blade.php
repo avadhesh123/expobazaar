@@ -415,7 +415,7 @@
             <p style="color:#4a5e6f;font-size:.65rem;margin-top:.15rem;">Supply Chain Management</p>
         </div>
         @auth
-      
+
         @if(auth()->user()->isAdmin())
         <div class="section-title">Administration</div>
         <a href="{{ route('admin.dashboard') }}" class="{{ request()->routeIs('admin.dashboard') ? 'active' : '' }}"><i class="fas fa-tachometer-alt"></i> Dashboard</a>
@@ -472,13 +472,12 @@
         <a href="{{ route('logistics.shipments') }}" class="{{ request()->routeIs('logistics.shipments*') ? 'active' : '' }}"><i class="fas fa-ship"></i> Shipments</a>
         <a href="{{ route('logistics.grn') }}" class="{{ request()->routeIs('logistics.grn*') ? 'active' : '' }}"><i class="fas fa-clipboard-check"></i> GRN</a>
         <a href="{{ route('logistics.inventory') }}" class="{{ request()->routeIs('logistics.inventory*') ? 'active' : '' }}"><i class="fas fa-boxes"></i> Inventory</a>
-        <a href="{{ route('logistics.warehouse-charges') }}" class="{{ request()->routeIs('logistics.warehouse-charges*') ? 'active' : '' }}"><i class="fas fa-calculator"></i> Warehouse Charges</a>
-      
-       <a href="{{ route('logistics.rate-cards') }}" class="{{ request()->routeIs('logistics.rate-cards*') ? 'active' : '' }}"><i class="fas fa-file-invoice-dollar"></i> Rate Cards</a>
-                    
-      <a href="{{ route('logistics.warehouse-rate-cards') }}" class="{{ request()->routeIs('logistics.warehouse-rate-cards*') ? 'active' : '' }}"><i class="fas fa-file-contract"></i> WH Rate Card</a>
-       <a href="{{ route('logistics.warehouse-monthly-charges') }}" class="{{ request()->routeIs('logistics.warehouse-monthly*') ? 'active' : '' }}"><i class="fas fa-receipt"></i> WH Charges & Recon</a>
-       <a href="{{ route('logistics.vendor-rate-cards') }}" class="{{ request()->routeIs('logistics.vendor-rate-cards*') ? 'active' : '' }}"><i class="fas fa-users-cog"></i> Vendor Rate Cards</a>
+        <!-- <a href="{{ route('logistics.warehouse-charges') }}" class="{{ request()->routeIs('logistics.warehouse-charges*') ? 'active' : '' }}"><i class="fas fa-calculator"></i> Warehouse Charges</a> -->
+        <!-- <a href="{{ route('logistics.rate-cards') }}" class="{{ request()->routeIs('logistics.rate-cards*') ? 'active' : '' }}"><i class="fas fa-file-invoice-dollar"></i> Rate Cards</a> -->
+
+        <a href="{{ route('logistics.warehouse-rate-cards') }}" class="{{ request()->routeIs('logistics.warehouse-rate-cards*') ? 'active' : '' }}"><i class="fas fa-file-contract"></i> WH Rate Card</a>
+        <a href="{{ route('logistics.warehouse-monthly-charges') }}" class="{{ request()->routeIs('logistics.warehouse-monthly*') ? 'active' : '' }}"><i class="fas fa-receipt"></i> WH Charges & Reconcilation</a>
+        <a href="{{ route('logistics.vendor-rate-cards') }}" class="{{ request()->routeIs('logistics.vendor-rate-cards*') ? 'active' : '' }}"><i class="fas fa-users-cog"></i> Vendor Rate Cards</a>
 
 
         @elseif(auth()->user()->department === 'cataloguing')
@@ -502,8 +501,8 @@
         <a href="{{ route('finance.payouts') }}" class="{{ request()->routeIs('finance.payout*') ? 'active' : '' }}"><i class="fas fa-money-check-alt"></i> Vendor Payouts</a>
         <a href="{{ route('finance.pricing-review') }}" class="{{ request()->routeIs('finance.pricing*') ? 'active' : '' }}"><i class="fas fa-file-invoice-dollar"></i> Pricing Review</a>
         <a href="{{ route('finance.vendor-rate-cards') }}" class="{{ request()->routeIs('finance.vendor-rate-cards*') ? 'active' : '' }}"><i class="fas fa-tags"></i> Vendor Rate Cards</a>
-       <a href="{{ route('finance.vendor-charges') }}" class="{{ request()->routeIs('finance.vendor-charges*') ? 'active' : '' }}"><i class="fas fa-calculator"></i> Vendor Charges</a>
-        
+        <a href="{{ route('finance.vendor-charges') }}" class="{{ request()->routeIs('finance.vendor-charges*') ? 'active' : '' }}"><i class="fas fa-calculator"></i> Vendor Charges</a>
+
 
         @elseif(auth()->user()->department === 'hod')
         <div class="section-title">Management</div>
@@ -518,9 +517,9 @@
             <h2 style="font-size:1.05rem;font-weight:700;color:#0d1b2a;">@yield('page-title', 'Dashboard')</h2>
             <div style="display:flex;align-items:center;gap:1.25rem;">
                 @if(auth()->check() && !auth()->user()->isVendor())
-                <form method="GET" action="{{ url()->current() }}" style="display:flex;align-items:center;gap:.4rem;">
+                <form method="GET" id="headerForm" action="{{ url()->current() }}" style="display:flex;align-items:center;gap:.4rem;">
                     <span style="font-size:.7rem;color:#64748b;font-weight:600;">Company:</span>
-                    <select name="company_code" onchange="this.form.submit()" style="padding:.35rem .6rem;border:1px solid #d1d5db;border-radius:6px;font-size:.78rem;font-family:inherit;">
+                    <select name="company_code" id="headerCompanyCode" onchange="this.form.submit()" style="padding:.35rem .6rem;border:1px solid #d1d5db;border-radius:6px;font-size:.78rem;font-family:inherit;">
                         <option value="">All</option>
                         <option value="2000" {{ request('company_code')=='2000'?'selected':'' }}>2000 – India</option>
                         <option value="2100" {{ request('company_code')=='2100'?'selected':'' }}>2100 – USA</option>

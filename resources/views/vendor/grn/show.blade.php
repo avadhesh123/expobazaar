@@ -100,7 +100,7 @@
 
 {{-- GRN Document --}}
 @if($grn->grn_file)
-<div class="card" style="margin-top:1.25rem;">
+<div class="card" style="margin-top:1.25rem; display:none;">
     <div class="card-body" style="padding:.85rem 1.4rem;display:flex;align-items:center;justify-content:space-between;">
         <div style="font-size:.82rem;color:#64748b;"><i class="fas fa-file-pdf" style="color:#dc2626;margin-right:.3rem;"></i> GRN Document attached</div>
         <a href="{{ asset('storage/app/public/' . $grn->grn_file) }}" target="_blank" class="btn btn-outline btn-sm"><i class="fas fa-download"></i> Download</a>

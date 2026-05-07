@@ -125,7 +125,9 @@ class LogisticsController extends Controller
     public function showGrn(Grn $grn)
     {
         $grn->load('shipment.consignments.vendor', 'warehouse', 'items.product');
-        $ageingDays = $grn->receipt_date ? now()->diffInDays($grn->receipt_date) : 0;
+        $ageingDays = $grn->received_date
+            ? round(abs(now()->diffInRealHours($grn->received_date) / 24), 1)
+            : 0;
         return view('logistics.grn.show', compact('grn', 'ageingDays'));
     }
 
@@ -139,19 +141,30 @@ class LogisticsController extends Controller
     public function storeGrn(Request $request, Shipment $shipment)
     {
         $request->validate([
-            'warehouse_id'             => 'required|exists:warehouses,id',
-            'receipt_date'             => 'required|date',
-            'items'                    => 'required|array|min:1',
-            'items.*.product_id'       => 'required|exists:products,id',
-            'items.*.expected_quantity' => 'required|integer|min:0',
+            'warehouse_id'              => 'required|exists:warehouses,id',
+            'receipt_date'              => 'required|date',
+            'grn_file'                  => 'nullable|file|max:10240|mimes:pdf,xlsx,csv',
+            'items'                     => 'required|array|min:1',
+            'items.*.product_id'        => 'required|exists:products,id',
+            'items.*.expected_quantity'  => 'required|integer|min:0',
             'items.*.received_quantity' => 'required|integer|min:0',
-            'items.*.damaged_quantity' => 'required|integer|min:0',
-            'items.*.missing_quantity' => 'required|integer|min:0',
-            'items.*.excess_quantity' => 'required|integer|min:0',
+            'items.*.damaged_quantity'  => 'nullable|integer|min:0',
+            'items.*.missing_quantity'  => 'nullable|integer|min:0',
+            'items.*.excess_quantity'   => 'nullable|integer|min:0',
         ]);
 
-        $this->logisticsService->uploadGrn($shipment, $request->all(), $request->items);
-        return redirect()->route('logistics.grn')->with('success', 'GRN uploaded. Inventory updated automatically.');
+        $data = $request->only(['warehouse_id', 'receipt_date', 'remarks']);
+
+        if ($request->hasFile('grn_file')) {
+            $data['grn_file'] = $request->file('grn_file')->store("grn/{$shipment->id}", 'public');
+        }
+
+        try {
+            $this->logisticsService->uploadGrn($shipment, $data, $request->items);
+            return redirect()->route('logistics.grn')->with('success', 'GRN uploaded. Inventory updated automatically.');
+        } catch (\Exception $e) {
+            return back()->with('error', 'GRN upload failed: ' . $e->getMessage())->withInput();
+        }
     }
 
     // ─── ASN ─────────────────────────────────────────────────────
@@ -362,13 +375,24 @@ class LogisticsController extends Controller
 
     public function transferInventory(Request $request)
     {
+
         $request->validate([
             'product_id'        => 'required|exists:products,id',
             'from_warehouse_id' => 'required|exists:warehouses,id',
             'to_warehouse_id'   => 'required|exists:warehouses,id|different:from_warehouse_id',
             'quantity'          => 'required|integer|min:1',
+            'transportation_cost' => 'required|numeric|min:0',
+
         ]);
-        $this->logisticsService->transferInventory($request->product_id, $request->from_warehouse_id, $request->to_warehouse_id, $request->quantity, $request->from_sub_id, $request->to_sub_id);
+        $this->logisticsService->transferInventory(
+            $request->product_id,
+            $request->from_warehouse_id,
+            $request->to_warehouse_id,
+            $request->quantity,
+            null,
+            null,
+            $request->transportation_cost
+        );
         return back()->with('success', 'Inventory transferred.');
     }
 

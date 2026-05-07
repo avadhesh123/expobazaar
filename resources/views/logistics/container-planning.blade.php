@@ -64,7 +64,7 @@
                         <option value="LCL">LCL (30 CBM)</option>
                         <option value="AIR">AIR (10 CBM)</option>
                     </select></div>
-                <div><label style="font-size:.7rem;font-weight:600;color:#64748b;display:block;margin-bottom:.25rem;">Company</label><select name="company_code" required style="padding:.4rem .5rem;border:1px solid #d1d5db;border-radius:8px;font-size:.82rem;font-family:inherit;">
+                <div><label style="font-size:.7rem;font-weight:600;color:#64748b;display:block;margin-bottom:.25rem;">Company</label><select name="company_code"  id="companyFilter" required style="padding:.4rem .5rem;border:1px solid #d1d5db;border-radius:8px;font-size:.82rem;font-family:inherit;">
                         <option value="2000" {{ request('company_code')==='2000'?'selected':'' }}>🇮🇳 2000</option>
                         <option value="2100" {{ request('company_code')==='2100'?'selected':'' }}>🇺🇸 2100</option>
                         <option value="2200" {{ request('company_code')==='2200'?'selected':'' }}>🇳🇱 2200</option>
@@ -163,13 +163,20 @@
 </script>
 @endpush
 
+ 
 <script>
-document.querySelector('select[name="company_code"]').addEventListener('change', function() {
-    var selected = this.value;
-    document.querySelectorAll('.consignment-row').forEach(function(row) {
-        var cc = row.getAttribute('data-company-code');
-        row.style.display = (cc === selected) ? '' : 'none';
-    });
-});
+(function() {
+    var select = document.getElementById('companyFilter');
+    function filterConsignments() {
+        var selected = select.value;
+        document.querySelectorAll('.consignment-row').forEach(function(row) {
+            row.style.display = (row.getAttribute('data-company-code') === selected) ? '' : 'none';
+        });
+    }
+    select.addEventListener('change', filterConsignments);
+    filterConsignments();
+})();
 </script>
+ 
+
 @endsection
