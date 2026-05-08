@@ -22,15 +22,20 @@ class WarehouseChargesService
         $periodStart = now()->create(null, $month, 1)->startOfMonth()->toDateString();
         foreach ($vendors as $vendor) {
             $rateCard = VendorRateCard::getActive($vendor->id, $periodEnd);
-
-
             if (!$rateCard) {
                 $results['skipped']++;
                 $results['errors'][] = "{$vendor->company_name}: No approved rate card";
                 continue;
             }
 
-            $currency = $vendor->company_code === '2200' ? 'EUR' : 'USD';
+            $currency = match ($vendor->company_code) {
+                '2000' => 'INR',
+                '2100' => 'EUR',
+                '2200' => 'USD',
+                default => 'USD'   // fallback
+            };
+
+            //  $currency = $vendor->company_code === '2200' ? 'EUR' : 'USD';
 
             // Get all GRNs for this vendor (via products)
             $vendorProductIds = $vendor->products()->pluck('id');
@@ -71,6 +76,8 @@ class WarehouseChargesService
 
                 try {
                     $charges = $this->calculateGrnCharges($vendor, $grn, $rateCard, $month, $year, $periodStart, $periodEnd);
+
+                    file_put_contents('storage/logs/warehouse_charges_errors.log', "Charges: " . json_encode($charges) . "\n", FILE_APPEND);
 
                     if (!$dryRun) {
                         DB::beginTransaction();
@@ -198,13 +205,12 @@ class WarehouseChargesService
 
             $storageQty += $remaining;
             $storageCft += $skuCft;
-            
-file_put_contents('storage/logs/warehouse_charges.log', "sku: {$product->sku}, remaining: {$remaining}, cftPerUnit: {$cftPerUnit}\n", FILE_APPEND);
 
+            file_put_contents('storage/logs/warehouse_charges' . date('Y-m-d') . '.log', "sku: {$product->sku}, length: {$product->length}, width: {$product->width}, height: {$product->height}, remaining: {$remaining},   cftPerUnit: {$cftPerUnit}\n", FILE_APPEND);
         }
 
         $storageCharge = round($storageCft * floatval($rc->storage_rate_per_cft), 2);
-file_put_contents('storage/logs/warehouse_charges.log', "Storage - Qty: {$storageQty}, CFT: {$storageCft}, Charge: {$storageCharge}\n", FILE_APPEND);
+        file_put_contents('storage/logs/warehouse_charges' . date('Y-m-d') . '.log', "StorageQty: {$storageQty}, CFT: {$storageCft}, Charge: {$storageCharge}, Storage_rate_per_cft: {$rc->storage_rate_per_cft}\n", FILE_APPEND);
         // ── 3. FULFILLMENT ───────────────────────────────────────────
         $fulfillSmall = 0;
         $fulfillLarge = 0;

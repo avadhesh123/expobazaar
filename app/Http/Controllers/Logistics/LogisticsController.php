@@ -816,7 +816,14 @@ class LogisticsController extends Controller
             'effective_from' => 'required|date',
         ]);
         $wh = Warehouse::findOrFail($request->warehouse_id);
-        $currency = $wh->company_code === '2200' ? 'EUR' : 'USD';
+        // $currency = $wh->company_code === '2200' ? 'EUR' : 'USD';
+        $currency = match ($wh->company_code) {
+            '2000' => 'INR',
+            '2100' => 'EUR',
+            '2200' => 'USD',
+            default => 'USD'   // fallback
+        };
+
         $maxV = \App\Models\WarehouseRateCard::where('warehouse_id', $wh->id)->max('version') ?? 0;
 
         \App\Models\WarehouseRateCard::where('warehouse_id', $wh->id)->where('status', 'approved')
@@ -873,6 +880,60 @@ class LogisticsController extends Controller
         }
         return back()->with('error', $result['error']);
     }
+
+
+    public function enterWarehouseInvoice(Request $request, \App\Models\WarehouseMonthlyCharge $warehouseMonthlyCharge)
+    {
+        $request->validate([
+            'invoice_number'     => 'required|string|max:100',
+            'invoice_date'       => 'required|date',
+            'actual_inward'      => 'required|numeric|min:0',
+            'actual_storage'     => 'required|numeric|min:0',
+            'actual_fulfillment' => 'required|numeric|min:0',
+            'actual_pick_pack'   => 'required|numeric|min:0',
+            'actual_other'       => 'nullable|numeric|min:0',
+            'invoice_file'       => 'nullable|file|max:10240|mimes:pdf,jpg,jpeg,png',
+        ]);
+
+        $data = $request->only(['invoice_number', 'invoice_date', 'actual_inward', 'actual_storage', 'actual_fulfillment', 'actual_pick_pack', 'actual_other']);
+        $data['actual_total'] = floatval($data['actual_inward']) + floatval($data['actual_storage']) + floatval($data['actual_fulfillment']) + floatval($data['actual_pick_pack']) + floatval($data['actual_other'] ?? 0);
+        $data['status'] = 'invoice_entered';
+        $data['invoice_entered_by'] = auth()->id();
+        $data['remarks'] = $request->remarks;
+
+        if ($request->hasFile('invoice_file')) {
+            $data['invoice_file'] = $request->file('invoice_file')->store("warehouse-invoices/{$warehouseMonthlyCharge->warehouse_id}", 'public');
+        }
+
+        $warehouseMonthlyCharge->update($data);
+        $warehouseMonthlyCharge->calculateVariances();
+        $warehouseMonthlyCharge->save();
+
+        ActivityLog::log('invoice_entered', 'warehouse_monthly_charge', $warehouseMonthlyCharge, null, $data, "Invoice #{$request->invoice_number} entered");
+        return back()->with('success', "Invoice entered. Variance: \$" . number_format(abs(floatval($warehouseMonthlyCharge->variance_total)), 2));
+    }
+
+    public function approveWarehouseCharge(\App\Models\WarehouseMonthlyCharge $warehouseMonthlyCharge)
+    {
+        // Check all over-limit variances have explanations
+        $explanations = $warehouseMonthlyCharge->variance_explanations ?? [];
+        foreach (['inward', 'storage', 'fulfillment', 'pick_pack'] as $field) {
+            if ($warehouseMonthlyCharge->isOverLimit($field) && empty($explanations[$field])) {
+                return back()->with('error', "Over-limit variance on '{$field}' requires an explanation before approval.");
+            }
+        }
+        $warehouseMonthlyCharge->update(['status' => 'approved', 'approved_by' => auth()->id(), 'approved_at' => now()]);
+        ActivityLog::log('approved', 'warehouse_monthly_charge', $warehouseMonthlyCharge);
+        return back()->with('success', 'Reconciliation approved and locked.');
+    }
+
+    public function saveVarianceExplanations(Request $request, \App\Models\WarehouseMonthlyCharge $warehouseMonthlyCharge)
+    {
+        $request->validate(['explanations' => 'required|array']);
+        $warehouseMonthlyCharge->update(['variance_explanations' => $request->explanations, 'status' => 'under_review', 'reviewed_by' => auth()->id()]);
+        return back()->with('success', 'Variance explanations saved. Ready for approval.');
+    }
+
     // ─── RATE CARDS ──────────────────────────────────────────────
     public function rateCards(Request $request)
     {

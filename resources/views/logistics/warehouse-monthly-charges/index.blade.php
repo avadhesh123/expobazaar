@@ -43,16 +43,26 @@
 
         {{-- Variance Table --}}
         <table class="data-table" style="margin:0;">
-            <thead><tr><th>Charge Head</th><th style="text-align:right;">Expected (System)</th><th style="text-align:right;">Actual (Invoice)</th><th style="text-align:right;">Variance</th><th style="text-align:right;">%</th><th>Status</th><th>Explanation</th></tr></thead>
+            <thead>
+                <tr>
+                    <th>Charge Head</th>
+                    <th style="text-align:right;">Expected (System)</th>
+                    <th style="text-align:right;">Actual (Invoice)</th>
+                    <th style="text-align:right;">Variance</th>
+                    <th style="text-align:right;">%</th>
+                    <th>Status</th>
+                    <th>Explanation</th>
+                </tr>
+            </thead>
             <tbody>
                 @foreach(['inward'=>'Inward Handling','storage'=>'Storage','fulfillment'=>'Fulfillment','pick_pack'=>'Pick & Pack'] as $key=>$label)
                 @php
-                    $exp = floatval($c->{'expected_'.$key});
-                    $act = $hasInvoice ? floatval($c->{'actual_'.$key} ?? 0) : null;
-                    $var = $hasInvoice ? floatval($c->{'variance_'.$key} ?? 0) : null;
-                    $pct = ($hasInvoice && $exp > 0) ? round(($var / $exp) * 100, 1) : null;
-                    $over = $hasInvoice ? $c->isOverLimit($key) : false;
-                    $expl = ($c->variance_explanations ?? [])[$key] ?? '';
+                $exp = floatval($c->{'expected_'.$key});
+                $act = $hasInvoice ? floatval($c->{'actual_'.$key} ?? 0) : null;
+                $var = $hasInvoice ? floatval($c->{'variance_'.$key} ?? 0) : null;
+                $pct = ($hasInvoice && $exp > 0) ? round(($var / $exp) * 100, 1) : null;
+                $over = $hasInvoice ? $c->isOverLimit($key) : false;
+                $expl = ($c->variance_explanations ?? [])[$key] ?? '';
                 @endphp
                 <tr style="{{ $over ? 'background:#fef2f2;' : '' }}">
                     <td style="font-weight:600;">{{ $label }}</td>
@@ -65,7 +75,15 @@
                 </tr>
                 @endforeach
                 @if($hasInvoice && floatval($c->actual_other ?? 0) > 0)
-                <tr style="background:#fefce8;"><td style="font-weight:600;">Other Charges</td><td style="text-align:right;">—</td><td style="text-align:right;font-family:monospace;">{{ $s }}{{ number_format(floatval($c->actual_other),2) }}</td><td style="text-align:right;font-family:monospace;color:#e8a838;">{{ $s }}{{ number_format(floatval($c->actual_other),2) }}</td><td>—</td><td><span class="badge badge-warning">For Review</span></td><td>—</td></tr>
+                <tr style="background:#fefce8;">
+                    <td style="font-weight:600;">Other Charges</td>
+                    <td style="text-align:right;">—</td>
+                    <td style="text-align:right;font-family:monospace;">{{ $s }}{{ number_format(floatval($c->actual_other),2) }}</td>
+                    <td style="text-align:right;font-family:monospace;color:#e8a838;">{{ $s }}{{ number_format(floatval($c->actual_other),2) }}</td>
+                    <td>—</td>
+                    <td><span class="badge badge-warning">For Review</span></td>
+                    <td>—</td>
+                </tr>
                 @endif
                 <tr style="background:#f0f4f8;font-weight:800;">
                     <td>TOTAL</td>
@@ -138,7 +156,14 @@
         <div id="drill-{{ $c->id }}" style="display:none;padding:1rem 1.4rem;background:#f8fafc;border-top:1px solid #e8ecf1;">
             <div style="font-weight:700;color:#64748b;margin-bottom:.5rem;font-size:.78rem;">GRN-Level Breakdown ({{ $c->grnDetails->count() }} GRNs)</div>
             <table style="width:100%;border-collapse:collapse;font-size:.78rem;">
-                <tr style="background:#e8ecf1;"><th style="padding:.3rem .5rem;text-align:left;">GRN</th><th style="text-align:right;">Inward</th><th style="text-align:right;">Storage</th><th style="text-align:right;">Fulfillment</th><th style="text-align:right;">P&P</th><th style="text-align:right;">Total</th></tr>
+                <tr style="background:#e8ecf1;">
+                    <th style="padding:.3rem .5rem;text-align:left;">GRN</th>
+                    <th style="text-align:right;">Inward</th>
+                    <th style="text-align:right;">Storage</th>
+                    <th style="text-align:right;">Fulfillment</th>
+                    <th style="text-align:right;">P&P</th>
+                    <th style="text-align:right;">Total</th>
+                </tr>
                 @foreach($c->grnDetails as $d)
                 <tr style="border-bottom:1px solid #f1f5f9;">
                     <td style="padding:.3rem .5rem;font-family:monospace;">{{ $d->grn->grn_number ?? '#'.$d->grn_id }}</td>
@@ -154,6 +179,8 @@
     </div>
 </div>
 @empty
-<div class="card"><div class="card-body" style="text-align:center;padding:3rem;color:#94a3b8;"><i class="fas fa-receipt" style="font-size:2rem;display:block;margin-bottom:.5rem;"></i>No charges for this period. Click "Calculate Charges" to run.</div></div>
+<div class="card">
+    <div class="card-body" style="text-align:center;padding:3rem;color:#94a3b8;"><i class="fas fa-receipt" style="font-size:2rem;display:block;margin-bottom:.5rem;"></i>No charges for this period. Click "Calculate Charges" to run.</div>
+</div>
 @endforelse
 @endsection
