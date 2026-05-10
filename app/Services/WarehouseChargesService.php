@@ -43,7 +43,7 @@ class WarehouseChargesService
                 ->with(['items' => fn($q) => $q->whereIn('product_id', $vendorProductIds)])
                 ->get();
 
-            file_put_contents('storage/logs/warehouse_charges_errors.log', "Results1: " . json_encode($results) . "\n", FILE_APPEND);
+            file_put_contents('storage/logs/vendor_warehouse_charges_errors.log', "Results1: " . json_encode($results) . "\n", FILE_APPEND);
 
             //  print_r($results);
             // print_r($grns->toArray());
@@ -58,7 +58,7 @@ class WarehouseChargesService
                 return $results;
                 // continue;
             }
-            file_put_contents('storage/logs/warehouse_charges_errors.log', "Results2: " . json_encode($grns) . "\n", FILE_APPEND);
+            file_put_contents('storage/logs/vendor_warehouse_charges_errors.log', "Results2: " . json_encode($grns) . "\n", FILE_APPEND);
 
             foreach ($grns as $grn) {
                 // Check if already calculated
@@ -72,12 +72,12 @@ class WarehouseChargesService
                     // continue;
                 }
 
-                file_put_contents('storage/logs/warehouse_charges_errors.log', "Results3: " . json_encode($existing) . "\n", FILE_APPEND);
+                file_put_contents('storage/logs/vendor_warehouse_charges_errors.log', "Results3: " . json_encode($existing) . "\n", FILE_APPEND);
 
                 try {
                     $charges = $this->calculateGrnCharges($vendor, $grn, $rateCard, $month, $year, $periodStart, $periodEnd);
 
-                    file_put_contents('storage/logs/warehouse_charges_errors.log', "Charges: " . json_encode($charges) . "\n", FILE_APPEND);
+                    file_put_contents('storage/logs/vendor_warehouse_charges_errors.log', "Charges: " . json_encode($charges) . "\n", FILE_APPEND);
 
                     if (!$dryRun) {
                         DB::beginTransaction();
@@ -124,9 +124,9 @@ class WarehouseChargesService
                         'currency' => $currency,
                     ];
 
-                    file_put_contents('storage/logs/warehouse_charges_errors.log', "Results4: " . json_encode($results) . "\n", FILE_APPEND);
+                    file_put_contents('storage/logs/vendor_warehouse_charges_errors.log', "Results4: " . json_encode($results) . "\n", FILE_APPEND);
                 } catch (\Exception $e) {
-                    file_put_contents(storage_path('logs/warehouse_charges_errors.log'), "Error processing Vendor ID {$vendor->id} / GRN ID {$grn->id}: {$e->getMessage()}\n", FILE_APPEND);
+                    file_put_contents(storage_path('logs/vendor_warehouse_charges_errors.log'), "Error processing Vendor ID {$vendor->id} / GRN ID {$grn->id}: {$e->getMessage()}\n", FILE_APPEND);
                     if (!$dryRun) DB::rollBack();
                     $results['errors'][] = "{$vendor->company_name} / {$grn->grn_number}: {$e->getMessage()}";
                 }
@@ -206,11 +206,11 @@ class WarehouseChargesService
             $storageQty += $remaining;
             $storageCft += $skuCft;
 
-            file_put_contents('storage/logs/warehouse_charges' . date('Y-m-d') . '.log', "sku: {$product->sku}, length: {$product->length}, width: {$product->width}, height: {$product->height}, remaining: {$remaining},   cftPerUnit: {$cftPerUnit}\n", FILE_APPEND);
+            file_put_contents('storage/logs/vendor_warehouse_charges' . date('Y-m-d') . '.log', "sku: {$product->sku}, length: {$product->length}, width: {$product->width}, height: {$product->height}, remaining: {$remaining},   cftPerUnit: {$cftPerUnit}\n", FILE_APPEND);
         }
 
         $storageCharge = round($storageCft * floatval($rc->storage_rate_per_cft), 2);
-        file_put_contents('storage/logs/warehouse_charges' . date('Y-m-d') . '.log', "StorageQty: {$storageQty}, CFT: {$storageCft}, Charge: {$storageCharge}, Storage_rate_per_cft: {$rc->storage_rate_per_cft}\n", FILE_APPEND);
+        file_put_contents('storage/logs/vendor_warehouse_charges' . date('Y-m-d') . '.log', "StorageQty: {$storageQty}, CFT: {$storageCft}, Charge: {$storageCharge}, Storage_rate_per_cft: {$rc->storage_rate_per_cft}\n", FILE_APPEND);
         // ── 3. FULFILLMENT ───────────────────────────────────────────
         $fulfillSmall = 0;
         $fulfillLarge = 0;

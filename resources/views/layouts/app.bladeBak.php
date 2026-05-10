@@ -416,130 +416,48 @@
             <p style="color:#4a5e6f;font-size:.65rem;margin-top:.15rem;">Supply Chain Management</p>
         </div>
         @auth
-        @php
-        $u = auth()->user();
-        $modules = config('modules');
-        $isVendor = $u->user_type === 'vendor';
-        $isAdmin = $u->isAdmin();
-        //echo  $u->user_type ;
-        // Get user's permissions (cached) — used for ALL user types except admin
-        $userPerms = collect();
-        if (!$isVendor) {
-        $userPerms = \App\Services\PermissionService::getUserPermissions($u);
-        }
+@php
+    $u = auth()->user();
+    $modules = config('modules');
 
-        $test = [];
-
-        $sidebarModules = [];
-
-        foreach ($modules as $moduleKey => $moduleConfig) {
-
-        // Vendor module only for vendors, internal modules only for non-vendors
-    //    if ($moduleKey === 'vendor' && !$isVendor) continue;
-      //  if ($moduleKey !== 'vendor' && $isVendor) continue;
-
-        // ── ADMIN: sees everything from config ──
-        if ($isAdmin && false) {
-        $features = [];
-        foreach ($moduleConfig['entities'] as $entityKey => $entityConfig) {
-        if (isset($entityConfig['sidebar']) && $entityConfig['sidebar'] === false) continue;
-        $routeName = $entityConfig['route'] ?? null;
-        if (!$routeName || !\Route::has($routeName)) continue;
-        $features[] = [
-        'label' => $entityConfig['label'],
-        'route' => $routeName,
-        'icon' => $entityConfig['icon'] ?? $moduleConfig['icon'],
-        ];
-        }
-        if (!empty($features)) {
-        $sidebarModules[$moduleKey] = ['label' => $moduleConfig['label'], 'features' => $features];
-        }
-        continue;
-        }
-
-        // ── VENDOR: sees all vendor module items ──
-        if ($isVendor && $moduleKey === 'vendor') {
-        $features = [];
-        foreach ($moduleConfig['entities'] as $entityKey => $entityConfig) {
-        if (isset($entityConfig['sidebar']) && $entityConfig['sidebar'] === false) continue;
-        $routeName = $entityConfig['route'] ?? null;
-        if (!$routeName || !\Route::has($routeName)) continue;
-        $features[] = [
-        'label' => $entityConfig['label'].'-AAAA',
-        'route' => $routeName,
-        'icon' => $entityConfig['icon'] ?? $moduleConfig['icon'],
-        ];
-        }
-        if (!empty($features)) {
-        $sidebarModules[$moduleKey] = ['label' => $moduleConfig['label'], 'features' => $features];
-        }
-        continue;
-        }
-
-        // ── INTERNAL + EXTERNAL: show only items assigned via roles/permissions ──
-        $features = [];
-
-        foreach ($moduleConfig['entities'] as $entityKey => $entityConfig) {
-        if (isset($entityConfig['sidebar']) && $entityConfig['sidebar'] === false) continue;
-        $routeName = $entityConfig['route'] ?? null;
-        if (!$routeName || !\Route::has($routeName)) continue;
-
-        // Check if user has any permission for this entity
-        $hasAccess = false;
-
-        // Check module.entity.action format
-        foreach ($entityConfig['actions'] as $action) {
-        if ($userPerms->contains("{$moduleKey}.{$entityKey}.{$action}")) {
-        $hasAccess = true;
-        break;
-        }
-        }
-
-        // Also check legacy format: module.entity (without action)
-        if (!$hasAccess && $userPerms->contains("{$moduleKey}.{$entityKey}")) {
-        $hasAccess = true;
-        }
-
-
-
-
-        // Also check display_name style: "View Shipments" contains "shipment"
-        if (!$hasAccess) {
-
-
-        $entityLower = strtolower(str_replace('-', ' ', $entityKey));
-        foreach ($userPerms as $p) {
-        if (str_contains(strtolower($p), $moduleKey.'.'.$entityLower)) {
-        $hasAccess = true;
-        break;
-        }
-        }
-        }
-
-        if ($hasAccess) {
-        $features[] = [
-        'label' => $entityConfig['label'] ,
-        'route' => $routeName,
-        'icon' => $entityConfig['icon'] ?? $moduleConfig['icon'],
-        ];
-        }
-        }
-
-        if (!empty($features)) {
-        $sidebarModules[$moduleKey] = ['label' => $moduleConfig['label'] , 'features' => $features];
-        }
-        }
-        @endphp
+    // Build sidebar data from config
+    $sidebarModules = [];
+    foreach ($modules as $moduleKey => $moduleConfig) {
+        if (!App\Services\PermissionService::canAccessModule($u, $moduleKey)) continue;
         
-        @foreach($sidebarModules as $moduleKey => $module)
-        <div class="section-title">{{ $module['label'] }}</div>
-        @foreach($module['features'] as $feat)
-        <a href="{{ route($feat['route']) }}"
-            class="{{ request()->routeIs($feat['route'] . '*') ? 'active' : '' }}">
-            <i class="{{ $feat['icon'] }}"></i> {{ $feat['label'] }}
-        </a>
-        @endforeach
-        @endforeach
+        $features = [];
+        foreach ($moduleConfig['entities'] as $entityKey => $entityConfig) {
+            $viewPerm = "{$moduleKey}.{$entityKey}.view";
+            if (App\Services\PermissionService::can($u, $viewPerm)) {
+                $features[] = [
+                    'key'   => $entityKey,
+                    'label' => $entityConfig['label'],
+                    'route' => "{$moduleKey}.{$entityKey}",  // map to route name
+                ];
+            }
+        }
+
+        if (!empty($features)) {
+            $sidebarModules[$moduleKey] = [
+                'label'    => $moduleConfig['label'],
+                'icon'     => $moduleConfig['icon'],
+                'features' => $features,
+            ];
+        }
+    }
+@endphp
+
+@foreach($sidebarModules as $moduleKey => $module)
+    <div class="section-title">{{ $module['label'] }}</div>
+    @foreach($module['features'] as $feat)
+        @if(Route::has($feat['route']))
+            <a href="{{ route($feat['route']) }}"
+               class="{{ request()->routeIs($feat['route'] . '*') ? 'active' : '' }}">
+                <i class="{{ $module['icon'] }}"></i> {{ $feat['label'] }}
+            </a>
+        @endif
+    @endforeach
+@endforeach
         @endauth
     </aside>
 

@@ -119,6 +119,7 @@ Route::middleware(['auth'])->group(function () {
             Route::get('chargebacks', [VendorController::class, 'chargebacks'])->name('chargebacks');
             Route::get('grn', [VendorController::class, 'grn'])->name('grn');
             Route::get('grn/{grn}', [VendorController::class, 'showGrn'])->name('grn.show');
+            Route::get('rate-card', [VendorController::class, 'rateCard'])->name('rate-card');
             Route::get('inventory', [VendorController::class, 'inventory'])->name('inventory');
             Route::get('payouts', [VendorController::class, 'payouts'])->name('payouts');
             Route::post('payouts/{payout}/invoice', [VendorController::class, 'uploadInvoice'])->name('payouts.invoice');
@@ -167,54 +168,60 @@ Route::middleware(['auth'])->group(function () {
         Route::post('chargebacks/{chargeback}/confirm', [SourcingController::class, 'confirmChargeback'])->name('chargebacks.confirm');
     });
     // LOGISTICS
-    Route::prefix('logistics')->name('logistics.')->middleware('user.type:internal,admin', 'department:logistics')->group(function () {
-        Route::get('dashboard', [LogisticsController::class, 'dashboard'])->name('dashboard');
-        Route::get('container-planning', [LogisticsController::class, 'containerPlanning'])->name('container-planning');
-        Route::post('shipments/create', [LogisticsController::class, 'createShipment'])->name('shipments.create');
-        Route::get('shipments', [LogisticsController::class, 'shipments'])->name('shipments');
-        Route::get('shipments/{shipment}', [LogisticsController::class, 'showShipment'])->name('shipments.show');
-        Route::post('shipments/{shipment}/lock', [LogisticsController::class, 'lockShipment'])->name('shipments.lock');
+    Route::prefix('logistics')->name('logistics.')->middleware('user.type:internal,admin,external', 'module:logistics')
+        ->group(function () {
+            Route::get('dashboard', [LogisticsController::class, 'dashboard'])->name('dashboard');
+            Route::get('container-planning', [LogisticsController::class, 'containerPlanning'])->name('container-planning');
+            Route::post('shipments/create', [LogisticsController::class, 'createShipment'])->name('shipments.create');
+            Route::get('shipments', [LogisticsController::class, 'shipments'])->name('shipments');
+            Route::get('shipments/{shipment}', [LogisticsController::class, 'showShipment'])->name('shipments.show');
+            Route::post('shipments/{shipment}/lock', [LogisticsController::class, 'lockShipment'])->name('shipments.lock');
 
-        Route::post('shipments/{shipment}/entry-summary', [LogisticsController::class, 'uploadEntrySummary'])->name('shipments.entry-summary');
-        Route::get('grn', [LogisticsController::class, 'grnList'])->name('grn');
-        Route::get('grn/{grn}/show', [LogisticsController::class, 'showGrn'])->name('grn.show');
-        Route::get('grn/{shipment}/upload', [LogisticsController::class, 'uploadGrn'])->name('grn.upload');
-        Route::post('grn/{shipment}', [LogisticsController::class, 'storeGrn'])->name('grn.store');
-        Route::get('asn/{asn}/download', [LogisticsController::class, 'downloadAsn'])->name('asn.download');
-        Route::get('inventory', [LogisticsController::class, 'inventory'])->name('inventory');
-        Route::get('inventory/download', [LogisticsController::class, 'downloadInventory'])->name('inventory.download');
-        Route::get('inventory/ageing', [LogisticsController::class, 'inventoryAgeing'])->name('inventory.ageing');
-        Route::get('inventory/allocation', [LogisticsController::class, 'warehouseAllocation'])->name('inventory.allocation');
-        Route::post('inventory/transfer', [LogisticsController::class, 'transferInventory'])->name('inventory.transfer');
-        Route::get('warehouse-charges', [LogisticsController::class, 'warehouseCharges'])->name('warehouse-charges');
-        Route::get('warehouse-charges/vendor-allocation', [LogisticsController::class, 'vendorChargeAllocation'])->name('warehouse-charges.vendor-allocation');
-        Route::post('warehouse-charges/{charge}/receipt', [LogisticsController::class, 'uploadChargeReceipt'])->name('warehouse-charges.receipt');
-        Route::post('warehouse-charges/calculate', [LogisticsController::class, 'calculateCharges'])->name('warehouse-charges.calculate');
-        Route::post('warehouse-charges/bulk-calculate', [LogisticsController::class, 'bulkCalculateCharges'])->name('warehouse-charges.bulk-calculate');
-        Route::post('warehouse-charges/run', [LogisticsController::class, 'runMonthlyCharges'])->name('warehouse-charges.run');
-        Route::post('warehouse-charges/{charge}/invoice', [LogisticsController::class, 'uploadWarehouseInvoice'])->name('warehouse-charges.invoice');
-        Route::post('warehouse-charges/{charge}/approve', [LogisticsController::class, 'approveCharge'])->name('warehouse-charges.approve');
-        Route::get('warehouse-charges/variance', [LogisticsController::class, 'varianceReport'])->name('warehouse-charges.variance');
-        Route::get('warehouse-charges/download', [LogisticsController::class, 'downloadChargesReport'])->name('warehouse-charges.download');
-        Route::get('vendor-rate-cards', [LogisticsController::class, 'vendorRateCards'])->name('vendor-rate-cards');
-        Route::post('vendor-rate-cards', [LogisticsController::class, 'storeVendorRateCard'])->name('vendor-rate-cards.store');
-        Route::put('vendor-rate-cards/{vendorRateCard}', [LogisticsController::class, 'updateVendorRateCard'])->name('vendor-rate-cards.update');
-        Route::get('rate-cards', [LogisticsController::class, 'rateCards'])->name('rate-cards');
-        Route::put('rate-cards/{warehouse}', [LogisticsController::class, 'updateRateCard'])->name('rate-cards.update');
+            Route::post('shipments/{shipment}/entry-summary', [LogisticsController::class, 'uploadEntrySummary'])->name('shipments.entry-summary');
+            // Route::get('grn', [LogisticsController::class, 'grnList'])->name('grn');
 
-        // Warehouse Rate Cards (company-level)
-        Route::get('warehouse-rate-cards', [LogisticsController::class, 'warehouseRateCards'])->name('warehouse-rate-cards');
-        Route::post('warehouse-rate-cards', [LogisticsController::class, 'storeWarehouseRateCard'])->name('warehouse-rate-cards.store');
-        Route::post('warehouse-rate-cards/{warehouseRateCard}/submit', [LogisticsController::class, 'submitWarehouseRateCard'])->name('warehouse-rate-cards.submit');
-        Route::post('warehouse-rate-cards/{warehouseRateCard}/approve', [LogisticsController::class, 'approveWarehouseRateCard'])->name('warehouse-rate-cards.approve');
+            Route::get('grn', [LogisticsController::class, 'grnList'])
+                ->middleware('permission:logistics.grn.view')
+                ->name('grn');
 
-        // Warehouse Monthly Charges (calculation + invoice + variance)
-        Route::get('warehouse-monthly-charges', [LogisticsController::class, 'warehouseMonthlyCharges'])->name('warehouse-monthly-charges');
-        Route::post('warehouse-monthly-charges/run', [LogisticsController::class, 'runWarehouseCharges'])->name('warehouse-monthly-charges.run');
-        Route::post('warehouse-monthly-charges/{warehouseMonthlyCharge}/invoice', [LogisticsController::class, 'enterWarehouseInvoice'])->name('warehouse-monthly-charges.invoice');
-        Route::post('warehouse-monthly-charges/{warehouseMonthlyCharge}/explanations', [LogisticsController::class, 'saveVarianceExplanations'])->name('warehouse-monthly-charges.explanations');
-        Route::post('warehouse-monthly-charges/{warehouseMonthlyCharge}/approve', [LogisticsController::class, 'approveWarehouseCharge'])->name('warehouse-monthly-charges.approve');
-    });
+            Route::get('grn/{grn}/show', [LogisticsController::class, 'showGrn'])->name('grn.show');
+            Route::get('grn/{shipment}/upload', [LogisticsController::class, 'uploadGrn'])->name('grn.upload');
+            Route::post('grn/{shipment}', [LogisticsController::class, 'storeGrn'])->name('grn.store');
+            Route::get('asn/{asn}/download', [LogisticsController::class, 'downloadAsn'])->name('asn.download');
+            Route::get('inventory', [LogisticsController::class, 'inventory'])->name('inventory');
+            Route::get('inventory/download', [LogisticsController::class, 'downloadInventory'])->name('inventory.download');
+            Route::get('inventory/ageing', [LogisticsController::class, 'inventoryAgeing'])->name('inventory.ageing');
+            Route::get('inventory/allocation', [LogisticsController::class, 'warehouseAllocation'])->name('inventory.allocation');
+            Route::post('inventory/transfer', [LogisticsController::class, 'transferInventory'])->name('inventory.transfer');
+            Route::get('warehouse-charges', [LogisticsController::class, 'warehouseCharges'])->name('warehouse-charges');
+            Route::get('warehouse-charges/vendor-allocation', [LogisticsController::class, 'vendorChargeAllocation'])->name('warehouse-charges.vendor-allocation');
+            Route::post('warehouse-charges/{charge}/receipt', [LogisticsController::class, 'uploadChargeReceipt'])->name('warehouse-charges.receipt');
+            Route::post('warehouse-charges/calculate', [LogisticsController::class, 'calculateCharges'])->name('warehouse-charges.calculate');
+            Route::post('warehouse-charges/bulk-calculate', [LogisticsController::class, 'bulkCalculateCharges'])->name('warehouse-charges.bulk-calculate');
+            Route::post('warehouse-charges/run', [LogisticsController::class, 'runMonthlyCharges'])->name('warehouse-charges.run');
+            Route::post('warehouse-charges/{charge}/invoice', [LogisticsController::class, 'uploadWarehouseInvoice'])->name('warehouse-charges.invoice');
+            Route::post('warehouse-charges/{charge}/approve', [LogisticsController::class, 'approveCharge'])->name('warehouse-charges.approve');
+            Route::get('warehouse-charges/variance', [LogisticsController::class, 'varianceReport'])->name('warehouse-charges.variance');
+            Route::get('warehouse-charges/download', [LogisticsController::class, 'downloadChargesReport'])->name('warehouse-charges.download');
+            Route::get('vendor-rate-cards', [LogisticsController::class, 'vendorRateCards'])->name('vendor-rate-cards');
+            Route::post('vendor-rate-cards', [LogisticsController::class, 'storeVendorRateCard'])->name('vendor-rate-cards.store');
+            Route::put('vendor-rate-cards/{vendorRateCard}', [LogisticsController::class, 'updateVendorRateCard'])->name('vendor-rate-cards.update');
+            Route::get('rate-cards', [LogisticsController::class, 'rateCards'])->name('rate-cards');
+            Route::put('rate-cards/{warehouse}', [LogisticsController::class, 'updateRateCard'])->name('rate-cards.update');
+
+            // Warehouse Rate Cards (company-level)
+            Route::get('warehouse-rate-cards', [LogisticsController::class, 'warehouseRateCards'])->name('warehouse-rate-cards');
+            Route::post('warehouse-rate-cards', [LogisticsController::class, 'storeWarehouseRateCard'])->name('warehouse-rate-cards.store');
+            Route::post('warehouse-rate-cards/{warehouseRateCard}/submit', [LogisticsController::class, 'submitWarehouseRateCard'])->name('warehouse-rate-cards.submit');
+            Route::post('warehouse-rate-cards/{warehouseRateCard}/approve', [LogisticsController::class, 'approveWarehouseRateCard'])->name('warehouse-rate-cards.approve');
+
+            // Warehouse Monthly Charges (calculation + invoice + variance)
+            Route::get('warehouse-monthly-charges', [LogisticsController::class, 'warehouseMonthlyCharges'])->name('warehouse-monthly-charges');
+            Route::post('warehouse-monthly-charges/run', [LogisticsController::class, 'runWarehouseCharges'])->name('warehouse-monthly-charges.run');
+            Route::post('warehouse-monthly-charges/{warehouseMonthlyCharge}/invoice', [LogisticsController::class, 'enterWarehouseInvoice'])->name('warehouse-monthly-charges.invoice');
+            Route::post('warehouse-monthly-charges/{warehouseMonthlyCharge}/explanations', [LogisticsController::class, 'saveVarianceExplanations'])->name('warehouse-monthly-charges.explanations');
+            Route::post('warehouse-monthly-charges/{warehouseMonthlyCharge}/approve', [LogisticsController::class, 'approveWarehouseCharge'])->name('warehouse-monthly-charges.approve');
+        });
 
 
     // CATALOGUING

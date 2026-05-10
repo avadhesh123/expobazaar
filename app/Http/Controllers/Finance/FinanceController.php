@@ -463,11 +463,21 @@ class FinanceController extends Controller
             'effective_from' => 'required|date',
         ]);
         $vendor = \App\Models\Vendor::findOrFail($request->vendor_id);
-        $currency = $vendor->company_code === '2200' ? 'EUR' : 'USD';
+        $currency = match ($vendor->company_code) {
+            '2000' => 'INR',
+            '2200' => 'EUR',
+            default => 'USD',
+        };
         $maxV = \App\Models\VendorRateCard::where('vendor_id', $vendor->id)->max('version') ?? 0;
 
-        \App\Models\VendorRateCard::where('vendor_id', $vendor->id)->where('status', 'approved')
-            ->whereNull('effective_to')->update(['effective_to' => now()->subDay()->toDateString(), 'status' => 'expired']);
+        $newEffectiveFrom = $request->effective_from;
+
+        \App\Models\VendorRateCard::where('vendor_id', $vendor->id)
+            ->where('status', 'approved')
+            ->whereNull('effective_to')
+            ->update([
+                'effective_to' => \Carbon\Carbon::parse($newEffectiveFrom)->subDay()->toDateString(),
+            ]);
 
         $rc = \App\Models\VendorRateCard::create(array_merge($request->only([
             'vendor_id',
@@ -524,13 +534,15 @@ class FinanceController extends Controller
 
     public function runVendorCharges(Request $request)
     {
-        
-        $request->validate(['month' => 'required|integer|min:1|max:12', 
-        'year' => 'required|integer|min:2024',
-        'vendor_id' => 'nullable|exists:vendors,id']);
+
+        $request->validate([
+            'month' => 'required|integer|min:1|max:12',
+            'year' => 'required|integer|min:2024',
+            'vendor_id' => 'nullable|exists:vendors,id'
+        ]);
         $service = new \App\Services\WarehouseChargesService();
         $results = $service->runMonthlyCharges($request->month, $request->year, $request->vendor_id, auth()->id(), (bool)$request->dry_run);
-     
+
         $msg = ($request->dry_run ? "[DRY RUN] " : "") . "{$results['created']} created, {$results['skipped']} skipped.";
         if (!empty($results['errors'])) $msg .= " Errors: " . implode('; ', array_slice($results['errors'], 0, 5));
         return back()->with($results['created'] > 0 ? 'success' : 'error', $msg);

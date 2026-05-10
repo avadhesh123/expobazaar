@@ -13,6 +13,7 @@ return Application::configure(basePath: dirname(__DIR__))
     )
     ->withMiddleware(function (Middleware $middleware) {
         $middleware->alias([
+            'permission' => \App\Http\Middleware\CheckPermission::class, 
             'user.type' => \App\Http\Middleware\CheckUserType::class,
             'department' => \App\Http\Middleware\CheckDepartment::class,
             'company.code' => \App\Http\Middleware\CheckCompanyCode::class,
@@ -85,5 +86,4 @@ return Application::configure(basePath: dirname(__DIR__))
                     ->with('error', 'You do not have permission to perform this action.');
             }
         });
-
     })->create();

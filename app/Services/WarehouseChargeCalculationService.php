@@ -19,7 +19,7 @@ class WarehouseChargeCalculationService
             default => 'USD'   // fallback
         };
 
-       // $dryRun = true;
+        // $dryRun = true;
         if (!$rateCard) {
             return ['success' => false, 'error' => 'No approved rate card for this warehouse.'];
         }
@@ -129,38 +129,47 @@ class WarehouseChargeCalculationService
         // 1. INWARD — one-time, only if not already charged
         $inwardCartons = 0;
         $inwardCharge = 0;
-      //  if (!$grn->inward_charged) {
+        if (!$grn->inward_charged) {
+
+            // Only charge inward in the month the GRN was received
+            $grnMonth = $grn->receipt_date ? $grn->receipt_date->month : null;
+            $grnYear = $grn->receipt_date ? $grn->receipt_date->year : null;
 
             $inwardCartons = $grnItems->sum('received_quantity');
 
             file_put_contents('storage/logs/warehouse_charges_calc.log', 'inwardCartons: ' . $inwardCartons . "\n", FILE_APPEND);
 
             $totalCartonsFromConsignment = 0;
-            // Calculate cartons from live sheet items (qty / qty_master_pack)
-            if ($grn->shipment && $grn->shipment->consignments) {
-                foreach ($grn->shipment->consignments as $c) {
-                    if (!$c->liveSheet) {
-                        continue;
-                    }
-                    foreach ($c->liveSheet->items as $i) {
-                        $qty = floatval($i->quantity);
-                        $d = $i->product_details ?? [];
-                        $qtyPerCarton = floatval($d['qty_master_pack'] ?? $d['qty_per_carton'] ?? 0);
-                        $totalCartonsFromConsignment += $qtyPerCarton > 0 ? ceil($qty / $qtyPerCarton) : 0;
+            if ($grnMonth === $month && $grnYear === $year) {
+                // Calculate cartons from live sheet items (qty / qty_master_pack)
+                if ($grn->shipment && $grn->shipment->consignments) {
+                    foreach ($grn->shipment->consignments as $c) {
+                        if (!$c->liveSheet) {
+                            continue;
+                        }
+                        foreach ($c->liveSheet->items as $i) {
+
+
+                            $qty = floatval($i->quantity);
+                            $d = $i->product_details ?? [];
+                            $qtyPerCarton = floatval($d['qty_master_pack'] ?? $d['qty_per_carton'] ?? 0);
+                            $totalCartonsFromConsignment += $qtyPerCarton > 0 ? ceil($qty / $qtyPerCarton) : 0;
+
+                            file_put_contents('storage/logs/warehouse_charges_calc.log', 'Live Sheet Id: ' . $c->liveSheet->id . '_' . $i->live_sheet_id . ', quantity: ' . $i->quantity . ', product_details: ' . json_encode($d) . ', qtyPerCarton: ' . $qtyPerCarton . "\n", FILE_APPEND);
+                        }
                     }
                 }
-            }
 
-            file_put_contents('storage/logs/warehouse_charges_calc.log', 'totalCartonsFromConsignment: ' . $totalCartonsFromConsignment . "\n", FILE_APPEND);
+                file_put_contents('storage/logs/warehouse_charges_calc.log', 'totalCartonsFromConsignment: ' . $totalCartonsFromConsignment . "\n", FILE_APPEND);
 
-            if ($totalCartonsFromConsignment > 0) {
-                $inwardCartons = $totalCartonsFromConsignment;
+                if ($totalCartonsFromConsignment > 0) {
+                    $inwardCartons = $totalCartonsFromConsignment;
+                }
+                $inwardCharge = round($inwardCartons * floatval($rc->wh_inward_rate_per_carton), 2);
             }
-            $inwardCharge = round($inwardCartons * floatval($rc->wh_inward_rate_per_carton), 2);
-        // } else {
-        //     file_put_contents('storage/logs/warehouse_charges_calc.log', 'grn->inward_charged: ' . $grn->inward_charged . "\n", FILE_APPEND);
-        //     $inwardCharge = $grn->inward_charged;
-        // }
+        } else {
+            file_put_contents('storage/logs/warehouse_charges_calc.log', 'grn->inward_charged: ' . $grn->inward_charged . "\n", FILE_APPEND);
+         }
 
         file_put_contents('storage/logs/warehouse_charges_calc.log', "Results1: " . 'inwardCartons: ' . $inwardCartons . ', wh_inward_rate_per_carton: ' . $rc->wh_inward_rate_per_carton . ', inwardCharge: ' . $inwardCharge . "\n", FILE_APPEND);
 

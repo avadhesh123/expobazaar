@@ -13,8 +13,7 @@ class AdminController extends Controller
     public function __construct(
         protected DashboardService $dashboardService,
         protected VendorService $vendorService
-    ) {
-    }
+    ) {}
 
     public function dashboard(Request $request)
     {
@@ -38,15 +37,15 @@ class AdminController extends Controller
         if ($search = $request->search) {
             $query->where(function ($q) use ($search) {
                 $q->where('name', 'like', "%{$search}%")
-                  ->orWhere('email', 'like', "%{$search}%")
-                  ->orWhere('phone', 'like', "%{$search}%");
+                    ->orWhere('email', 'like', "%{$search}%")
+                    ->orWhere('phone', 'like', "%{$search}%");
             });
         }
 
-        $query->when($request->type, fn ($q, $v) => $q->where('user_type', $v));
-        $query->when($request->department, fn ($q, $v) => $q->where('department', $v));
-        $query->when($request->status, fn ($q, $v) => $q->where('status', $v));
-        $query->when($request->company_code, fn ($q, $v) => $q->whereJsonContains('company_codes', $v));
+        $query->when($request->type, fn($q, $v) => $q->where('user_type', $v));
+        $query->when($request->department, fn($q, $v) => $q->where('department', $v));
+        $query->when($request->status, fn($q, $v) => $q->where('status', $v));
+        $query->when($request->company_code, fn($q, $v) => $q->whereJsonContains('company_codes', $v));
 
         $sortField = in_array($request->sort, ['name', 'email', 'user_type', 'department', 'status', 'created_at', 'last_login_at'])
             ? $request->sort : 'created_at';
@@ -99,6 +98,9 @@ class AdminController extends Controller
             'status'          => 'nullable|in:active,inactive',
         ]);
 
+        // print_r($validated);
+        // exit;
+
         $user = User::create([
             'name'              => $validated['name'],
             'email'             => $validated['email'],
@@ -143,7 +145,7 @@ class AdminController extends Controller
         ]);
 
         $oldValues = $user->toArray();
-
+        // print_r($validated);exit;
         $user->update([
             'name'          => $validated['name'],
             'email'         => $validated['email'],
@@ -182,7 +184,7 @@ class AdminController extends Controller
         $userDirectPermissionIds = $user->permissions->pluck('id')->toArray();
 
         // IDs of permissions the user gets via their roles (read-only, shown grayed out)
-        $rolePermissionIds = $user->roles->flatMap(fn ($role) => $role->permissions->pluck('id'))->unique()->toArray();
+        $rolePermissionIds = $user->roles->flatMap(fn($role) => $role->permissions->pluck('id'))->unique()->toArray();
 
         return view('admin.users.permissions', compact(
             'user',
@@ -304,27 +306,32 @@ class AdminController extends Controller
             'user_ids.*'  => 'exists:users,id',
         ]);
 
-        $userIds = collect($request->user_ids)->reject(fn ($id) => (int)$id === auth()->id());
+        $userIds = collect($request->user_ids)->reject(fn($id) => (int)$id === auth()->id());
         if ($userIds->isEmpty()) {
             return back()->with('error', 'No valid users selected.');
         }
 
         $count = $userIds->count();
         switch ($request->action) {
-            case 'activate':   User::whereIn('id', $userIds)->update(['status' => 'active']);
+            case 'activate':
+                User::whereIn('id', $userIds)->update(['status' => 'active']);
                 $msg = "{$count} user(s) activated.";
                 break;
-            case 'deactivate': User::whereIn('id', $userIds)->update(['status' => 'inactive']);
+            case 'deactivate':
+                User::whereIn('id', $userIds)->update(['status' => 'inactive']);
                 $msg = "{$count} user(s) deactivated.";
                 break;
-            case 'suspend':    User::whereIn('id', $userIds)->update(['status' => 'suspended']);
+            case 'suspend':
+                User::whereIn('id', $userIds)->update(['status' => 'suspended']);
                 $msg = "{$count} user(s) suspended.";
                 break;
-            case 'delete':     User::whereIn('id', $userIds)->update(['status' => 'inactive']);
+            case 'delete':
+                User::whereIn('id', $userIds)->update(['status' => 'inactive']);
                 User::whereIn('id', $userIds)->delete();
                 $msg = "{$count} user(s) deleted.";
                 break;
-            default: return back()->with('error', 'Invalid action.');
+            default:
+                return back()->with('error', 'Invalid action.');
         }
 
         return back()->with('success', $msg);
@@ -333,9 +340,9 @@ class AdminController extends Controller
     public function exportUsers(Request $request)
     {
         $users = User::with('roles')
-            ->when($request->type, fn ($q, $v) => $q->where('user_type', $v))
-            ->when($request->department, fn ($q, $v) => $q->where('department', $v))
-            ->when($request->status, fn ($q, $v) => $q->where('status', $v))
+            ->when($request->type, fn($q, $v) => $q->where('user_type', $v))
+            ->when($request->department, fn($q, $v) => $q->where('department', $v))
+            ->when($request->status, fn($q, $v) => $q->where('status', $v))
             ->orderBy('name')->get();
 
         $csv = "ID,Name,Email,Phone,Type,Department,Company Codes,Status,Roles,Created,Last Login\n";
@@ -407,6 +414,9 @@ class AdminController extends Controller
             'company_codes' => 'nullable|array',
             'permissions'   => 'nullable|array',
         ]);
+
+        $validated['slug'] = \Str::slug($validated['name']);
+        $validated['guard_name'] = 'web';
 
         $role = Role::create($validated);
         if (!empty($validated['permissions'])) {
@@ -559,38 +569,37 @@ class AdminController extends Controller
     // =====================================================================
 
     public function activityLog(Request $request)
-{
-    $logs = \App\Models\ActivityLog::with('user')
-        ->when($request->module, fn($q, $v) => $q->where('module', $v))
-        ->when($request->action, fn($q, $v) => $q->where('action', $v))
-        ->when($request->user_id, fn($q, $v) => $q->where('user_id', $v))
-        ->when($request->date_from, fn($q, $v) => $q->whereDate('created_at', '>=', $v))
-        ->when($request->date_to, fn($q, $v) => $q->whereDate('created_at', '<=', $v))
-        ->when($request->search, function ($q, $v) {
-            $q->where(function ($sub) use ($v) {
-                $sub->where('description', 'LIKE', "%{$v}%")
-                    ->orWhere('subject_type', 'LIKE', "%{$v}%")
-                    ->orWhere('action', 'LIKE', "%{$v}%");
-            });
-        })
-        ->latest()
-        ->paginate(50)
-        ->withQueryString();
+    {
+        $logs = \App\Models\ActivityLog::with('user')
+            ->when($request->module, fn($q, $v) => $q->where('module', $v))
+            ->when($request->action, fn($q, $v) => $q->where('action', $v))
+            ->when($request->user_id, fn($q, $v) => $q->where('user_id', $v))
+            ->when($request->date_from, fn($q, $v) => $q->whereDate('created_at', '>=', $v))
+            ->when($request->date_to, fn($q, $v) => $q->whereDate('created_at', '<=', $v))
+            ->when($request->search, function ($q, $v) {
+                $q->where(function ($sub) use ($v) {
+                    $sub->where('description', 'LIKE', "%{$v}%")
+                        ->orWhere('subject_type', 'LIKE', "%{$v}%")
+                        ->orWhere('action', 'LIKE', "%{$v}%");
+                });
+            })
+            ->latest()
+            ->paginate(50)
+            ->withQueryString();
 
-    // For filter dropdowns
-    $modules = \App\Models\ActivityLog::distinct()->pluck('module')->filter()->sort()->values();
-    $actions = \App\Models\ActivityLog::distinct()->pluck('action')->filter()->sort()->values();
-    $users   = \App\Models\User::orderBy('name')->get(['id', 'name', 'email']);
+        // For filter dropdowns
+        $modules = \App\Models\ActivityLog::distinct()->pluck('module')->filter()->sort()->values();
+        $actions = \App\Models\ActivityLog::distinct()->pluck('action')->filter()->sort()->values();
+        $users   = \App\Models\User::orderBy('name')->get(['id', 'name', 'email']);
 
-    // KPI summary
-    $stats = [
-        'total'        => \App\Models\ActivityLog::count(),
-        'today'        => \App\Models\ActivityLog::whereDate('created_at', today())->count(),
-        'this_week'    => \App\Models\ActivityLog::where('created_at', '>=', now()->startOfWeek())->count(),
-        'unique_users' => \App\Models\ActivityLog::distinct('user_id')->count('user_id'),
-    ];
+        // KPI summary
+        $stats = [
+            'total'        => \App\Models\ActivityLog::count(),
+            'today'        => \App\Models\ActivityLog::whereDate('created_at', today())->count(),
+            'this_week'    => \App\Models\ActivityLog::where('created_at', '>=', now()->startOfWeek())->count(),
+            'unique_users' => \App\Models\ActivityLog::distinct('user_id')->count('user_id'),
+        ];
 
-    return view('admin.activity-log', compact('logs', 'modules', 'actions', 'users', 'stats'));
-}
-
+        return view('admin.activity-log', compact('logs', 'modules', 'actions', 'users', 'stats'));
+    }
 }

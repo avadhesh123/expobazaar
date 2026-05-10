@@ -31,7 +31,7 @@
 
         .sidebar {
             background: linear-gradient(180deg, #0d1b2a 0%, #1e3a5f 100%);
-            height: 100vh;
+            min-height: 100vh;
             width: 260px;
             position: fixed;
             left: 0;
@@ -39,7 +39,6 @@
             overflow-y: auto;
             z-index: 40;
             border-right: 1px solid rgba(255, 255, 255, .06);
-            padding-bottom: 2rem;
         }
 
         .sidebar a {
@@ -416,130 +415,101 @@
             <p style="color:#4a5e6f;font-size:.65rem;margin-top:.15rem;">Supply Chain Management</p>
         </div>
         @auth
-        @php
-        $u = auth()->user();
-        $modules = config('modules');
-        $isVendor = $u->user_type === 'vendor';
-        $isAdmin = $u->isAdmin();
-        //echo  $u->user_type ;
-        // Get user's permissions (cached) — used for ALL user types except admin
-        $userPerms = collect();
-        if (!$isVendor) {
-        $userPerms = \App\Services\PermissionService::getUserPermissions($u);
-        }
 
-        $test = [];
+        @if(auth()->user()->isAdmin())
+        <div class="section-title">Administration</div>
+        <a href="{{ route('admin.dashboard') }}" class="{{ request()->routeIs('admin.dashboard') ? 'active' : '' }}"><i class="fas fa-tachometer-alt"></i> Dashboard</a>
+        <a href="{{ route('admin.users') }}" class="{{ request()->routeIs('admin.users*') ? 'active' : '' }}"><i class="fas fa-users-cog"></i> User Management</a>
+        <a href="{{ route('admin.vendors.pending') }}" class="{{ request()->routeIs('admin.vendors*') ? 'active' : '' }}"><i class="fas fa-user-check"></i> Vendor Approvals</a>
+        <a href="{{ route('admin.roles') }}" class="{{ request()->routeIs('admin.roles*') ? 'active' : '' }}"><i class="fas fa-shield-alt"></i> Roles & Permissions</a>
+        <div class="section-title">Masters</div>
+        <a href="{{ route('admin.categories') }}" class="{{ request()->routeIs('admin.categories*') ? 'active' : '' }}"><i class="fas fa-tags"></i> Categories</a>
+        <a href="{{ route('admin.sales-channels') }}" class="{{ request()->routeIs('admin.sales-channels*') ? 'active' : '' }}"><i class="fas fa-store"></i> Sales Channels</a>
+        <a href="{{ route('admin.warehouses') }}" class="{{ request()->routeIs('admin.warehouses*') ? 'active' : '' }}"><i class="fas fa-warehouse"></i> Warehouses</a>
+        <div class="section-title">System</div>
+        <a href="{{ route('admin.activity-log') }}" class="{{ request()->routeIs('admin.activity-log*') ? 'active' : '' }}"><i class="fas fa-history"></i> Activity Log</a>
+        @elseif(auth()->user()->isVendor())
+        @php $kycApproved = auth()->user()->vendor && auth()->user()->vendor->kyc_status === 'approved'; @endphp
+        <div class="section-title">Vendor Panel</div>
+        <a href="{{ route('vendor.dashboard') }}" class="{{ request()->routeIs('vendor.dashboard') ? 'active' : '' }}"><i class="fas fa-tachometer-alt"></i> Dashboard</a>
+        <a href="{{ route('vendor.kyc') }}" class="{{ request()->routeIs('vendor.kyc*') ? 'active' : '' }}"><i class="fas fa-id-card"></i> KYC Documents</a>
 
-        $sidebarModules = [];
+        @if($kycApproved)
+        <a href="{{ route('vendor.offer-sheets') }}" class="{{ request()->routeIs('vendor.offer-sheets*') ? 'active' : '' }}"><i class="fas fa-file-alt"></i> Offer Sheets</a>
+        <a href="{{ route('vendor.live-sheets') }}" class="{{ request()->routeIs('vendor.live-sheets*') ? 'active' : '' }}"><i class="fas fa-clipboard-list"></i> Live Sheets</a>
+        <a href="{{ route('vendor.consignments') }}" class="{{ request()->routeIs('vendor.consignments*') ? 'active' : '' }}"><i class="fas fa-box"></i> Consignments</a>
+        <a href="{{ route('vendor.sales') }}" class="{{ request()->routeIs('vendor.sales*') ? 'active' : '' }}"><i class="fas fa-chart-line"></i> Sales Report</a>
+        <a href="{{ route('vendor.chargebacks') }}" class="{{ request()->routeIs('vendor.chargebacks*') ? 'active' : '' }}"><i class="fas fa-exclamation-triangle"></i> Chargebacks</a>
+        <a href="{{ route('vendor.payouts') }}" class="{{ request()->routeIs('vendor.payouts*') ? 'active' : '' }}"><i class="fas fa-money-check-alt"></i> Payouts</a>
+        <a href="{{ route('vendor.inspections.index') }}" class="{{ request()->routeIs('vendor.inspections*') ? 'active' : '' }}"><i class="fas fa-search"></i> Inspections</a>
+        <a href="{{ route('vendor.grn') }}" class="{{ request()->routeIs('vendor.grn*') ? 'active' : '' }}"><i class="fas fa-clipboard-check"></i> GRN</a>
+        <a href="{{ route('vendor.rate-card') }}" class="{{ request()->routeIs('vendor.rate-card*') ? 'active' : '' }}"><i class="fas fa-file-invoice-dollar"></i> Rate Card</a>
+        <a href="{{ route('vendor.inventory') }}" class="{{ request()->routeIs('vendor.inventory*') ? 'active' : '' }}"><i class="fas fa-boxes"></i> Inventory</a>
+        @else
+        <span style="display:block;padding:.55rem .85rem;color:#94a3b8;font-size:.82rem;cursor:not-allowed;opacity:.5;"><i class="fas fa-lock" style="margin-right:.4rem;font-size:.7rem;"></i> Offer Sheets</span>
+        <span style="display:block;padding:.55rem .85rem;color:#94a3b8;font-size:.82rem;cursor:not-allowed;opacity:.5;"><i class="fas fa-lock" style="margin-right:.4rem;font-size:.7rem;"></i> Live Sheets</span>
+        <span style="display:block;padding:.55rem .85rem;color:#94a3b8;font-size:.82rem;cursor:not-allowed;opacity:.5;"><i class="fas fa-lock" style="margin-right:.4rem;font-size:.7rem;"></i> Consignments</span>
+        <span style="display:block;padding:.55rem .85rem;color:#94a3b8;font-size:.82rem;cursor:not-allowed;opacity:.5;"><i class="fas fa-lock" style="margin-right:.4rem;font-size:.7rem;"></i> Sales Report</span>
+        <span style="display:block;padding:.55rem .85rem;color:#94a3b8;font-size:.82rem;cursor:not-allowed;opacity:.5;"><i class="fas fa-lock" style="margin-right:.4rem;font-size:.7rem;"></i> Chargebacks</span>
+        <span style="display:block;padding:.55rem .85rem;color:#94a3b8;font-size:.82rem;cursor:not-allowed;opacity:.5;"><i class="fas fa-lock" style="margin-right:.4rem;font-size:.7rem;"></i> Payouts</span>
+        <div style="margin:.5rem .85rem;padding:.5rem .65rem;background:#fef3c7;border-radius:8px;font-size:.68rem;color:#92400e;line-height:1.3;">
+            <i class="fas fa-info-circle" style="margin-right:.2rem;"></i> Complete KYC & get Finance approval to unlock all modules.
+        </div>
+        @endif
+        @elseif(auth()->user()->department === 'sourcing')
+        <div class="section-title">Sourcing</div>
+        <a href="{{ route('sourcing.dashboard') }}" class="{{ request()->routeIs('sourcing.dashboard') ? 'active' : '' }}"><i class="fas fa-tachometer-alt"></i> Dashboard</a>
+        <a href="{{ route('sourcing.vendors') }}" class="{{ request()->routeIs('sourcing.vendors*') ? 'active' : '' }}"><i class="fas fa-users"></i> Vendors</a>
+        <a href="{{ route('sourcing.offer-sheets') }}" class="{{ request()->routeIs('sourcing.offer*') ? 'active' : '' }}"><i class="fas fa-file-alt"></i> Offer Sheets</a>
+        <a href="{{ route('sourcing.live-sheets') }}" class="{{ request()->routeIs('sourcing.live*') ? 'active' : '' }}"><i class="fas fa-clipboard-list"></i> Live Sheets</a>
+        <a href="{{ route('sourcing.consignments') }}" class="{{ request()->routeIs('sourcing.consignment*') ? 'active' : '' }}"><i class="fas fa-box"></i> Consignments</a>
+        <div class="section-title">Quality</div>
+        <a href="{{ route('sourcing.inspections') }}" class="{{ request()->routeIs('sourcing.inspections*') ? 'active' : '' }}"><i class="fas fa-search"></i> Inspections</a>
+        <a href="{{ route('sourcing.chargebacks') }}" class="{{ request()->routeIs('sourcing.chargeback*') ? 'active' : '' }}"><i class="fas fa-exclamation-triangle"></i> Chargebacks</a>
+        @elseif(auth()->user()->department === 'logistics')
+        <div class="section-title">Logistics</div>
+        <a href="{{ route('logistics.dashboard') }}" class="{{ request()->routeIs('logistics.dashboard') ? 'active' : '' }}"><i class="fas fa-tachometer-alt"></i> Dashboard</a>
+        <a href="{{ route('logistics.container-planning') }}" class="{{ request()->routeIs('logistics.container-planning*') ? 'active' : '' }}"><i class="fas fa-cubes"></i> Container Planning</a>
+        <a href="{{ route('logistics.shipments') }}" class="{{ request()->routeIs('logistics.shipments*') ? 'active' : '' }}"><i class="fas fa-ship"></i> Shipments</a>
+        <a href="{{ route('logistics.grn') }}" class="{{ request()->routeIs('logistics.grn*') ? 'active' : '' }}"><i class="fas fa-clipboard-check"></i> GRN</a>
+        <a href="{{ route('logistics.inventory') }}" class="{{ request()->routeIs('logistics.inventory*') ? 'active' : '' }}"><i class="fas fa-boxes"></i> Inventory</a>
+        <!-- <a href="{{ route('logistics.warehouse-charges') }}" class="{{ request()->routeIs('logistics.warehouse-charges*') ? 'active' : '' }}"><i class="fas fa-calculator"></i> Warehouse Charges</a> -->
+        <!-- <a href="{{ route('logistics.rate-cards') }}" class="{{ request()->routeIs('logistics.rate-cards*') ? 'active' : '' }}"><i class="fas fa-file-invoice-dollar"></i> Rate Cards</a> -->
 
-        foreach ($modules as $moduleKey => $moduleConfig) {
-
-        // Vendor module only for vendors, internal modules only for non-vendors
-    //    if ($moduleKey === 'vendor' && !$isVendor) continue;
-      //  if ($moduleKey !== 'vendor' && $isVendor) continue;
-
-        // ── ADMIN: sees everything from config ──
-        if ($isAdmin && false) {
-        $features = [];
-        foreach ($moduleConfig['entities'] as $entityKey => $entityConfig) {
-        if (isset($entityConfig['sidebar']) && $entityConfig['sidebar'] === false) continue;
-        $routeName = $entityConfig['route'] ?? null;
-        if (!$routeName || !\Route::has($routeName)) continue;
-        $features[] = [
-        'label' => $entityConfig['label'],
-        'route' => $routeName,
-        'icon' => $entityConfig['icon'] ?? $moduleConfig['icon'],
-        ];
-        }
-        if (!empty($features)) {
-        $sidebarModules[$moduleKey] = ['label' => $moduleConfig['label'], 'features' => $features];
-        }
-        continue;
-        }
-
-        // ── VENDOR: sees all vendor module items ──
-        if ($isVendor && $moduleKey === 'vendor') {
-        $features = [];
-        foreach ($moduleConfig['entities'] as $entityKey => $entityConfig) {
-        if (isset($entityConfig['sidebar']) && $entityConfig['sidebar'] === false) continue;
-        $routeName = $entityConfig['route'] ?? null;
-        if (!$routeName || !\Route::has($routeName)) continue;
-        $features[] = [
-        'label' => $entityConfig['label'].'-AAAA',
-        'route' => $routeName,
-        'icon' => $entityConfig['icon'] ?? $moduleConfig['icon'],
-        ];
-        }
-        if (!empty($features)) {
-        $sidebarModules[$moduleKey] = ['label' => $moduleConfig['label'], 'features' => $features];
-        }
-        continue;
-        }
-
-        // ── INTERNAL + EXTERNAL: show only items assigned via roles/permissions ──
-        $features = [];
-
-        foreach ($moduleConfig['entities'] as $entityKey => $entityConfig) {
-        if (isset($entityConfig['sidebar']) && $entityConfig['sidebar'] === false) continue;
-        $routeName = $entityConfig['route'] ?? null;
-        if (!$routeName || !\Route::has($routeName)) continue;
-
-        // Check if user has any permission for this entity
-        $hasAccess = false;
-
-        // Check module.entity.action format
-        foreach ($entityConfig['actions'] as $action) {
-        if ($userPerms->contains("{$moduleKey}.{$entityKey}.{$action}")) {
-        $hasAccess = true;
-        break;
-        }
-        }
-
-        // Also check legacy format: module.entity (without action)
-        if (!$hasAccess && $userPerms->contains("{$moduleKey}.{$entityKey}")) {
-        $hasAccess = true;
-        }
+        <a href="{{ route('logistics.warehouse-rate-cards') }}" class="{{ request()->routeIs('logistics.warehouse-rate-cards*') ? 'active' : '' }}"><i class="fas fa-file-contract"></i> WH Rate Card</a>
+        <a href="{{ route('logistics.warehouse-monthly-charges') }}" class="{{ request()->routeIs('logistics.warehouse-monthly*') ? 'active' : '' }}"><i class="fas fa-receipt"></i> WH Charges & Reconcilation</a>
+        <a href="{{ route('logistics.vendor-rate-cards') }}" class="{{ request()->routeIs('logistics.vendor-rate-cards*') ? 'active' : '' }}"><i class="fas fa-users-cog"></i> Vendor Rate Cards</a>
 
 
+        @elseif(auth()->user()->department === 'cataloguing')
+        <div class="section-title">Cataloguing</div>
+        <a href="{{ route('cataloguing.dashboard') }}" class="{{ request()->routeIs('cataloguing.dashboard') ? 'active' : '' }}"><i class="fas fa-tachometer-alt"></i> Dashboard</a>
+        <a href="{{ route('cataloguing.pricing-sheets') }}" class="{{ request()->routeIs('cataloguing.pricing-sheets*') ? 'active' : '' }}"><i class="fas fa-dollar-sign"></i> Pricing Sheets</a>
+        <a href="{{ route('cataloguing.listing-panel') }}" class="{{ request()->routeIs('cataloguing.listing-panel*') ? 'active' : '' }}"><i class="fas fa-list"></i> Listing Panel</a>
+        <a href="{{ route('cataloguing.sku-dashboard') }}" class="{{ request()->routeIs('cataloguing.sku-dashboard*') ? 'active' : '' }}"><i class="fas fa-chart-bar"></i> SKU Dashboard</a>
+        @elseif(auth()->user()->department === 'sales')
+        <div class="section-title">Sales</div>
+        <a href="{{ route('sales.dashboard') }}" class="{{ request()->routeIs('sales.dashboard') ? 'active' : '' }}"><i class="fas fa-tachometer-alt"></i> Dashboard</a>
+        <a href="{{ route('sales.orders') }}" class="{{ request()->routeIs('sales.orders*') ? 'active' : '' }}"><i class="fas fa-shopping-cart"></i> Orders</a>
+        <a href="{{ route('sales.upload') }}" class="{{ request()->routeIs('sales.upload*') ? 'active' : '' }}"><i class="fas fa-upload"></i> Upload Sales</a>
+        @elseif(auth()->user()->department === 'finance')
+        <div class="section-title">Finance</div>
+        <a href="{{ route('finance.dashboard') }}" class="{{ request()->routeIs('finance.dashboard') ? 'active' : '' }}"><i class="fas fa-tachometer-alt"></i> Dashboard</a>
+        <a href="{{ route('finance.kyc') }}" class="{{ request()->routeIs('finance.kyc*') ? 'active' : '' }}"><i class="fas fa-id-card"></i> KYC Review</a>
+        <a href="{{ route('finance.live-sheets') }}" class="{{ request()->routeIs('finance.live*') ? 'active' : '' }}"><i class="fas fa-clipboard-list"></i> Live Sheets / SAP</a>
+        <a href="{{ route('finance.receivables') }}" class="{{ request()->routeIs('finance.receivable*') ? 'active' : '' }}"><i class="fas fa-hand-holding-usd"></i> Receivables</a>
+        <a href="{{ route('finance.chargebacks') }}" class="{{ request()->routeIs('finance.chargeback*') ? 'active' : '' }}"><i class="fas fa-exclamation-triangle"></i> Chargebacks</a>
+        <a href="{{ route('finance.payouts') }}" class="{{ request()->routeIs('finance.payout*') ? 'active' : '' }}"><i class="fas fa-money-check-alt"></i> Vendor Payouts</a>
+        <a href="{{ route('finance.pricing-review') }}" class="{{ request()->routeIs('finance.pricing*') ? 'active' : '' }}"><i class="fas fa-file-invoice-dollar"></i> Pricing Review</a>
+        <a href="{{ route('finance.vendor-rate-cards') }}" class="{{ request()->routeIs('finance.vendor-rate-cards*') ? 'active' : '' }}"><i class="fas fa-tags"></i> Vendor Rate Cards</a>
+        <a href="{{ route('finance.vendor-charges') }}" class="{{ request()->routeIs('finance.vendor-charges*') ? 'active' : '' }}"><i class="fas fa-calculator"></i> Vendor Charges</a>
 
 
-        // Also check display_name style: "View Shipments" contains "shipment"
-        if (!$hasAccess) {
-
-
-        $entityLower = strtolower(str_replace('-', ' ', $entityKey));
-        foreach ($userPerms as $p) {
-        if (str_contains(strtolower($p), $moduleKey.'.'.$entityLower)) {
-        $hasAccess = true;
-        break;
-        }
-        }
-        }
-
-        if ($hasAccess) {
-        $features[] = [
-        'label' => $entityConfig['label'] ,
-        'route' => $routeName,
-        'icon' => $entityConfig['icon'] ?? $moduleConfig['icon'],
-        ];
-        }
-        }
-
-        if (!empty($features)) {
-        $sidebarModules[$moduleKey] = ['label' => $moduleConfig['label'] , 'features' => $features];
-        }
-        }
-        @endphp
-        
-        @foreach($sidebarModules as $moduleKey => $module)
-        <div class="section-title">{{ $module['label'] }}</div>
-        @foreach($module['features'] as $feat)
-        <a href="{{ route($feat['route']) }}"
-            class="{{ request()->routeIs($feat['route'] . '*') ? 'active' : '' }}">
-            <i class="{{ $feat['icon'] }}"></i> {{ $feat['label'] }}
-        </a>
-        @endforeach
-        @endforeach
+        @elseif(auth()->user()->department === 'hod')
+        <div class="section-title">Management</div>
+        <a href="{{ route('hod.dashboard') }}" class="{{ request()->routeIs('hod.dashboard') ? 'active' : '' }}"><i class="fas fa-tachometer-alt"></i> Dashboard</a>
+        <a href="{{ route('hod.asn-list') }}" class="{{ request()->routeIs('hod.asn-list*') ? 'active' : '' }}"><i class="fas fa-file-alt"></i> ASN & Pricing</a>
+        @endif
         @endauth
     </aside>
 
@@ -548,9 +518,9 @@
             <h2 style="font-size:1.05rem;font-weight:700;color:#0d1b2a;">@yield('page-title', 'Dashboard')</h2>
             <div style="display:flex;align-items:center;gap:1.25rem;">
                 @if(auth()->check() && !auth()->user()->isVendor())
-                <form method="GET" action="{{ url()->current() }}" style="display:flex;align-items:center;gap:.4rem;">
+                <form method="GET" id="headerForm" action="{{ url()->current() }}" style="display:flex;align-items:center;gap:.4rem;">
                     <span style="font-size:.7rem;color:#64748b;font-weight:600;">Company:</span>
-                    <select name="company_code" onchange="this.form.submit()" style="padding:.35rem .6rem;border:1px solid #d1d5db;border-radius:6px;font-size:.78rem;font-family:inherit;">
+                    <select name="company_code" id="headerCompanyCode" onchange="this.form.submit()" style="padding:.35rem .6rem;border:1px solid #d1d5db;border-radius:6px;font-size:.78rem;font-family:inherit;">
                         <option value="">All</option>
                         <option value="2000" {{ request('company_code')=='2000'?'selected':'' }}>2000 – India</option>
                         <option value="2100" {{ request('company_code')=='2100'?'selected':'' }}>2100 – USA</option>

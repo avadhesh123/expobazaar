@@ -23,6 +23,12 @@ class VendorService
                 'status' => 'pending',
             ]);
 
+            // Auto-assign "Vendor" role
+            $vendorRole = \App\Models\Role::where('name', 'Vendor')->first();
+            if ($vendorRole) {
+                $user->roles()->syncWithoutDetaching([$vendorRole->id]);
+            }
+
             // Create vendor record
             $vendor = Vendor::create([
                 'user_id' => $user->id,

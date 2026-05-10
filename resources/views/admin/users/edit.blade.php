@@ -21,7 +21,7 @@
                     <div style="font-size:.75rem;color:#64748b;">Last login: {{ $user->last_login_at ? $user->last_login_at->diffForHumans() : 'Never' }}</div>
                 </div>
                 @if($user->id === auth()->id())
-                    <span class="badge badge-info" style="margin-left:auto;">This is you</span>
+                <span class="badge badge-info" style="margin-left:auto;">This is you</span>
                 @endif
             </div>
 
@@ -61,7 +61,7 @@
                     <select name="department" id="departmentSelect">
                         <option value="">Select department...</option>
                         @foreach(['sourcing','logistics','cataloguing','sales','finance','hod'] as $dept)
-                            <option value="{{ $dept }}" {{ old('department',$user->department)===$dept?'selected':'' }}>{{ ucfirst($dept) }}{{ $dept==='hod'?' (Head of Department)':' Team' }}</option>
+                        <option value="{{ $dept }}" {{ old('department',$user->department)===$dept?'selected':'' }}>{{ ucfirst($dept) }}{{ $dept==='hod'?' (Head of Department)':' Team' }}</option>
                         @endforeach
                     </select>
                     @error('department')<span style="font-size:.72rem;color:#dc2626;">{{ $message }}</span>@enderror
@@ -104,23 +104,15 @@
                         <option value="suspended" {{ old('status',$user->status)==='suspended'?'selected':'' }}>Suspended</option>
                     </select>
                     @if($user->id === auth()->id())
-                        <span style="font-size:.72rem;color:#e8a838;display:block;margin-top:.25rem;"><i class="fas fa-info-circle"></i> Changing your own status to inactive/suspended will lock you out.</span>
+                    <span style="font-size:.72rem;color:#e8a838;display:block;margin-top:.25rem;"><i class="fas fa-info-circle"></i> Changing your own status to inactive/suspended will lock you out.</span>
                     @endif
                 </div>
 
                 <hr style="border:none;border-top:1px solid #e8ecf1;margin:1.5rem 0;">
 
                 <div style="display:flex;gap:.5rem;justify-content:space-between;">
-                    <div>
-                        @if($user->id !== auth()->id())
-                        <form method="POST" action="{{ route('admin.users.delete', $user) }}" style="display:inline;" onsubmit="return confirm('Delete this user?')">
-                            @csrf @method('DELETE')
-                            <button type="submit" class="btn btn-danger btn-sm"><i class="fas fa-trash"></i> Delete User</button>
-                        </form>
-                        @endif
-                    </div>
+                    <a href="{{ route('admin.users') }}" class="btn btn-outline">Cancel</a>
                     <div style="display:flex;gap:.5rem;">
-                        <a href="{{ route('admin.users') }}" class="btn btn-outline">Cancel</a>
                         <button type="submit" class="btn btn-primary"><i class="fas fa-save" style="margin-right:.3rem;"></i> Save Changes</button>
                     </div>
                 </div>
@@ -131,8 +123,20 @@
 
 @push('scripts')
 <script>
-function toggleDepartment(){const t=document.getElementById('userType').value,g=document.getElementById('departmentGroup'),s=document.getElementById('departmentSelect');if(t==='internal'){g.style.display='block';s.required=true;}else{g.style.display='none';s.required=false;s.value='';}}
-document.addEventListener('DOMContentLoaded',toggleDepartment);
+    function toggleDepartment() {
+        const t = document.getElementById('userType').value,
+            g = document.getElementById('departmentGroup'),
+            s = document.getElementById('departmentSelect');
+        if (t === 'internal') {
+            g.style.display = 'block';
+            s.required = true;
+        } else {
+            g.style.display = 'none';
+            s.required = false;
+            s.value = '';
+        }
+    }
+    document.addEventListener('DOMContentLoaded', toggleDepartment);
 </script>
 @endpush
 @endsection

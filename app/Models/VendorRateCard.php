@@ -8,6 +8,7 @@ class VendorRateCard extends Model
 {
     protected $fillable = [
         'vendor_id',
+        'warehouse_id',
         'company_code',
         'currency',
         'inward_rate_per_carton',
@@ -40,10 +41,10 @@ class VendorRateCard extends Model
         'vendor_acknowledged' => 'boolean',
         'vendor_acknowledged_at' => 'datetime',
     ];
-public function warehouse()
-{
-    return $this->belongsTo(\App\Models\Warehouse::class, 'warehouse_id');
-}
+    public function warehouse()
+    {
+        return $this->belongsTo(\App\Models\Warehouse::class, 'warehouse_id');
+    }
     public function vendor()
     {
         return $this->belongsTo(Vendor::class);
@@ -66,7 +67,7 @@ public function warehouse()
     {
         $date = $date ?? now()->toDateString();
         return $q->where('effective_from', '<=', $date)
-            ->where(fn($q2) => $q2->whereNull('effective_to')->orWhere('effective_to', '>=', $date));
+            ->where(fn ($q2) => $q2->whereNull('effective_to')->orWhere('effective_to', '>=', $date));
     }
     // public function scopeActive($query)
     // {
@@ -79,7 +80,12 @@ public function warehouse()
 
     public function getCurrencySymbol(): string
     {
-        return $this->currency === 'EUR' ? '€' : '$';
+        return match($this->currency) {
+            'INR' => '₹',
+            'EUR' => '€',
+            'USD' => '$',
+            default => '$',
+        };
     }
 
     public function isComplete(): bool

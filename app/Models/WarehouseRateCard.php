@@ -40,7 +40,7 @@ class WarehouseRateCard extends Model
         return static::where('warehouse_id', $warehouseId)->approved()->effectiveOn($date)->orderByDesc('version')->first();
     }
 
-    public function getCurrencySymbol(): string { return $this->currency === 'EUR' ? '€' : '$'; }
+    public function getCurrencySymbol(): string { return match($this->currency) { 'INR' => '₹', 'EUR' => '€', default => '$' }; }
 
     public function isComplete(): bool
     {

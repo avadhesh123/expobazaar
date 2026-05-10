@@ -9,6 +9,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Str;
 use Illuminate\Support\Facades\Log;
 use App\Models\ActivityLog;
+
 class VendorController extends Controller
 {
     public function __construct(
@@ -1029,7 +1030,7 @@ class VendorController extends Controller
             return back()->with('error', 'Upload failed: ' . $e->getMessage())->withInput();
         }
     }
-     /**
+    /**
      * Upload Shipping Bill Copy
      */
     public function uploadShippingBill(Request $request, Consignment $consignment)
@@ -1808,7 +1809,11 @@ class VendorController extends Controller
             ->paginate(20);
 
         // Calculate vendor-specific stats per GRN
-        $totalExpected = 0; $totalReceived = 0; $totalDamaged = 0; $totalMissing = 0; $totalExcess = 0;
+        $totalExpected = 0;
+        $totalReceived = 0;
+        $totalDamaged = 0;
+        $totalMissing = 0;
+        $totalExcess = 0;
 
         $grns->getCollection()->transform(function ($grn) use ($vendorProductIds, &$totalExpected, &$totalReceived, &$totalDamaged, &$totalMissing, &$totalExcess) {
             $myItems = $grn->items->filter(fn($i) => in_array($i->product_id, $vendorProductIds));
@@ -1868,6 +1873,34 @@ class VendorController extends Controller
         return view('vendor.grn.show', compact('grn', 'vendor', 'vendorItems', 'itemStats'));
     }
 
+    public function rateCard()
+    {
+        $vendor = auth()->user()->vendor;
+
+        $rateCard = \App\Models\VendorRateCard::where('vendor_id', $vendor->id)
+            ->where('status', 'approved')
+            ->orderByDesc('version')
+            ->first();
+
+        // Get all versions for history
+        $history = \App\Models\VendorRateCard::where('vendor_id', $vendor->id)
+            ->with('warehouse')
+            ->orderByDesc('version')
+            ->get();
+
+        $currency = match ($vendor->company_code ?? '2100') {
+            '2000' => 'INR',
+            '2200' => 'EUR',
+            default => 'USD',
+        };
+        $sym = match ($currency) {
+            'INR' => '₹',
+            'EUR' => '€',
+            default => '$',
+        };
+        $warehouses = \App\Models\Warehouse::active()->get();
+        return view('vendor.rate-card', compact('vendor', 'rateCard', 'history', 'currency', 'sym', 'warehouses'));
+    }
     public function inventory(Request $request)
     {
         $vendor = auth()->user()->vendor;

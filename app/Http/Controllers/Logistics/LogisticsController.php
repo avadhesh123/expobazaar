@@ -618,72 +618,82 @@ class LogisticsController extends Controller
         ];
         return view('logistics.warehouse-charges.variance', compact('charges', 'warehouses', 'totals', 'month', 'year'));
     }
+
     public function vendorRateCards(Request $request)
     {
-        $rateCards = \App\Models\VendorRateCard::with('vendor', 'warehouse')
+        // Show warehouse rate cards as the base template
+        $warehouseRateCards = \App\Models\WarehouseRateCard::with('warehouse')
+            ->approved()
+            ->orderBy('warehouse_id')
+            ->get();
+
+        // Existing vendor rate cards
+        $vendorRateCards = \App\Models\VendorRateCard::with('vendor', 'creator')
             ->when($request->vendor_id, fn($q, $v) => $q->where('vendor_id', $v))
-            ->orderBy('vendor_id')
-            ->paginate(50)->withQueryString();
+            ->orderByDesc('created_at')
+            ->paginate(30)->withQueryString();
+
         $vendors = \App\Models\Vendor::orderBy('company_name')->get();
         $warehouses = Warehouse::active()->orderBy('name')->get();
-        $chargeKeys = [
-            'inward_unloading' => 'Unloading',
-            'inward_putaway' => 'Put Away',
-            'inward_checkin' => 'Check In',
-            'storage_pallet' => 'Pallet/Week',
-            'storage_cft' => 'CFT/Month',
-            'outward_order' => 'Order Processing',
-            'outward_pickpack' => 'Pick Pack',
-            'outward_label' => 'Label',
-            'outward_material' => 'Material Cost',
-            'others_vas' => 'VAS',
-            'others_setup' => 'Setup',
-            'others_wms' => 'WMS Monthly',
-        ];
-        return view('logistics.warehouse-charges.vendor-rate-cards', compact('rateCards', 'vendors', 'warehouses', 'chargeKeys'));
-    }
-    public function vendorRateCardsOLD(Request $request)
-    {
-        $rateCards = \App\Models\VendorRateCard::with('vendor', 'warehouse')
-            ->when($request->vendor_id, fn($q, $v) => $q->where('vendor_id', $v))
-            ->orderBy('vendor_id')
-            ->orderBy('created_at', 'desc')
-            ->paginate(50)->withQueryString();
-        //  $vendors =  Vendor::active()->orderBy('company_name')->get();
 
-        $vendors =  Vendor::orderBy('company_name')->get();
-
-        // print_r($vendors->toArray());exit;
-        $warehouses = Warehouse::active()->orderBy('name')->get();
-        $chargeKeys = [
-            'inward_unloading' => 'Unloading',
-            'inward_putaway' => 'Put Away',
-            'inward_checkin' => 'Check In',
-            'storage_pallet' => 'Pallet/Week',
-            'storage_cft' => 'CFT/Month',
-            'outward_order' => 'Order Processing',
-            'outward_pickpack' => 'Pick Pack',
-            'outward_label' => 'Label',
-            'outward_material' => 'Material Cost',
-            'others_vas' => 'VAS',
-            'others_setup' => 'Setup',
-            'others_wms' => 'WMS Monthly',
-        ];
-        return view('logistics.warehouse-charges.vendor-rate-cards', compact('rateCards', 'vendors', 'warehouses', 'chargeKeys'));
+        return view('logistics.warehouse-charges.vendor-rate-cards', compact('warehouseRateCards', 'vendorRateCards', 'vendors', 'warehouses'));
     }
 
     public function storeVendorRateCard(Request $request)
     {
         $request->validate([
-            'vendor_id' => 'required|exists:vendors,id',
-            'effective_from' => 'nullable|date',
-            'effective_to' => 'nullable|date|after_or_equal:effective_from',
+            'vendor_id'                 => 'required|exists:vendors,id',
+            'inward_rate_per_carton'    => 'required|numeric|min:0',
+            'storage_rate_per_cft'      => 'required|numeric|min:0',
+            'fulfillment_rate_small'    => 'required|numeric|min:0',
+            'fulfillment_rate_large'    => 'required|numeric|min:0',
+            'fulfillment_qty_threshold' => 'required|integer|min:1',
+            'pick_pack_rate_per_unit'   => 'required|numeric|min:0',
+            'effective_from'            => 'nullable|date',
         ]);
-        \App\Models\VendorRateCard::create(array_merge(
-            $request->only(['vendor_id', 'warehouse_id', 'charge_label', 'charge_type', 'uom', 'rate', 'effective_from', 'effective_to']),
-            ['is_active' => true, 'created_by' => auth()->id()]
-        ));
-        return back()->with('success', 'Vendor rate card created.');
+
+        $vendor = \App\Models\Vendor::findOrFail($request->vendor_id);
+        //  $currency = $vendor->company_code === '2200' ? 'EUR' : 'USD';
+
+        $currency = match ($vendor->company_code) {
+            '2000' => 'INR',
+            '2100' => 'EUR',
+            '2200' => 'USD',
+            default => 'USD'   // fallback
+        };
+
+        $maxV = \App\Models\VendorRateCard::where('vendor_id', $vendor->id)->max('version') ?? 0;
+
+
+        $newEffectiveFrom = $request->effective_from ?? now()->toDateString();
+
+        \App\Models\VendorRateCard::where('vendor_id', $vendor->id)
+            ->where('status', 'approved')
+            ->whereNull('effective_to')
+            ->update([
+                'effective_to' => \Carbon\Carbon::parse($newEffectiveFrom)->subDay()->toDateString(),
+            ]);
+
+        $rc = \App\Models\VendorRateCard::create([
+            'vendor_id'                 => $vendor->id,
+            'company_code'              => $vendor->company_code ?? '2100',
+            'currency'                  => $currency,
+            'inward_rate_per_carton'    => $request->inward_rate_per_carton,
+            'storage_rate_per_cft'      => $request->storage_rate_per_cft,
+            'fulfillment_rate_small'    => $request->fulfillment_rate_small,
+            'fulfillment_rate_large'    => $request->fulfillment_rate_large,
+            'fulfillment_qty_threshold' => $request->fulfillment_qty_threshold,
+            'pick_pack_rate_per_unit'   => $request->pick_pack_rate_per_unit,
+            'effective_from'            => $request->effective_from ?? now()->toDateString(),
+            'version'                   => $maxV + 1,
+            'status'                    => 'approved',
+            'created_by'                => auth()->id(),
+            'approved_by'               => auth()->id(),
+            'approved_at'               => now(),
+        ]);
+
+        ActivityLog::log('created', 'vendor_rate_card', $rc, null, $rc->toArray(), "Vendor rate card assigned to {$vendor->company_name}");
+        return back()->with('success', "Rate card v{$rc->version} assigned to {$vendor->company_name} and auto-approved.");
     }
 
     public function updateVendorRateCard(Request $request, \App\Models\VendorRateCard $vendorRateCard)
