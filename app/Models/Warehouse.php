@@ -8,7 +8,7 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Warehouse extends Model
 {
-    use HasFactory, SoftDeletes;
+    use HasFactory, \App\Traits\FiltersByCompany,SoftDeletes;
 
     protected $fillable = [
         'name', 'code', 'company_code', 'type', 'parent_warehouse_id',

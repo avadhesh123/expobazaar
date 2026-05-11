@@ -28,14 +28,15 @@
     <div class="card-body" style="padding:.85rem 1.4rem;">
         <form method="GET" action="{{ route('logistics.inventory') }}" style="display:flex;flex-wrap:wrap;gap:.6rem;align-items:flex-end;">
             <div style="flex:1;min-width:180px;"><label style="font-size:.7rem;font-weight:600;color:#64748b;display:block;margin-bottom:.25rem;">Search</label><input type="text" name="search" value="{{ request('search') }}" placeholder="SKU or product name..." style="width:100%;padding:.4rem .65rem;border:1px solid #d1d5db;border-radius:8px;font-size:.82rem;font-family:inherit;"></div>
-            <div style="min-width:110px;"><label style="font-size:.7rem;font-weight:600;color:#64748b;display:block;margin-bottom:.25rem;">Company</label><select name="company_code" style="width:100%;padding:.4rem .5rem;border:1px solid #d1d5db;border-radius:8px;font-size:.82rem;font-family:inherit;">
+            <!-- <div style="min-width:110px;"><label style="font-size:.7rem;font-weight:600;color:#64748b;display:block;margin-bottom:.25rem;">Company</label><select name="company_code" style="width:100%;padding:.4rem .5rem;border:1px solid #d1d5db;border-radius:8px;font-size:.82rem;font-family:inherit;">
                     <option value="">All</option>
                     <option value="2000" {{ request('company_code')==='2000'?'selected':'' }}>2000</option>
                     <option value="2100" {{ request('company_code')==='2100'?'selected':'' }}>2100</option>
                     <option value="2200" {{ request('company_code')==='2200'?'selected':'' }}>2200</option>
-                </select></div>
+                </select></div> -->
+
             <div style="min-width:140px;"><label style="font-size:.7rem;font-weight:600;color:#64748b;display:block;margin-bottom:.25rem;">Warehouse</label><select name="warehouse_id" style="width:100%;padding:.4rem .5rem;border:1px solid #d1d5db;border-radius:8px;font-size:.82rem;font-family:inherit;">
-                    <option value="">All</option>@foreach($warehouses as $wh)<option value="{{ $wh->id }}" {{ request('warehouse_id')==(string)$wh->id?'selected':'' }}>{{ $wh->name }}</option>@endforeach
+                    <option value="">All</option>@foreach($warehouses as $wh)<option value="{{ $wh->id }}" {{ request('warehouse_id')==(string)$wh->id?'selected':'' }}>{{$wh->company_code}} - {{$wh->name}}</option>@endforeach
                 </select></div>
             <div style="min-width:120px;"><label style="font-size:.7rem;font-weight:600;color:#64748b;display:block;margin-bottom:.25rem;">Vendor</label><select name="vendor_id" style="width:100%;padding:.4rem .5rem;border:1px solid #d1d5db;border-radius:8px;font-size:.82rem;font-family:inherit;">
                     <option value="">All</option>@foreach($vendors as $v)<option value="{{ $v->id }}" {{ request('vendor_id')==(string)$v->id?'selected':'' }}>{{ $v->company_name }}</option>@endforeach

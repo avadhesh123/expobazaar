@@ -16,13 +16,36 @@
                     @endforeach
                 </select>
             </div>
-            <div style="min-width:120px;">
+         @php
+            $user = auth()->user();
+            $userCompanyCodes = $user->company_codes ?? [];
+
+            // Convert to array if stored as JSON string
+            if (is_string($userCompanyCodes)) {
+            $userCompanyCodes = json_decode($userCompanyCodes, true) ?? [];
+            }
+
+            $allowedCompanies = array_filter(array_map('strval', $userCompanyCodes));
+            @endphp
+
+            <div style="min-width:110px;">
                 <label style="font-size:.7rem;font-weight:600;color:#64748b;display:block;margin-bottom:.25rem;">Company</label>
                 <select name="company_code" style="width:100%;padding:.4rem .5rem;border:1px solid #d1d5db;border-radius:8px;font-size:.82rem;font-family:inherit;">
                     <option value="">All</option>
-                    <option value="2000" {{ request('company_code')==='2000'?'selected':'' }}>2000 – India</option>
-                    <option value="2100" {{ request('company_code')==='2100'?'selected':'' }}>2100 – USA</option>
-                    <option value="2200" {{ request('company_code')==='2200'?'selected':'' }}>2200 – NL</option>
+
+                    @if($user->isAdmin())
+                    <!-- Admin sees all companies -->
+                    <option value="2000" {{ request('company_code')==='2000'?'selected':'' }}>2000 India</option>
+                    <option value="2100" {{ request('company_code')==='2100'?'selected':'' }}>2100 USA</option>
+                    <option value="2200" {{ request('company_code')==='2200'?'selected':'' }}>2200 NL</option>
+                    @else
+                    <!-- Normal user sees only assigned companies -->
+                    @foreach($allowedCompanies as $code)
+                    <option value="{{ $code }}" {{ request('company_code') === $code ? 'selected' : '' }}>
+                        {{ $code === '2000' ? '2000 India' : ($code === '2100' ? '2100 USA' : '2200 NL') }}
+                    </option>
+                    @endforeach
+                    @endif
                 </select>
             </div>
             <button type="submit" class="btn btn-primary btn-sm"><i class="fas fa-filter"></i> Filter</button>

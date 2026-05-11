@@ -7,6 +7,8 @@ use App\Models\{FinanceReceivable, Chargeback, VendorPayout, Vendor, Order, Sale
 use App\Services\{DashboardService, FinanceService, VendorService};
 use Illuminate\Http\Request;
 
+use function PHPUnit\Framework\isArray;
+
 class FinanceController extends Controller
 {
     public function __construct(
@@ -63,26 +65,54 @@ class FinanceController extends Controller
     // ─── RECEIVABLES ─────────────────────────────────────────────
     public function receivables(Request $request)
     {
+        $user = auth()->user();
+        // Get user's allowed company codes
+        $userCompanyCodes = $user->company_codes ?? [];
+        if (is_string($userCompanyCodes)) {
+            $userCompanyCodes = json_decode($userCompanyCodes, true) ?? [];
+        }
+        $userCompanyCodes = array_filter(array_map('strval', $userCompanyCodes));
+
         $receivables = FinanceReceivable::with('order.salesChannel', 'order.chargebacks')
-            ->when($request->company_code, fn($q, $v) => $q->where('company_code', $v))
+            // Restrict to user's companies (non-admins)
+            ->when(
+                !$user->isAdmin() && !empty($userCompanyCodes),
+                fn($q) => $q->whereIn('company_code', $userCompanyCodes)
+            )
+            ->when($request->company_code,fn($q, $v) => $q->where('company_code', $v))
             ->when($request->status, fn($q, $v) => $q->where('payment_status', $v))
             ->when($request->channel_id, fn($q, $v) => $q->where('channel_id', $v))
             ->when($request->payment === 'unpaid', fn($q) => $q->where('payment_status', 'unpaid'))
             ->orderByRaw("FIELD(payment_status, 'unpaid', 'partial', 'paid') ASC")
-            ->latest()->paginate(30);
+            ->latest()
+            ->paginate(30);
 
-        $channels = SalesChannel::where('is_active', true)->get();
+        //        $channels = SalesChannel::where('is_active', true)->get();
+
+        $channels = SalesChannel::where('is_active', true)
+            ->when(!$user->isAdmin() && !empty($userCompanyCodes), function ($q) use ($userCompanyCodes) {
+                foreach ($userCompanyCodes as $code) {
+                    $q->whereJsonContains('company_codes', $code);
+                }
+                return $q;
+            })
+            ->orderBy('name')
+            ->get();
 
         // Fix: $summary was never built — blade was crashing with "Undefined variable: summary"
         $summary = [
-            'unpaid_count'     => FinanceReceivable::where('payment_status', 'unpaid')->count(),
-            'unpaid_total'     => FinanceReceivable::where('payment_status', 'unpaid')->sum('net_receivable'),
-            'partial_count'    => FinanceReceivable::where('payment_status', 'partial')->count(),
-            'partial_total'    => FinanceReceivable::where('payment_status', 'partial')->sum('net_receivable'),
-            'total_deductions' => FinanceReceivable::sum('platform_commission')
-                + FinanceReceivable::sum('platform_fee')
-                + FinanceReceivable::sum('insurance_charge')
-                + FinanceReceivable::sum('other_deductions'),
+            'unpaid_count'     => FinanceReceivable::where('payment_status', 'unpaid') 
+            ->when($request->company_code,fn($q, $v) => $q->where('company_code', $v))->count(),
+            'unpaid_total'     => FinanceReceivable::where('payment_status', 'unpaid') 
+            ->when($request->company_code,fn($q, $v) => $q->where('company_code', $v))->sum('net_receivable'),
+            'partial_count'    => FinanceReceivable::where('payment_status', 'partial') 
+            ->when($request->company_code,fn($q, $v) => $q->where('company_code', $v))->count(),
+            'partial_total'    => FinanceReceivable::where('payment_status', 'partial') 
+            ->when($request->company_code,fn($q, $v) => $q->where('company_code', $v))->sum('net_receivable'),
+            'total_deductions' => FinanceReceivable::when($request->company_code,fn($q, $v) => $q->where('company_code', $v))->sum('platform_commission')
+                + FinanceReceivable::when($request->company_code,fn($q, $v) => $q->where('company_code', $v))->sum('platform_fee')
+                + FinanceReceivable::when($request->company_code,fn($q, $v) => $q->where('company_code', $v))->sum('insurance_charge')
+                + FinanceReceivable::when($request->company_code,fn($q, $v) => $q->where('company_code', $v))->sum('other_deductions'),
         ];
 
         return view('finance.receivables.index', compact('receivables', 'channels', 'summary'));
@@ -131,10 +161,10 @@ class FinanceController extends Controller
 
 
         $stats = [
-            'total'        => Chargeback::count(),
-            'pending'      => Chargeback::where('status', 'pending_confirmation')->count(),
-            'confirmed'    => Chargeback::where('status', 'confirmed')->count(),
-            'total_amount' => Chargeback::where('status', 'confirmed')->sum('amount'),
+            'total'        => Chargeback::when($request->company_code,fn($q, $v) => $q->where('company_code', $v))->count(),
+            'pending'      => Chargeback::when($request->company_code,fn($q, $v) => $q->where('company_code', $v))->where('status', 'pending_confirmation')->count(),
+            'confirmed'    => Chargeback::when($request->company_code,fn($q, $v) => $q->where('company_code', $v))->where('status', 'confirmed')->count(),
+            'total_amount' => Chargeback::when($request->company_code,fn($q, $v) => $q->where('company_code', $v))->where('status', 'confirmed')->sum('amount'),
         ];
 
         // Fix #2: $vendors was never passed — blade vendor filter crashed with Undefined variable
@@ -205,25 +235,58 @@ class FinanceController extends Controller
     // ─── VENDOR PAYOUTS ──────────────────────────────────────────
     public function payouts(Request $request)
     {
+        $user = auth()->user();
+
+        // Handle company_codes (could be array or JSON string)
+        $userCompanyCodes = $user->company_codes ?? [];
+        if (is_string($userCompanyCodes)) {
+            $userCompanyCodes = json_decode($userCompanyCodes, true) ?? [];
+        }
+        $userCompanyCodes = array_filter(array_map('strval', $userCompanyCodes));
+
         $payouts = VendorPayout::with('vendor')
+            // Restrict to user's allowed companies (non-admins)
+            ->when(
+                !$user->isAdmin() && !empty($userCompanyCodes),
+                fn($q) => $q->whereIn('company_code', $userCompanyCodes)
+            )            
             ->when($request->company_code, fn($q, $v) => $q->where('company_code', $v))
             ->when($request->vendor_id, fn($q, $v) => $q->where('vendor_id', $v))
             ->when($request->status, fn($q, $v) => $q->where('status', $v))
             ->when($request->month, fn($q, $v) => $q->where('payout_month', $v))
             ->when($request->year, fn($q, $v) => $q->where('payout_year', $v))
-            ->latest()->paginate(20);
+            ->latest()
+            ->paginate(20);
 
-        $vendors = Vendor::active()->orderBy('company_name')->get();
+        // Vendors list - also filtered by user company
+        $vendors = Vendor::active()->orderBy('company_name')
+            ->when(
+                !$user->isAdmin() && !empty($userCompanyCodes),
+                fn($q) => $q->whereIn('company_code', $userCompanyCodes)
+            )
+            ->get();
 
         // KPI summary for the header cards
         try {
+            $summaryQuery = VendorPayout::query()
+                ->when(
+                    !$user->isAdmin() && !empty($userCompanyCodes),
+                    fn($q) => $q->whereIn('company_code', $userCompanyCodes)
+                );
+
             $summary = [
-                'total_payouts' => (float) VendorPayout::whereIn('status', ['calculated', 'approved', 'payment_pending'])->sum('net_payout'),
-                'paid_this_month' => (float) VendorPayout::where('status', 'paid')
+                'total_payouts' => (float) (clone $summaryQuery)
+                    ->whereIn('status', ['calculated', 'approved', 'payment_pending'])
+                    ->sum('net_payout'),
+
+                'paid_this_month' => (float) (clone $summaryQuery)
+                    ->where('status', 'paid')
                     ->whereMonth('payment_date', now()->month)
                     ->whereYear('payment_date', now()->year)
                     ->sum('net_payout'),
-                'pending_invoices' => (int) VendorPayout::where('status', 'paid')
+
+                'pending_invoices' => (int) (clone $summaryQuery)
+                    ->where('status', 'paid')
                     ->whereNull('vendor_invoice_file')
                     ->count(),
             ];
@@ -238,7 +301,6 @@ class FinanceController extends Controller
 
         return view('finance.payouts.index', compact('payouts', 'vendors', 'summary'));
     }
-
     public function showPayout(VendorPayout $payout)
     {
         $payout->load('vendor');
@@ -334,10 +396,28 @@ class FinanceController extends Controller
     // ─── PRICING REVIEW ──────────────────────────────────────────
     public function pricingReview(Request $request)
     {
+
+        $user = auth()->user();
+
+        // Handle company_codes (could be array or JSON string)
+        $userCompanyCodes = $user->company_codes ?? [];
+        if (is_string($userCompanyCodes)) {
+            $userCompanyCodes = json_decode($userCompanyCodes, true) ?? [];
+        }
+        $userCompanyCodes = array_filter(array_map('strval', $userCompanyCodes));
+
         $pricings = \App\Models\PlatformPricing::with('product', 'salesChannel', 'asn')
             ->where('status', 'submitted')
-            ->when($request->company_code, fn($q, $v) => $q->where('company_code', $v))
-            ->paginate(30);
+            // Non-admin users: restrict to their assigned companies
+            ->when(
+                !$user->isAdmin() && !empty($userCompanyCodes),
+                fn($q) => $q->whereIn('company_code', $userCompanyCodes)
+            )
+            // Admin users: allow manual filter
+            ->when(
+                $user->isAdmin() && $request->company_code,
+                fn($q, $v) => $q->where('company_code', $v)
+            )->paginate(30);
         return view('finance.pricing-review', compact('pricings'));
     }
 
@@ -350,8 +430,26 @@ class FinanceController extends Controller
     // ─── LIVE SHEETS — SAP CODE UPDATE ───────────────────────────
     public function liveSheets(Request $request)
     {
+        $user = auth()->user();
+
+        // Handle company_codes (could be array or JSON string)
+        $userCompanyCodes = $user->company_codes ?? [];
+        if (is_string($userCompanyCodes)) {
+            $userCompanyCodes = json_decode($userCompanyCodes, true) ?? [];
+        }
+        $userCompanyCodes = array_filter(array_map('strval', $userCompanyCodes));
+
         $liveSheets = \App\Models\LiveSheet::with('vendor', 'offerSheet', 'items.product')
-            ->when($request->company_code, fn($q, $v) => $q->where('company_code', $v))
+            // Non-admin users: restrict to their assigned companies
+            ->when(
+                !$user->isAdmin() && !empty($userCompanyCodes),
+                fn($q) => $q->whereIn('company_code', $userCompanyCodes)
+            )
+            // Admin users: allow manual filter
+            ->when(
+                $user->isAdmin() && $request->company_code,
+                fn($q, $v) => $q->where('company_code', $v)
+            )
             ->when($request->status, fn($q, $v) => $q->where('status', $v))
             ->latest()->paginate(20);
         return view('finance.live-sheets.index', compact('liveSheets'));
@@ -443,10 +541,30 @@ class FinanceController extends Controller
 
     public function vendorRateCards(Request $request)
     {
+        $user = auth()->user();
+        $userCompanyCodes = $user->company_codes ?? [];   // Array
+
+        // Convert to array if it's stored as JSON string
+        if (is_string($userCompanyCodes)) {
+            $userCompanyCodes = json_decode($userCompanyCodes, true) ?? [];
+        }
         $rateCards = \App\Models\VendorRateCard::with('vendor', 'creator', 'approver')
+            // Restrict to user's allowed companies (unless admin)
+            ->when(!$user->isAdmin() && !empty($userCompanyCodes), function ($q) use ($userCompanyCodes) {
+                return $q->whereIn('company_code', $userCompanyCodes);
+            })
+             ->when(  $request->company_code, fn($q, $v) => $q->where('company_code', $v))
             ->when($request->vendor_id, fn($q, $v) => $q->where('vendor_id', $v))
-            ->orderByDesc('created_at')->paginate(30)->withQueryString();
-        $vendors = \App\Models\Vendor::orderBy('company_name')->get();
+            ->orderByDesc('created_at')
+            ->paginate(30)
+            ->withQueryString();
+
+        // Filter vendors based on user's allowed companies
+        $vendors = \App\Models\Vendor::orderBy('company_name')
+            ->when(!$user->isAdmin() && !empty($userCompanyCodes), fn($q) => $q->whereIn('company_code', $userCompanyCodes))
+            ->get();
+
+
         return view('finance.vendor-rate-cards', compact('rateCards', 'vendors'));
     }
 
@@ -512,12 +630,23 @@ class FinanceController extends Controller
 
     public function vendorCharges(Request $request)
     {
+        $user = auth()->user();
+        // User's allowed company codes
+        $userCompanyCodes = $user->company_codes ?? [];
+        if (is_string($userCompanyCodes)) {
+            $userCompanyCodes = json_decode($userCompanyCodes, true) ?? [];
+        }
+        $userCompanyCodes = array_filter(array_map('strval', $userCompanyCodes));
+
         $month = $request->get('month', now()->month);
         $year = $request->get('year', now()->year);
         $charges = \App\Models\VendorMonthlyCharge::with('vendor', 'grn', 'warehouse')
+            ->when(!$user->isAdmin() && !empty($userCompanyCodes), fn($q) => $q->whereIn('company_code', $userCompanyCodes))
             ->byMonth($month, $year)->when($request->vendor_id, fn($q, $v) => $q->where('vendor_id', $v))
             ->orderBy('vendor_id')->paginate(50)->withQueryString();
-        $vendors = \App\Models\Vendor::orderBy('company_name')->get();
+        $vendors = \App\Models\Vendor::orderBy('company_name')
+            ->when(!$user->isAdmin() && !empty($userCompanyCodes), fn($q) => $q->whereIn('company_code', $userCompanyCodes))
+            ->get();
         $baseQ = \App\Models\VendorMonthlyCharge::byMonth($month, $year);
         $stats = [
             'total_charges' => (float)(clone $baseQ)->sum('total_charges'),
@@ -565,9 +694,19 @@ class FinanceController extends Controller
 
     public function downloadVendorCharges(Request $request)
     {
+        $user = auth()->user();
+        // User's allowed company codes
+        $userCompanyCodes = $user->company_codes ?? [];
+        if (is_string($userCompanyCodes)) {
+            $userCompanyCodes = json_decode($userCompanyCodes, true) ?? [];
+        }
+        $userCompanyCodes = array_filter(array_map('strval', $userCompanyCodes));
+
         $month = $request->get('month', now()->month);
         $year = $request->get('year', now()->year);
-        $charges = \App\Models\VendorMonthlyCharge::with('vendor', 'grn')->byMonth($month, $year)->get();
+        $charges = \App\Models\VendorMonthlyCharge::with('vendor', 'grn')
+            ->when(!$user->isAdmin() && !empty($userCompanyCodes), fn($q) => $q->whereIn('company_code', $userCompanyCodes))
+            ->byMonth($month, $year)->get();
         $csv = "Vendor,GRN,Inward,Storage,Fulfillment,Pick&Pack,Material,Total,Currency,Status\n";
         foreach ($charges as $c) {
             $s = $c->getCurrencySymbol();

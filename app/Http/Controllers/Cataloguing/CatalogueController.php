@@ -12,8 +12,7 @@ class CatalogueController extends Controller
     public function __construct(
         protected DashboardService $dashboardService,
         protected CatalogueService $catalogueService
-    ) {
-    }
+    ) {}
 
     public function dashboard(Request $request)
     {
@@ -24,11 +23,22 @@ class CatalogueController extends Controller
 
     public function pricingSheets(Request $request)
     {
+        $user = auth()->user();
+        $userCompanyCodes = $user->company_codes ?? [];   // Array
+
+        if (is_string($userCompanyCodes)) {
+            $userCompanyCodes = json_decode($userCompanyCodes, true) ?? [];
+        }
+        $userCompanyCodes = array_filter(array_map('strval', $userCompanyCodes));
+
         $pricings = PlatformPricing::with('product.category', 'product.vendor', 'salesChannel', 'asn')
             ->where('status', 'approved')
-            ->when($request->company_code, fn ($q, $v) => $q->where('company_code', $v))
-            ->when($request->channel_id, fn ($q, $v) => $q->where('sales_channel_id', $v))
-            ->when($request->asn_id, fn ($q, $v) => $q->where('asn_id', $v))
+            ->when(!$user->isAdmin() && !empty($userCompanyCodes), function ($q) use ($userCompanyCodes) {
+                return $q->whereIn('company_code', $userCompanyCodes);
+            })
+            ->when($request->company_code, fn($q, $v) => $q->where('company_code', $v))
+            ->when($request->channel_id, fn($q, $v) => $q->where('sales_channel_id', $v))
+            ->when($request->asn_id, fn($q, $v) => $q->where('asn_id', $v))
             ->when($request->search, function ($q, $v) {
                 $q->whereHas('product', fn($p) => $p->where('sku', 'LIKE', "%{$v}%")->orWhere('name', 'LIKE', "%{$v}%"));
             })
@@ -44,8 +54,19 @@ class CatalogueController extends Controller
             return $p;
         });
 
-        $channels = SalesChannel::active()->orderBy('name')->get();
-        $asns = \App\Models\Asn::orderBy('asn_number', 'desc')->limit(100)->get(['id', 'asn_number']);
+        $channels = SalesChannel::active()
+            ->when(!$user->isAdmin() && !empty($userCompanyCodes), function ($q) use ($userCompanyCodes) {
+                return $q->whereJsonContains('company_codes', $userCompanyCodes);
+            })
+            ->when($request->company_code, fn($q, $v) => $q->where('company_code', $v))
+            ->orderBy('name')->get();
+            
+        $asns = \App\Models\Asn::orderBy('asn_number', 'desc')
+            ->when(!$user->isAdmin() && !empty($userCompanyCodes), function ($q) use ($userCompanyCodes) {
+                return $q->whereIn('company_code', $userCompanyCodes);
+            })
+            ->when($request->company_code, fn($q, $v) => $q->where('company_code', $v))
+            ->limit(100)->get(['id', 'asn_number']);
 
         return view('cataloguing.pricing-sheets', compact('pricings', 'channels', 'asns'));
     }
@@ -53,12 +74,12 @@ class CatalogueController extends Controller
     public function listingPanel(Request $request)
     {
         $products = Product::with('category', 'vendor')
-            ->when($request->company_code, fn ($q, $v) => $q->where('company_code', $v))
-            ->when($request->category_id, fn ($q, $v) => $q->where('category_id', $v))
+            ->when($request->company_code, fn($q, $v) => $q->where('company_code', $v))
+            ->when($request->category_id, fn($q, $v) => $q->where('category_id', $v))
             ->when($request->search, function ($q, $v) {
                 $q->where(function ($s) use ($v) {
                     $s->where('sku', 'LIKE', "%{$v}%")
-                      ->orWhere('name', 'LIKE', "%{$v}%");
+                        ->orWhere('name', 'LIKE', "%{$v}%");
                 });
             })
             ->paginate(30)->withQueryString();
@@ -80,10 +101,18 @@ class CatalogueController extends Controller
 
         $allowed = ['pending', 'listed', 'inactive', 'removed'];
         $aliases = [
-            'active' => 'listed', 'published' => 'listed', 'live' => 'listed', 'enabled' => 'listed',
-            'draft' => 'pending', 'not_listed' => 'pending', 'unlisted' => 'pending',
-            'paused' => 'inactive', 'disabled' => 'inactive',
-            'deleted' => 'removed', 'archived' => 'removed', '' => 'pending',
+            'active' => 'listed',
+            'published' => 'listed',
+            'live' => 'listed',
+            'enabled' => 'listed',
+            'draft' => 'pending',
+            'not_listed' => 'pending',
+            'unlisted' => 'pending',
+            'paused' => 'inactive',
+            'disabled' => 'inactive',
+            'deleted' => 'removed',
+            'archived' => 'removed',
+            '' => 'pending',
         ];
 
         try {
@@ -121,14 +150,15 @@ class CatalogueController extends Controller
         $categories = \App\Models\Category::orderBy('name')->get(['id', 'name']);
 
         $productQuery = Product::where('company_code', $companyCode)
-            ->when($categoryId, fn ($q, $v) => $q->where('category_id', $v));
+            ->when($categoryId, fn($q, $v) => $q->where('category_id', $v));
 
         $totalProducts = (clone $productQuery)->count();
         $allProducts = (clone $productQuery)->whereNotNull('platform_listing_status')->get(['id', 'platform_listing_status', 'category_id']);
 
         // Per-channel stats from Product.platform_listing_status JSON
         $channelStats = $channels->map(function ($ch) use ($allProducts, $totalProducts) {
-            $listed = 0; $pending = 0;
+            $listed = 0;
+            $pending = 0;
             foreach ($allProducts as $p) {
                 $pls = $p->platform_listing_status ?? [];
                 $status = $pls[$ch->id] ?? $pls[strval($ch->id)] ?? null;
@@ -150,7 +180,8 @@ class CatalogueController extends Controller
             $categoryStats = $categories->map(function ($cat) use ($allProducts, $channelId, $companyCode) {
                 $catProducts = $allProducts->where('category_id', $cat->id);
                 $totalInCat = Product::where('company_code', $companyCode)->where('category_id', $cat->id)->count();
-                $listed = 0; $pending = 0;
+                $listed = 0;
+                $pending = 0;
                 foreach ($catProducts as $p) {
                     $pls = $p->platform_listing_status ?? [];
                     $status = $pls[$channelId] ?? $pls[strval($channelId)] ?? null;
@@ -158,7 +189,7 @@ class CatalogueController extends Controller
                     elseif ($status === 'pending') $pending++;
                 }
                 return ['category' => $cat, 'listed' => $listed, 'pending' => $pending, 'total' => $totalInCat];
-            })->filter(fn ($cs) => $cs['total'] > 0);
+            })->filter(fn($cs) => $cs['total'] > 0);
         }
 
         // Count total listed across all channels
@@ -176,8 +207,14 @@ class CatalogueController extends Controller
         ];
 
         return view('cataloguing.sku-dashboard', compact(
-            'totals', 'channels', 'categories', 'channelStats', 'categoryStats',
-            'companyCode', 'channelId', 'categoryId'
+            'totals',
+            'channels',
+            'categories',
+            'channelStats',
+            'categoryStats',
+            'companyCode',
+            'channelId',
+            'categoryId'
         ));
     }
 
@@ -196,12 +233,42 @@ class CatalogueController extends Controller
         $channels = SalesChannel::active()->orderBy('name')->get();
 
         // Header row matching Excel
-        $headers = ['S.no','Vendor SKU','SAP Code','Barcode','Product Name','Description','Picture','HSN/HTS',
-            'L (in)','W (in)','H (in)','Wt (lbs)','Material','Other Mat.','Color','Finish',
-            'Category','Sub Cat.','Inner Qty','Inner L','Inner W','Inner H','Inner Wt (Lbs)',
-            'Master Qty','Master L','Master W','Master H','Master Wt (Lbs)',
-            'Final Qty *','Final FOB *','WSP ($)'];
-        foreach ($channels as $ch) { $headers[] = $ch->name; }
+        $headers = [
+            'S.no',
+            'Vendor SKU',
+            'SAP Code',
+            'Barcode',
+            'Product Name',
+            'Description',
+            'Picture',
+            'HSN/HTS',
+            'L (in)',
+            'W (in)',
+            'H (in)',
+            'Wt (lbs)',
+            'Material',
+            'Other Mat.',
+            'Color',
+            'Finish',
+            'Category',
+            'Sub Cat.',
+            'Inner Qty',
+            'Inner L',
+            'Inner W',
+            'Inner H',
+            'Inner Wt (Lbs)',
+            'Master Qty',
+            'Master L',
+            'Master W',
+            'Master H',
+            'Master Wt (Lbs)',
+            'Final Qty *',
+            'Final FOB *',
+            'WSP ($)'
+        ];
+        foreach ($channels as $ch) {
+            $headers[] = $ch->name;
+        }
 
         $csv = implode(',', $headers) . "\n";
 
@@ -222,8 +289,8 @@ class CatalogueController extends Controller
                 '"' . ($p->product->sku ?? '') . '"',
                 '"' . ($p->product->sap_code ?? '') . '"',
                 '"' . ($d['barcode'] ?? '') . '"',
-                '"' . str_replace('"','""', $p->product->name ?? '') . '"',
-                '"' . str_replace('"','""', $d['description'] ?? $d['product_description'] ?? '') . '"',
+                '"' . str_replace('"', '""', $p->product->name ?? '') . '"',
+                '"' . str_replace('"', '""', $d['description'] ?? $d['product_description'] ?? '') . '"',
                 '', // Picture
                 '"' . ($d['hsn_code'] ?? $d['hts_code'] ?? '') . '"',
                 $d['product_length'] ?? $d['length'] ?? '',

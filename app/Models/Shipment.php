@@ -8,7 +8,7 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Shipment extends Model
 {
-    use HasFactory, SoftDeletes;
+    use HasFactory, \App\Traits\FiltersByCompany, SoftDeletes;
 
     protected $fillable = [
         'shipment_code',

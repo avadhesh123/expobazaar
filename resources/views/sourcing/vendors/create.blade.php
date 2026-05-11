@@ -46,11 +46,36 @@
                     </div>
                     <div class="form-group">
                         <label>Company Code <span style="color:#dc2626;">*</span></label>
+
+
+                        @php
+                        $user = auth()->user();
+                        $userCompanyCodes = $user->company_codes ?? [];
+
+                        // Convert to array if stored as JSON string
+                        if (is_string($userCompanyCodes)) {
+                        $userCompanyCodes = json_decode($userCompanyCodes, true) ?? [];
+                        }
+
+                        $allowedCompanies = array_filter(array_map('strval', $userCompanyCodes));
+                        @endphp
+
                         <select name="company_code" required>
                             <option value="">Select company...</option>
-                            <option value="2000" {{ old('company_code')==='2000'?'selected':'' }}>2000 – India (Expo Digital India Pvt Ltd)</option>
-                            <option value="2100" {{ old('company_code')==='2100'?'selected':'' }}>2100 – USA (Expo Digital SCM Inc.)</option>
-                            <option value="2200" {{ old('company_code')==='2200'?'selected':'' }}>2200 – Netherlands (Expo Digital SCM B.V.)</option>
+
+                            @if($user->isAdmin())
+                            <!-- Admin sees all companies -->
+                            <option value="2000" {{ old('company_code')==='2000'?'selected':'' }}>2000 India</option>
+                            <option value="2100" {{ old('company_code')==='2100'?'selected':'' }}>2100 USA</option>
+                            <option value="2200" {{ old('company_code')==='2200'?'selected':'' }}>2200 Netherlands</option>
+                            @else
+                            <!-- Normal user sees only assigned companies -->
+                            @foreach($allowedCompanies as $code)
+                            <option value="{{ $code }}" {{ old('company_code') === $code ? 'selected' : '' }}>
+                                {{ $code === '2000' ? '2000 India' : ($code === '2100' ? '2100 USA' : '2200 Netherlands') }}
+                            </option>
+                            @endforeach
+                            @endif
                         </select>
                         @error('company_code')<span style="font-size:.72rem;color:#dc2626;">{{ $message }}</span>@enderror
                         <span style="font-size:.68rem;color:#94a3b8;">Vendor account will be specific to this company code</span>

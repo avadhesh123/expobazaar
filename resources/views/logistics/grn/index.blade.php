@@ -50,14 +50,14 @@
                     @foreach(['pending','uploaded','verified','completed'] as $s)<option value="{{ $s }}" {{ request('status')===$s?'selected':'' }}>{{ ucfirst($s) }}</option>@endforeach
                 </select>
             </div>
-            <div style="min-width:110px;"><label style="font-size:.7rem;font-weight:600;color:#64748b;display:block;margin-bottom:.25rem;">Company</label>
+            <!-- <div style="min-width:110px;"><label style="font-size:.7rem;font-weight:600;color:#64748b;display:block;margin-bottom:.25rem;">Company</label>
                 <select name="company_code" style="width:100%;padding:.4rem .5rem;border:1px solid #d1d5db;border-radius:8px;font-size:.82rem;font-family:inherit;">
                     <option value="">All</option>
                     <option value="2000" {{ request('company_code')==='2000'?'selected':'' }}>2000</option>
                     <option value="2100" {{ request('company_code')==='2100'?'selected':'' }}>2100</option>
                     <option value="2200" {{ request('company_code')==='2200'?'selected':'' }}>2200</option>
                 </select>
-            </div>
+            </div> -->
             @php
             $selectedId = old('warehouse_id', request('warehouse_id'));
 

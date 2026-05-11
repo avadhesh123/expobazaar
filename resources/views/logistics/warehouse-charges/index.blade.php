@@ -32,7 +32,7 @@
                     <option value="receivable" {{ $category==='receivable'?'selected':'' }}>Receivable</option>
                 </select></div>
             <div style="min-width:140px;"><label style="font-size:.7rem;font-weight:600;color:#64748b;display:block;margin-bottom:.25rem;">Warehouse</label><select name="warehouse_id" style="width:100%;padding:.4rem .5rem;border:1px solid #d1d5db;border-radius:8px;font-size:.82rem;">
-                    <option value="">All</option>@foreach($warehouses as $w)<option value="{{ $w->id }}" {{ request('warehouse_id')==(string)$w->id?'selected':'' }}>{{ $w->name }}</option>@endforeach
+                    <option value="">All</option>@foreach($warehouses as $w)<option value="{{ $w->id }}" {{ request('warehouse_id')==(string)$w->id?'selected':'' }}>{{$w->company_code}} - {{$w->name}}</option>@endforeach
                 </select></div>
             <button type="submit" class="btn btn-primary btn-sm"><i class="fas fa-filter"></i></button>
             <a href="{{ route('logistics.warehouse-charges') }}" class="btn btn-outline btn-sm"><i class="fas fa-times"></i></a>

@@ -343,8 +343,21 @@ class VendorController extends Controller
      */
     public function offerSheets()
     {
-        $vendor = auth()->user()->vendor;
-        $sheets = $vendor->offerSheets()->with('items')->latest()->paginate(20);
+        $user = auth()->user();
+
+        // User's allowed company codes
+        $userCompanyCodes = $user->company_codes ?? [];
+        if (is_string($userCompanyCodes)) {
+            $userCompanyCodes = json_decode($userCompanyCodes, true) ?? [];
+        }
+        $userCompanyCodes = array_filter(array_map('strval', $userCompanyCodes));
+
+        $vendor = $user->vendor;
+        $sheets = $vendor->offerSheets()->with('items')
+            ->when(
+                !$user->isAdmin() && !empty($userCompanyCodes),
+                fn($q) => $q->whereIn('company_code', $userCompanyCodes)
+            )->latest()->paginate(20);
         return view('vendor.offer-sheets.index', compact('sheets', 'vendor'));
     }
 
@@ -1148,9 +1161,20 @@ class VendorController extends Controller
 
     public function liveSheets()
     {
-        $vendor = auth()->user()->vendor;
+        $user = auth()->user();
+
+        // User's allowed company codes
+        $userCompanyCodes = $user->company_codes ?? [];
+        if (is_string($userCompanyCodes)) {
+            $userCompanyCodes = json_decode($userCompanyCodes, true) ?? [];
+        }
+        $userCompanyCodes = array_filter(array_map('strval', $userCompanyCodes));
+        $vendor = $user->vendor;
         $liveSheets = LiveSheet::where('vendor_id', $vendor->id)
             ->with('consignment', 'offerSheet', 'items.product')
+            ->when(!$user->isAdmin() && !empty($userCompanyCodes), function ($query) use ($userCompanyCodes) {
+                $query->whereIn('company_code', $userCompanyCodes);
+            })
             ->latest()->paginate(20);
         return view('vendor.live-sheets.index', compact('liveSheets', 'vendor'));
     }
@@ -1792,7 +1816,15 @@ class VendorController extends Controller
     }
     public function grn(Request $request)
     {
-        $vendor = auth()->user()->vendor;
+        $user = auth()->user();
+        // User's allowed company codes
+        $userCompanyCodes = $user->company_codes ?? [];
+        if (is_string($userCompanyCodes)) {
+            $userCompanyCodes = json_decode($userCompanyCodes, true) ?? [];
+        }
+        $userCompanyCodes = array_filter(array_map('strval', $userCompanyCodes));
+
+        $vendor = $user->vendor;
         $vendorProductIds = $vendor->products()->pluck('id')->toArray();
 
         // Get consignment IDs for this vendor
@@ -1805,6 +1837,9 @@ class VendorController extends Controller
 
         $grns = \App\Models\Grn::with('shipment', 'warehouse', 'items.product')
             ->whereIn('shipment_id', $shipmentIds)
+            ->when(!$user->isAdmin() && !empty($userCompanyCodes), function ($query) use ($userCompanyCodes) {
+                $query->whereIn('company_code', $userCompanyCodes);
+            })
             ->latest('receipt_date')
             ->paginate(20);
 
@@ -1875,16 +1910,29 @@ class VendorController extends Controller
 
     public function rateCard()
     {
-        $vendor = auth()->user()->vendor;
+        $user = auth()->user();
+        // User's allowed company codes
+        $userCompanyCodes = $user->company_codes ?? [];
+        if (is_string($userCompanyCodes)) {
+            $userCompanyCodes = json_decode($userCompanyCodes, true) ?? [];
+        }
+        $userCompanyCodes = array_filter(array_map('strval', $userCompanyCodes));
+        $vendor = $user->vendor;
 
         $rateCard = \App\Models\VendorRateCard::where('vendor_id', $vendor->id)
             ->where('status', 'approved')
+            ->when(!$user->isAdmin() && !empty($userCompanyCodes), function ($query) use ($userCompanyCodes) {
+                $query->whereIn('company_code', $userCompanyCodes);
+            })
             ->orderByDesc('version')
             ->first();
 
         // Get all versions for history
         $history = \App\Models\VendorRateCard::where('vendor_id', $vendor->id)
             ->with('warehouse')
+            ->when(!$user->isAdmin() && !empty($userCompanyCodes), function ($query) use ($userCompanyCodes) {
+                $query->whereIn('company_code', $userCompanyCodes);
+            })
             ->orderByDesc('version')
             ->get();
 
@@ -1903,11 +1951,22 @@ class VendorController extends Controller
     }
     public function inventory(Request $request)
     {
-        $vendor = auth()->user()->vendor;
+        $user = auth()->user();
+        // User's allowed company codes
+        $userCompanyCodes = $user->company_codes ?? [];
+        if (is_string($userCompanyCodes)) {
+            $userCompanyCodes = json_decode($userCompanyCodes, true) ?? [];
+        }
+        $userCompanyCodes = array_filter(array_map('strval', $userCompanyCodes));
+
+        $vendor = $user->vendor;
 
         $inventory = \App\Models\Inventory::with('product', 'warehouse', 'grn')
             ->whereHas('product', fn($q) => $q->where('vendor_id', $vendor->id))
             ->when($request->warehouse_id, fn($q, $v) => $q->where('warehouse_id', $v))
+            ->when(!$user->isAdmin() && !empty($userCompanyCodes), function ($query) use ($userCompanyCodes) {
+                $query->whereIn('company_code', $userCompanyCodes);
+            })
             ->latest('received_date')
             ->paginate(30);
 

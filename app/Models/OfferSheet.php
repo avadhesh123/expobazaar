@@ -8,7 +8,7 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 
 class OfferSheet extends Model
 {
-    use HasFactory, SoftDeletes;
+    use HasFactory,\App\Traits\FiltersByCompany, SoftDeletes;
 
     protected $fillable = [
         'offer_sheet_number', 'vendor_id', 'company_code', 'status',

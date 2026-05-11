@@ -25,8 +25,20 @@ class LogisticsController extends Controller
     // ─── CONTAINER PLANNING ──────────────────────────────────────
     public function containerPlanning(Request $request)
     {
+        $user = auth()->user();
+        $userCompanyCodes = $user->company_codes ?? [];   // Array
+
+        // Convert to array if it's stored as JSON string
+        if (is_string($userCompanyCodes)) {
+            $userCompanyCodes = json_decode($userCompanyCodes, true) ?? [];
+        }
+
         $consignments = Consignment::with('vendor', 'liveSheet')
             ->where('status', 'created')
+            ->when(!$user->isAdmin() && !empty($userCompanyCodes), function ($q) use ($userCompanyCodes) {
+                return $q->whereIn('company_code', $userCompanyCodes);
+            })
+            ->when($request->company_code, fn($q, $v) => $q->where('company_code', $v))
             ->whereDoesntHave('shipments')
             ->when($request->company_code, fn($q, $v) => $q->where('company_code', $v))
             ->get();
@@ -54,8 +66,19 @@ class LogisticsController extends Controller
     // ─── SHIPMENTS ───────────────────────────────────────────────
     public function shipments(Request $request)
     {
+        $user = auth()->user();
+        $userCompanyCodes = $user->company_codes ?? [];   // Array
+
+        // Convert to array if it's stored as JSON string
+        if (is_string($userCompanyCodes)) {
+            $userCompanyCodes = json_decode($userCompanyCodes, true) ?? [];
+        }
+
         $shipments = Shipment::with('consignments.vendor')
             ->when($request->status, fn($q, $v) => $q->where('status', $v))
+            ->when(!$user->isAdmin() && !empty($userCompanyCodes), function ($q) use ($userCompanyCodes) {
+                return $q->whereIn('company_code', $userCompanyCodes);
+            })
             ->when($request->company_code, fn($q, $v) => $q->where('company_code', $v))
             ->when($request->type, fn($q, $v) => $q->where('shipment_type', $v))
             ->latest()->paginate(20);
@@ -107,8 +130,19 @@ class LogisticsController extends Controller
     // ─── GRN ─────────────────────────────────────────────────────
     public function grnList(Request $request)
     {
+        $user = auth()->user();
+        $userCompanyCodes = $user->company_codes ?? [];   // Array
+
+        // Convert to array if it's stored as JSON string
+        if (is_string($userCompanyCodes)) {
+            $userCompanyCodes = json_decode($userCompanyCodes, true) ?? [];
+        }
+
         $grns = Grn::with('shipment', 'warehouse')
             ->when($request->status, fn($q, $v) => $q->where('status', $v))
+            ->when(!$user->isAdmin() && !empty($userCompanyCodes), function ($q) use ($userCompanyCodes) {
+                return $q->whereIn('company_code', $userCompanyCodes);
+            })
             ->when($request->company_code, fn($q, $v) => $q->where('company_code', $v))
             ->when($request->warehouse_id, fn($q, $v) => $q->where('warehouse_id', $v))
             ->latest()->paginate(20);
@@ -118,7 +152,12 @@ class LogisticsController extends Controller
             ->with('consignments.vendor', 'warehouse')
             ->latest()->get();
 
-        $warehouses = Warehouse::active()->get();
+        $warehouses = Warehouse::active()
+            ->when(!$user->isAdmin() && !empty($userCompanyCodes), function ($q) use ($userCompanyCodes) {
+                return $q->whereIn('company_code', $userCompanyCodes);
+            })
+            ->when($request->company_code, fn($q, $v) => $q->where('company_code', $v))
+            ->get();
         return view('logistics.grn.index', compact('grns', 'pendingShipments', 'warehouses'));
     }
 
@@ -246,7 +285,18 @@ class LogisticsController extends Controller
     // ─── INVENTORY ───────────────────────────────────────────────
     public function inventory(Request $request)
     {
+        $user = auth()->user();
+        $userCompanyCodes = $user->company_codes ?? [];   // Array
+
+        // Convert to array if it's stored as JSON string
+        if (is_string($userCompanyCodes)) {
+            $userCompanyCodes = json_decode($userCompanyCodes, true) ?? [];
+        }
+
         $query = Inventory::with('product.vendor', 'product.category', 'warehouse')
+            ->when(!$user->isAdmin() && !empty($userCompanyCodes), function ($q) use ($userCompanyCodes) {
+                return $q->whereIn('company_code', $userCompanyCodes);
+            })
             ->when($request->company_code, fn($q, $v) => $q->where('company_code', $v))
             ->when($request->warehouse_id, fn($q, $v) => $q->where('warehouse_id', $v))
             ->when($request->vendor_id, fn($q, $v) => $q->whereHas('product', fn($pq) => $pq->where('vendor_id', $v)))
@@ -255,20 +305,37 @@ class LogisticsController extends Controller
 
         $inventory = $query->paginate(50)->appends($request->query());
 
+        // print_r($inventory->toArray());
+        // exit;
+
         // Add ageing_days to each item for the view
         $inventory->getCollection()->transform(function ($inv) {
             $inv->ageing_days = $inv->received_date ? now()->diffInDays($inv->received_date) : 0;
             return $inv;
         });
-
         $warehouses = Warehouse::active()->get();
-        $vendors = \App\Models\Vendor::active()->orderBy('company_name')->get();
+        $vendors = \App\Models\Vendor::active()
+            ->when(!$user->isAdmin() && !empty($userCompanyCodes), function ($q) use ($userCompanyCodes) {
+                return $q->whereIn('company_code', $userCompanyCodes);
+            })->orderBy('company_name')->get();
 
         $stats = [
-            'total_skus'  => Inventory::when($request->company_code, fn($q, $v) => $q->where('company_code', $v))->where('quantity', '>', 0)->count(),
-            'total_units' => Inventory::when($request->company_code, fn($q, $v) => $q->where('company_code', $v))->sum('quantity'),
-            'available'   => Inventory::when($request->company_code, fn($q, $v) => $q->where('company_code', $v))->sum('available_quantity'),
-            'reserved'    => Inventory::when($request->company_code, fn($q, $v) => $q->where('company_code', $v))->sum('reserved_quantity'),
+            'total_skus'  => Inventory::when($request->company_code, fn($q, $v) => $q->where('company_code', $v))
+                ->when(!$user->isAdmin() && !empty($userCompanyCodes), function ($q) use ($userCompanyCodes) {
+                    return $q->whereIn('company_code', $userCompanyCodes);
+                })->where('quantity', '>', 0)->count(),
+            'total_units' => Inventory::when($request->company_code, fn($q, $v) => $q->where('company_code', $v))
+                ->when(!$user->isAdmin() && !empty($userCompanyCodes), function ($q) use ($userCompanyCodes) {
+                    return $q->whereIn('company_code', $userCompanyCodes);
+                })->sum('quantity'),
+            'available'   => Inventory::when($request->company_code, fn($q, $v) => $q->where('company_code', $v))
+                ->when(!$user->isAdmin() && !empty($userCompanyCodes), function ($q) use ($userCompanyCodes) {
+                    return $q->whereIn('company_code', $userCompanyCodes);
+                })->sum('available_quantity'),
+            'reserved'    => Inventory::when($request->company_code, fn($q, $v) => $q->where('company_code', $v))
+                ->when(!$user->isAdmin() && !empty($userCompanyCodes), function ($q) use ($userCompanyCodes) {
+                    return $q->whereIn('company_code', $userCompanyCodes);
+                })->sum('reserved_quantity'),
         ];
 
         return view('logistics.inventory.index', compact('inventory', 'warehouses', 'vendors', 'stats'));
@@ -399,12 +466,24 @@ class LogisticsController extends Controller
     // ─── WAREHOUSE CHARGES ───────────────────────────────────────
     public function warehouseCharges(Request $request)
     {
+
+        $user = auth()->user();
+        $userCompanyCodes = $user->company_codes ?? [];   // Array
+
+        // Convert to array if it's stored as JSON string
+        if (is_string($userCompanyCodes)) {
+            $userCompanyCodes = json_decode($userCompanyCodes, true) ?? [];
+        }
+
         $month = $request->get('month', now()->month);
         $year = $request->get('year', now()->year);
         $category = $request->get('category', '');
 
         $charges = WarehouseCharge::with('warehouse', 'vendor', 'items')
             ->byMonth($month, $year)
+            ->when(!$user->isAdmin() && !empty($userCompanyCodes), function ($q) use ($userCompanyCodes) {
+                return $q->whereIn('company_code', $userCompanyCodes);
+            })
             ->when($category, fn($q, $v) => $q->where('charge_category', $v))
             ->when($request->warehouse_id, fn($q, $v) => $q->where('warehouse_id', $v))
             ->when($request->vendor_id, fn($q, $v) => $q->where('vendor_id', $v))
@@ -621,19 +700,41 @@ class LogisticsController extends Controller
 
     public function vendorRateCards(Request $request)
     {
+
+        $user = auth()->user();
+        $userCompanyCodes = $user->company_codes ?? [];   // Array
+
+        // Convert to array if it's stored as JSON string
+        if (is_string($userCompanyCodes)) {
+            $userCompanyCodes = json_decode($userCompanyCodes, true) ?? [];
+        }
+
         // Show warehouse rate cards as the base template
         $warehouseRateCards = \App\Models\WarehouseRateCard::with('warehouse')
             ->approved()
+            ->when(!$user->isAdmin() && !empty($userCompanyCodes), function ($q) use ($userCompanyCodes) {
+                return $q->whereIn('company_code', $userCompanyCodes);
+            })
+            ->when($request->company_code, fn($q, $v) => $q->where('company_code', $v))
             ->orderBy('warehouse_id')
             ->get();
 
         // Existing vendor rate cards
         $vendorRateCards = \App\Models\VendorRateCard::with('vendor', 'creator')
+            ->when(!$user->isAdmin() && !empty($userCompanyCodes), function ($q) use ($userCompanyCodes) {
+                return $q->whereIn('company_code', $userCompanyCodes);
+            })
+            ->when($request->company_code, fn($q, $v) => $q->where('company_code', $v))
             ->when($request->vendor_id, fn($q, $v) => $q->where('vendor_id', $v))
             ->orderByDesc('created_at')
             ->paginate(30)->withQueryString();
 
-        $vendors = \App\Models\Vendor::orderBy('company_name')->get();
+        $vendors = \App\Models\Vendor::orderBy('company_name')
+            ->when(!$user->isAdmin() && !empty($userCompanyCodes), function ($q) use ($userCompanyCodes) {
+                return $q->whereIn('company_code', $userCompanyCodes);
+            })
+            ->when($request->company_code, fn($q, $v) => $q->where('company_code', $v))
+            ->get();
         $warehouses = Warehouse::active()->orderBy('name')->get();
 
         return view('logistics.warehouse-charges.vendor-rate-cards', compact('warehouseRateCards', 'vendorRateCards', 'vendors', 'warehouses'));
@@ -806,8 +907,21 @@ class LogisticsController extends Controller
 
     public function warehouseRateCards(Request $request)
     {
+
+        $user = auth()->user();
+        $userCompanyCodes = $user->company_codes ?? [];   // Array
+
+        // Convert to array if it's stored as JSON string
+        if (is_string($userCompanyCodes)) {
+            $userCompanyCodes = json_decode($userCompanyCodes, true) ?? [];
+        }
+
         $rateCards = \App\Models\WarehouseRateCard::with('warehouse', 'creator', 'approver')
             ->when($request->warehouse_id, fn($q, $v) => $q->where('warehouse_id', $v))
+            ->when(!$user->isAdmin() && !empty($userCompanyCodes), function ($q) use ($userCompanyCodes) {
+                return $q->whereIn('company_code', $userCompanyCodes);
+            })
+            ->when($request->company_code, fn($q, $v) => $q->where('company_code', $v))
             ->orderByDesc('created_at')->paginate(30)->withQueryString();
         $warehouses = Warehouse::active()->orderBy('name')->get();
         return view('logistics.warehouse-rate-cards.index', compact('rateCards', 'warehouses'));
@@ -872,9 +986,22 @@ class LogisticsController extends Controller
 
     public function warehouseMonthlyCharges(Request $request)
     {
+
+        $user = auth()->user();
+        $userCompanyCodes = $user->company_codes ?? [];   // Array
+
+        // Convert to array if it's stored as JSON string
+        if (is_string($userCompanyCodes)) {
+            $userCompanyCodes = json_decode($userCompanyCodes, true) ?? [];
+        }
+
         $month = $request->get('month', now()->month);
         $year = $request->get('year', now()->year);
         $charges = \App\Models\WarehouseMonthlyCharge::with('warehouse', 'grnDetails.grn', 'rateCard')
+            ->when(!$user->isAdmin() && !empty($userCompanyCodes), function ($q) use ($userCompanyCodes) {
+                return $q->whereIn('company_code', $userCompanyCodes);
+            })
+            ->when($request->company_code, fn($q, $v) => $q->where('company_code', $v))
             ->byMonth($month, $year)->orderBy('warehouse_id')->get();
         $warehouses = Warehouse::active()->orderBy('name')->get();
         return view('logistics.warehouse-monthly-charges.index', compact('charges', 'warehouses', 'month', 'year'));

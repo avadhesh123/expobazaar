@@ -29,9 +29,18 @@ class DashboardService
                 'total_skus' => (clone $productQuery)->count(),
                 'listed_skus' => (clone $productQuery)->listed()->count(),
                 'shipments_in_transit' => (clone $shipmentQuery)->inTransit()->count(),
-                'inventory_value' => Inventory::when($companyCode, fn($q) => $q->byCompanyCode($companyCode))
-                    ->join('products', 'inventory.product_id', '=', 'products.id')
-                    ->sum(DB::raw('inventory.quantity * products.vendor_price')),
+               
+                // 'inventory_value' => Inventory::when($companyCode, fn($q) => $q->byCompanyCode($companyCode))
+                //     ->join('products', 'inventory.product_id', '=', 'products.id')
+                //     ->sum(DB::raw('inventory.quantity * products.vendor_price')),
+
+                'inventory_value' => Inventory::when($companyCode, function ($q) use ($companyCode) {
+                    $q->where('inventory.company_code', $companyCode);
+                })
+                ->join('products', 'inventory.product_id', '=', 'products.id')
+                ->sum(DB::raw('inventory.quantity * products.vendor_price')),
+
+
                 'monthly_sales' => (clone $orderQuery)->whereMonth('order_date', now()->month)->sum('total_amount'),
                 'ytd_sales' => (clone $orderQuery)->whereYear('order_date', now()->year)->sum('total_amount'),
                 'pending_payouts' => VendorPayout::when($companyCode, fn($q) => $q->where('company_code', $companyCode))
