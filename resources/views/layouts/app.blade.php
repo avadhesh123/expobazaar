@@ -575,7 +575,7 @@
         </div>
         <div style="padding:1.25rem 2rem 0;">
             @if(session('success'))<div class="alert alert-success" id="successAlert"><i class="fas fa-check-circle"></i> {{ session('success') }}</div>@endif
-            @if(session('error'))<div class="alert alert-error"><i class="fas fa-exclamation-circle"></i> {{ session('error') }}</div>@endif
+            @if(session('error'))<div class="alert alert-error"><i class="fas fa-exclamation-circle"></i>{!! session('error') !!}</div>@endif
             @if($errors->any())
             <div class="alert alert-error" style="padding:.75rem 1rem;">
                 <div style="font-weight:700;margin-bottom:.3rem;"><i class="fas fa-exclamation-triangle"></i> Please fix the following errors:</div>

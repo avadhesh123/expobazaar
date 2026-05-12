@@ -15,36 +15,7 @@ class PermissionService
     public static function can(User $user, string $permission): bool
     {
         // Admin bypass
-        if ($user->isAdmin()) return true;
-
-        // Internal user — always has full access to their own department
-
-        if ($user->isInternal()) {
-            $module = explode('.', $permission)[0] ?? '';
-            $dept = strtolower($user->department ?? '');
-
-            // Direct match
-            if ($dept === $module) {
-                return true;
-            }
-
-            // Department aliases (department name → modules they can access)
-            $deptModules = [
-                'admin'       => ['admin'],
-                'sourcing'    => ['sourcing'],
-                'logistics'   => ['logistics'],
-                'cataloguing' => ['cataloguing', 'catalog'],
-                'sales'       => ['sales'],
-                'finance'     => ['finance'],
-                'hod'         => ['hod', 'admin', 'sourcing', 'logistics', 'cataloguing', 'sales', 'finance'],
-            ];
-
-            $allowedModules = $deptModules[$dept] ?? [$dept];
-            if (in_array($module, $allowedModules)) {
-                return true;
-            }
-        }
-
+        if ($user->isAdmin()) return true; 
 
         // Additional access via roles (both internal cross-dept and external)
         $perms = self::getUserPermissions($user);
@@ -68,18 +39,29 @@ class PermissionService
      */
     public static function getUserPermissions(User $user): \Illuminate\Support\Collection
     {
-        $perms = Cache::remember("user_perms_{$user->id}", 300, function () use ($user) {
-            $direct = $user->permissions()->pluck('name');
-            $roleIds = $user->roles()->pluck('roles.id');
-            $viaRoles = Permission::whereHas(
-                'roles',
-                fn($q) =>
-                $q->whereIn('roles.id', $roleIds)
-            )->pluck('name');
-            return $direct->merge($viaRoles)->unique()->values()->toArray(); // cache as array, not Collection
-        });
+        // $perms = Cache::remember("user_perms_{$user->id}", 300, function () use ($user) {
+        //     $direct = $user->permissions()->pluck('name');
+        //     $roleIds = $user->roles()->pluck('roles.id');
+        //     $viaRoles = Permission::whereHas(
+        //         'roles',
+        //         fn($q) =>
+        //         $q->whereIn('roles.id', $roleIds)
+        //     )->pluck('name');
+        //     return $direct->merge($viaRoles)->unique()->values()->toArray(); // cache as array, not Collection
+        // });
 
-        return collect($perms); // convert back to Collection when reading
+        // return collect($perms); // convert back to Collection when reading
+
+
+        $direct = $user->permissions()->pluck('name');
+        $roleIds = $user->roles()->pluck('roles.id');
+        $viaRoles = Permission::whereHas(
+            'roles',
+            fn($q) =>
+            $q->whereIn('roles.id', $roleIds)
+        )->pluck('name');
+
+        return $direct->merge($viaRoles)->unique()->values();
     }
 
     /**
@@ -87,9 +69,9 @@ class PermissionService
      */
     public static function hasRoles(User $user): bool
     {
-        return Cache::remember("user_has_roles_{$user->id}", 300, function () use ($user) {
+        //return Cache::remember("user_has_roles_{$user->id}", 300, function () use ($user) {
             return $user->roles()->exists();
-        });
+        //});
     }
 
     /**

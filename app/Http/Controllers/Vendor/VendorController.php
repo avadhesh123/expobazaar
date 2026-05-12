@@ -1460,7 +1460,11 @@ class VendorController extends Controller
         if (empty($parsed)) {
             return back()->with('error', 'No valid data found. Please use the provided template.');
         }
-
+        // Check if error returned
+        if (isset($parsed['error'])) {
+            $errorMessage = nl2br(htmlspecialchars($parsed['error']));
+            return back()->with('error', $errorMessage);
+        }
         $updated = 0;
         $errors = [];
 
@@ -1478,19 +1482,26 @@ class VendorController extends Controller
                 continue;
             }
 
-            // Calculate CBM
-            $masterL = $row['master_length'] ?? 0;
-            $masterW = $row['master_width'] ?? 0;
-            $masterH = $row['master_height'] ?? 0;
-            $masterCbm = ($masterL && $masterW && $masterH) ? ($masterL * $masterW * $masterH) / 61023 : 0;
-            $qtyMaster = $row['qty_master_pack'] ?? 1;
-            $finalQty = $row['final_qty'] ?? $row['qty_offered'] ?? $item->quantity;
+            // Calculate CBM and weight based on master carton details if provided
+            $masterL = (float)($row['master_length'] ?? 0);
+            $masterW = (float)($row['master_width'] ?? 0);
+            $masterH = (float)($row['master_height'] ?? 0);
+            $qtyMaster = (int)($row['qty_master_pack'] ?? 1);
+            $finalQty = (int)($row['final_qty'] ?? $row['qty_offered'] ?? $item->quantity);
+
+            $masterCbm = ($masterL > 0 && $masterW > 0 && $masterH > 0)
+                ? ($masterL * $masterW * $masterH) / 61023
+                : 0;
+
             $totalMasterCartons = $qtyMaster > 0 ? ceil($finalQty / $qtyMaster) : 0;
             $cbmShipment = $totalMasterCartons * $masterCbm;
-            $unitPrice = $row['vendor_fob'] ?? $item->unit_price;
-            $finalFob = $row['final_fob'] ?? $unitPrice;
-            $weightPerUnit = isset($row['weight_grams']) && $row['weight_grams'] > 0 ? round($row['weight_grams'] / 1000, 3) : $item->weight_per_unit;
-            $masterWeight = $row['master_weight_kg'] ?? 0;
+            $unitPrice = (float)($row['vendor_fob'] ?? $item->unit_price);
+            $finalFob = (float)($row['final_fob'] ?? $unitPrice);
+            $weightPerUnit = isset($row['weight_grams']) && $row['weight_grams'] > 0
+                ? round((float)$row['weight_grams'] / 1000, 3)
+                : (float)($item->weight_per_unit ?? 0);
+
+            $masterWeight = (float)($row['master_weight_kg'] ?? 0);
 
             // Track changes BEFORE updating
             try {
@@ -1578,11 +1589,59 @@ class VendorController extends Controller
     {
         $rows = [];
 
+        $formulaErrors = [];
+
         try {
             $reader = \PhpOffice\PhpSpreadsheet\IOFactory::createReaderForFile($filePath);
             $reader->setReadDataOnly(true);
             $spreadsheet = $reader->load($filePath);
             $sheet = $spreadsheet->getActiveSheet();
+
+            $maxRow = $sheet->getHighestRow();
+
+            // Scan for formulas
+
+            for ($row = 2; $row <= $maxRow; $row++) {
+                $rowHasFormula = false;
+                $formulaDetails = [];
+
+                foreach ($sheet->getRowIterator($row, $row) as $rowObj) {
+                    foreach ($rowObj->getCellIterator() as $cell) {
+                        $rawValue = $cell->getValue();
+                        $calculatedValue = $cell->getCalculatedValue();
+
+                        // Detect formula: starts with '=' or calculated value differs significantly
+                        if (is_string($rawValue) && str_starts_with(trim($rawValue), '=')) {
+                            $rowHasFormula = true;
+                            $col = $cell->getColumn();
+                            $formulaDetails[] = "{$col}{$row}: " . substr($rawValue, 0, 40) . (strlen($rawValue) > 40 ? '...' : '');
+                        }
+                    }
+                }
+
+                if ($rowHasFormula) {
+                    $formulaErrors[] = "Row {$row}: " . implode(", ", $formulaDetails)  ;
+                }
+            }
+
+
+            // === FORMULA VALIDATION ===
+            if (!empty($formulaErrors)) {
+                $errorMsg = "Formula detected in uploaded file!\n";
+                $errorMsg .= "The following cells contain formulas:\n";
+                $errorMsg .= implode("\n", array_slice($formulaErrors, 0, 10));
+
+              //  $errorMsg .= implode("\n", $formulaErrors);
+
+                if (count($formulaErrors) > 10) {
+                    $errorMsg .= "\n... and " . (count($formulaErrors) - 10) . " more cells.";
+                }
+
+                $errorMsg .= "\nPlease remove all formulas and upload only static values.";
+                \Log::error('Live sheet parse error: ' . $errorMsg);
+                return ['error' => $errorMsg];
+                //throw new \Exception($errorMsg);
+            }
 
             // Build header map
             $colMap = [];
@@ -1666,7 +1725,7 @@ class VendorController extends Controller
                 }
             }
 
-            $maxRow = $sheet->getHighestRow();
+
             // Start from row 3 (row 1 = headers, row 2 = formulas)
             for ($r = 2; $r <= $maxRow; $r++) {
                 $sku = trim((string) ($sheet->getCell(($colMap['vendor_sku'] ?? 'B') . $r)->getValue() ?? ''));
@@ -1711,6 +1770,8 @@ class VendorController extends Controller
             }
         } catch (\Exception $e) {
             \Log::error('Live sheet parse error: ' . $e->getMessage());
+
+            return ['error' => 'Failed to parse Excel file: ' . $e->getMessage()];
         }
 
         return $rows;

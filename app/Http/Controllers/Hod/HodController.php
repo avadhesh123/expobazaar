@@ -30,7 +30,16 @@ class HodController extends Controller
 
     public function asnList(Request $request)
     {
+        $user = auth()->user();
+        // User's allowed company codes
+        $userCompanyCodes = $user->company_codes ?? [];
+        if (is_string($userCompanyCodes)) {
+            $userCompanyCodes = json_decode($userCompanyCodes, true) ?? [];
+        }
+        $userCompanyCodes = array_filter(array_map('strval', $userCompanyCodes));
+
         $asns = Asn::with('shipment', 'platformPricing')
+            ->when(!$user->isAdmin() && !empty($userCompanyCodes), fn($q) => $q->whereIn('company_code', $userCompanyCodes))
             ->when($request->status, fn($q, $v) => $q->where('status', $v))
             ->when($request->company_code, fn($q, $v) => $q->where('company_code', $v))
             ->latest()->paginate(20);
@@ -93,8 +102,6 @@ class HodController extends Controller
 
     public function storePricing(Request $request, Asn $asn)
     {
-
-
         $request->validate([
             'pricing'                    => 'required|array|min:1',
             'pricing.*.product_id'       => 'required|exists:products,id',
@@ -130,12 +137,22 @@ class HodController extends Controller
     }
     public function downloadPricing(Asn $asn)
     {
+        $user = auth()->user();
+        // User's allowed company codes
+        $userCompanyCodes = $user->company_codes ?? [];
+        if (is_string($userCompanyCodes)) {
+            $userCompanyCodes = json_decode($userCompanyCodes, true) ?? [];
+        }
+        $userCompanyCodes = array_filter(array_map('strval', $userCompanyCodes));
+
         $asn->load(
             'shipment.consignments.vendor',
             'shipment.consignments.liveSheet.items.product.category'
         );
 
-        $channels = SalesChannel::active()->orderBy('name')->get();
+        $channels = SalesChannel::active()
+            ->when(!$user->isAdmin() && !empty($userCompanyCodes), fn($q) => $q->whereIn('company_code', $userCompanyCodes))
+            ->orderBy('name')->get();
 
         $existingPricing = PlatformPricing::where('asn_id', $asn->id)
             ->get()
