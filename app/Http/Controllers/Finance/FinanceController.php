@@ -536,6 +536,152 @@ class FinanceController extends Controller
 
         return back()->with('success', "{$updated} SAP code(s) updated successfully.");
     }
+    /**
+     * Download pre-filled SAP template CSV for a live sheet
+     */
+    public function downloadSapTemplate(\App\Models\LiveSheet $liveSheet)
+    {
+        $liveSheet->load('items.product');
+
+        $csv = "Item ID,SKU,Product Name,Current SAP Code,New SAP Code\n";
+
+        foreach ($liveSheet->items as $item) {
+            $d = $item->product_details ?? [];
+            $currentSap = $item->product->sap_code ?? $d['sap_code'] ?? '';
+
+            $csv .= implode(',', [
+                $item->id,
+                '"' . ($item->product->sku ?? '') . '"',
+                '"' . str_replace('"', '""', $item->product->name ?? '') . '"',
+                '"' . $currentSap . '"',
+                '', // New SAP Code — to be filled by finance
+            ]) . "\n";
+        }
+
+        $filename = "SAP-Template-{$liveSheet->live_sheet_number}.csv";
+        return response($csv, 200, [
+            'Content-Type' => 'text/csv',
+            'Content-Disposition' => "attachment; filename=\"{$filename}\"",
+        ]);
+    }
+
+    /**
+     * Upload filled SAP CSV and apply codes to products
+     */
+    public function uploadSapCodes(Request $request, \App\Models\LiveSheet $liveSheet)
+    {
+        $request->validate([
+            'sap_file' => 'required|file|max:5120',
+        ]);
+
+        $file = $request->file('sap_file');
+        $ext = strtolower($file->getClientOriginalExtension());
+        if (!in_array($ext, ['csv', 'txt', 'xlsx'])) {
+            return back()->with('error', 'File must be CSV or XLSX format.');
+        }
+
+        try {
+            $filePath = $file->store('temp', 'local');
+            $fullPath = storage_path('app/' . $filePath);
+
+            if ($ext === 'xlsx') {
+                $reader = new \PhpOffice\PhpSpreadsheet\Reader\Xlsx();
+                $reader->setReadDataOnly(true);
+                $spreadsheet = $reader->load($fullPath);
+                $rows = $spreadsheet->getActiveSheet()->toArray();
+            } else {
+                $rows = [];
+                if (($handle = fopen($fullPath, 'r')) !== false) {
+                    while (($row = fgetcsv($handle)) !== false) {
+                        $rows[] = $row;
+                    }
+                    fclose($handle);
+                }
+            }
+
+            @unlink($fullPath);
+
+            if (count($rows) < 2) {
+                return back()->with('error', 'File is empty or has no data rows.');
+            }
+
+            // Find column indexes
+            $header = array_map(fn($h) => strtolower(trim($h ?? '')), $rows[0]);
+            $itemIdCol = null;
+            $sapCol = null;
+
+            foreach ($header as $i => $h) {
+                if (in_array($h, ['item id', 'item_id', 'id'])) $itemIdCol = $i;
+                if (in_array($h, ['new sap code', 'new_sap_code', 'sap code', 'sap_code'])) $sapCol = $i;
+            }
+
+            if ($sapCol === null) {
+                return back()->with('error', 'CSV must have a "New SAP Code" column.');
+            }
+
+            $updated = 0;
+            $errors = [];
+            $sapCodes = [];
+
+            for ($i = 1; $i < count($rows); $i++) {
+                $row = $rows[$i];
+                $sapCode = trim($row[$sapCol] ?? '');
+                if ($sapCode === '') continue;
+
+                // Get item ID from column or match by row order
+                $itemId = $itemIdCol !== null ? intval($row[$itemIdCol] ?? 0) : null;
+
+                if (!$itemId) continue;
+
+                // Check uniqueness
+                if (in_array($sapCode, $sapCodes)) {
+                    $errors[] = "Row " . ($i + 1) . ": Duplicate SAP code '{$sapCode}'.";
+                    continue;
+                }
+                $sapCodes[] = $sapCode;
+
+                $item = \App\Models\LiveSheetItem::where('id', $itemId)
+                    ->where('live_sheet_id', $liveSheet->id)
+                    ->first();
+
+                if (!$item) continue;
+
+                // Check against existing products
+                $dup = \App\Models\Product::where('sap_code', $sapCode)
+                    ->when($item->product_id, fn($q) => $q->where('id', '!=', $item->product_id))
+                    ->first();
+
+                if ($dup) {
+                    $errors[] = "Row " . ($i + 1) . ": SAP '{$sapCode}' already used by {$dup->sku}.";
+                    continue;
+                }
+
+                // Update product and live sheet item
+                if ($item->product_id) {
+                    \App\Models\Product::where('id', $item->product_id)->update(['sap_code' => $sapCode]);
+                }
+                $d = $item->product_details ?? [];
+                $d['sap_code'] = $sapCode;
+                $item->update(['product_details' => $d]);
+                $updated++;
+            }
+
+            \App\Models\ActivityLog::log('uploaded', 'sap_codes', $liveSheet, null, [
+                'updated' => $updated, 'errors' => count($errors),
+            ], "SAP codes uploaded via CSV: {$updated} updated");
+
+            $msg = "{$updated} SAP code(s) updated.";
+            if (!empty($errors)) {
+                $msg .= " Errors: " . implode('; ', array_slice($errors, 0, 5));
+            }
+
+            return back()->with($updated > 0 ? 'success' : 'error', $msg);
+
+        } catch (\Exception $e) {
+            \Log::error('SAP upload failed: ' . $e->getMessage());
+            return back()->with('error', 'Upload failed: ' . $e->getMessage());
+        }
+    }
 
     // ═══ VENDOR RATE CARDS ═══
 

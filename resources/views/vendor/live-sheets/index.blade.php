@@ -33,7 +33,7 @@
                     </th>
                     <th style="min-width:160px;">
                         Final Inspection Date
-                        <span style="display:block;font-size:.62rem;font-weight:400;color:#94a3b8;">Within 7 days of Goods Ready Date</span>
+                        <span style="display:block;font-size:.62rem;font-weight:400;color:#94a3b8;">Within Goods Ready Date</span>
                     </th>
 
                     <th>Created</th>
@@ -50,7 +50,10 @@
                 $finalInsp = $ls->final_inspection_date?->toDateString() ?? '';
                 $factoryLoc = $ls->factory_location ?? '';
                 // Max inspection = Goods Ready Date + 7 days (or today + 100 as fallback before Goods Ready Date is set)
-                $maxInspection = $exFactory ? \Carbon\Carbon::parse($exFactory)->addDays(7)->toDateString() : '';
+                // $maxInspection = $exFactory ? \Carbon\Carbon::parse($exFactory)->addDays(7)->toDateString() : '';
+                // For client-side validation, we only need to validate that the maximum inspection date is within the selected ex-factory date. The server-side validation will also enforce this rule.
+
+                $maxInspection = $exFactory ?? $maxExFactory;
                 @endphp
                 <tr id="row-{{ $ls->id }}">
                     <td style="font-family:monospace;font-weight:700;">{{ $ls->live_sheet_number }}</td>
@@ -135,15 +138,15 @@
                                 class="inspection-input"
                                 data-id="{{ $ls->id }}"
                                 value="{{ $finalInsp }}"
-                                min="{{ $exFactory ?: $today }}"
-                                max="{{ $maxInspection ?: '' }}"
+                                min="{{  $today }}"
+                                max="{{ $maxInspection }}"
                                 {{ !$exFactory ? 'disabled' : '' }}
                                 style="width:100%;padding:.32rem .45rem;border:1px solid {{ $finalInsp ? '#86efac' : '#d1d5db' }};border-radius:6px;font-size:.8rem;font-family:monospace;color:#0d1b2a;background:{{ $finalInsp ? '#f0fdf4' : ($exFactory ? '#fff' : '#f8fafc') }};opacity:{{ $exFactory ? '1' : '.55' }};"
                                 title="{{ $exFactory ? 'Select within 10 days of Ex-Factory date' : 'Set Ex-Factory date first' }}">
                         </div>
                         <div class="insp-hint-{{ $ls->id }}" style="font-size:.65rem;color:#94a3b8;margin-top:.2rem;">
                             @if($exFactory)
-                            Latest: {{ \Carbon\Carbon::parse($exFactory)->addDays(7)->format('d M Y') }}
+                            Latest: {{ now()->addDays(75)->format('d M Y') }}
                             @else
                             Set Goods Ready Date first
                             @endif
@@ -196,7 +199,7 @@
     (function() {
         var csrfToken = '{{ csrf_token() }}';
         var today = '{{ now()->toDateString() }}';
-        var maxExFactory = '{{ now()->addDays(90)->toDateString() }}';
+        var maxExFactory = '{{ now()->addDays(75)->toDateString() }}';
 
         // ── Helper: add days to a yyyy-mm-dd string ──────────────────────────────
         function addDays(dateStr, days) {
@@ -247,7 +250,7 @@
 
                 if (!exDate) return;
 
-                // Enforce max 90 days
+                // Enforce max 75 days
                 if (exDate > maxExFactory) {
                     this.value = maxExFactory;
                     exDate = maxExFactory;
@@ -260,7 +263,7 @@
                 // Update inspection input constraints for this row
                 var inspInput = document.querySelector('.inspection-input[data-id="' + lsId + '"]');
                 var inspHint = document.querySelector('.insp-hint-' + lsId);
-                var maxInsp = addDays(exDate, 10);
+                var maxInsp = exDate; //addDays(exDate, 10);
 
                 if (inspInput) {
                     inspInput.disabled = false;

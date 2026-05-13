@@ -4,10 +4,10 @@
 
 @section('content')
 @php
-    $isApproved = $vendor && $vendor->kyc_status === 'approved';
-    $isLocked = $isApproved;
-    $disabled = $isLocked ? 'disabled' : '';
-    $signedContractDoc = $documents->where('document_type', 'signed_contract')->first();
+$isApproved = $vendor && $vendor->kyc_status === 'approved';
+$isLocked = false;$isApproved;
+$disabled = $isLocked ? 'disabled' : '';
+$signedContractDoc = $documents->where('document_type', 'signed_contract')->first();
 @endphp
 
 {{-- Status Banners --}}
@@ -42,7 +42,7 @@
                         <div class="form-group" style="margin-bottom:0;">
                             <label>1. V.A.T Number / GST <span style="color:#dc2626;">*</span></label>
                             <input type="text" name="gst_number" value="{{ old('gst_number', $vendor->gst_number ?? '') }}" required placeholder="e.g. 22AAAAA0000A1Z5" {{ $disabled }}>
-                           <span id="gst_error" style="font-size:.72rem;color:#dc2626;"></span>
+                            <span id="gst_number_error" class="error-text"></span>
                             @error('gst_number')<span style="font-size:.72rem;color:#dc2626;">{{ $message }}</span>@enderror
                         </div>
                     </div>
@@ -59,6 +59,7 @@
                 <div class="form-group">
                     <label>2. Vendor / Customer Name <span style="color:#dc2626;">*</span></label>
                     <input type="text" name="company_name" value="{{ old('company_name', $vendor->company_name ?? '') }}" required placeholder="Legal entity name" {{ $disabled }}>
+                    <span id="company_name_error" class="error-text"></span>
                 </div>
 
                 {{-- 3. Registered Address --}}
@@ -66,27 +67,47 @@
                 <div class="form-group">
                     <label>Street Name & Number <span style="color:#dc2626;">*</span></label>
                     <input type="text" name="street_address" value="{{ old('street_address', $vendor->street_address ?? '') }}" required placeholder="Street name and number" {{ $disabled }}>
+                    <span id="street_address_error" class="error-text"></span>
                     @error('street_address')<span style="font-size:.72rem;color:#dc2626;">{{ $message }}</span>@enderror
                 </div>
                 <div class="grid-2">
-                    <div class="form-group"><label>City / Town <span style="color:#dc2626;">*</span></label><input type="text" name="city" value="{{ old('city', $vendor->city ?? '') }}" required placeholder="City or town" {{ $disabled }}>@error('city')<span style="font-size:.72rem;color:#dc2626;">{{ $message }}</span>@enderror</div>
-                    <div class="form-group"><label>Province / State <span style="color:#dc2626;">*</span></label><input type="text" name="province_state" value="{{ old('province_state', $vendor->province_state ?? $vendor->state ?? '') }}" required placeholder="Province or state" {{ $disabled }}>@error('province_state')<span style="font-size:.72rem;color:#dc2626;">{{ $message }}</span>@enderror</div>
+                    <div class="form-group"><label>City / Town <span style="color:#dc2626;">*</span></label>
+                        <input type="text" name="city" value="{{ old('city', $vendor->city ?? '') }}" required placeholder="City or town" {{ $disabled }}>
+                        <span id="city_error" class="error-text"></span>
+                    </div>
+                    <div class="form-group"><label>Province / State <span style="color:#dc2626;">*</span></label>
+                        <input type="text" name="province_state" value="{{ old('province_state', $vendor->province_state ?? $vendor->state ?? '') }}" required placeholder="Province or state" {{ $disabled }}>
+                        <span id="province_state_error" class="error-text"></span>
+                    </div>
                 </div>
                 <div class="grid-2">
-                    <div class="form-group"><label>Pin Code <span style="color:#dc2626;">*</span></label><input type="text" name="pincode" value="{{ old('pincode', $vendor->pincode ?? '') }}" required placeholder="Postal / Pin code" {{ $disabled }}>@error('pincode')<span style="font-size:.72rem;color:#dc2626;">{{ $message }}</span>@enderror</div>
-                    <div class="form-group"><label>Country <span style="color:#dc2626;">*</span></label><input type="text" name="country" value="{{ old('country', $vendor->country ?? '') }}" required placeholder="Country" {{ $disabled }}>@error('country')<span style="font-size:.72rem;color:#dc2626;">{{ $message }}</span>@enderror</div>
+                    <div class="form-group"><label>Pin Code <span style="color:#dc2626;">*</span></label>
+                        <input type="text" name="pincode" value="{{ old('pincode', $vendor->pincode ?? '') }}" required placeholder="Postal / Pin code" {{ $disabled }}>
+                        <span id="pincode_error" class="error-text"></span>
+                    </div>
+                    <div class="form-group"><label>Country <span style="color:#dc2626;">*</span></label>
+                        <input type="text" name="country" value="{{ old('country', $vendor->country ?? '') }}" required placeholder="Country" {{ $disabled }}>
+                        <span id="country_error" class="error-text"></span>
+                    </div>
                 </div>
 
                 {{-- 4. Contact Persons --}}
                 <div class="grid-2">
-                    <div class="form-group"><label>4. Contact Person <span style="color:#dc2626;">*</span></label><input type="text" name="contact_person" value="{{ old('contact_person', $vendor->contact_person ?? '') }}" required placeholder="Primary contact name" {{ $disabled }}>@error('contact_person')<span style="font-size:.72rem;color:#dc2626;">{{ $message }}</span>@enderror</div>
-                    <div class="form-group"><label>Finance Contact Person</label><input type="text" name="finance_contact_person" value="{{ old('finance_contact_person', $vendor->finance_contact_person ?? '') }}" placeholder="Finance contact name" {{ $disabled }}></div>
+                    <div class="form-group"><label>4. Contact Person <span style="color:#dc2626;">*</span></label>
+                        <input type="text" name="contact_person" value="{{ old('contact_person', $vendor->contact_person ?? '') }}" required placeholder="Primary contact name" {{ $disabled }}>
+                        <span id="contact_person_error" class="error-text"></span>
+                    </div>
+                    <div class="form-group"><label>Finance Contact Person</label>
+                        <input type="text" name="finance_contact_person" value="{{ old('finance_contact_person', $vendor->finance_contact_person ?? '') }}" placeholder="Finance contact name" {{ $disabled }}>
+                        <span id="finance_contact_person_error" class="error-text"></span>
+                    </div>
                 </div>
 
                 {{-- 5. Mobile --}}
                 <div class="form-group">
                     <label>5. Mobile No <span style="color:#dc2626;">*</span></label>
                     <input type="text" name="phone" value="{{ old('phone', $vendor->phone ?? '') }}" required placeholder="+91 98765 43210" {{ $disabled }}>
+                    <span id="phone_error" class="error-text"></span>
                     @error('phone')<span style="font-size:.72rem;color:#dc2626;">{{ $message }}</span>@enderror
                 </div>
 
@@ -94,6 +115,7 @@
                 <div class="form-group">
                     <label>6. Email I.D <span style="color:#dc2626;">*</span></label>
                     <input type="email" name="email" value="{{ old('email', $vendor->email ?? auth()->user()->email) }}" required placeholder="vendor@company.com" {{ $disabled }}>
+                    <span id="email_error" class="error-text"></span>
                     @error('email')<span style="font-size:.72rem;color:#dc2626;">{{ $message }}</span>@enderror
                 </div>
 
@@ -103,8 +125,9 @@
                         <div class="form-group" style="margin-bottom:0;">
                             <label>7. IEC Code<span style="color:#dc2626;">*</span></label>
                             <input type="text" name="iec_code" value="{{ old('iec_code', $vendor->iec_code ?? '') }}" required placeholder="Import Export Code" {{ $disabled }}>
+                            <span id="iec_code_error" class="error-text"></span>
                             @error('iec_code')<span style="font-size:.72rem;color:#dc2626;">{{ $message }}</span>@enderror
-</div>
+                        </div>
                     </div>
                     <div style="min-width:200px;">
                         <label style="font-size:.78rem;font-weight:600;color:#374151;display:block;margin-bottom:.3rem;">IEC Certificate<span style="color:#dc2626;">*</span></label>
@@ -119,33 +142,33 @@
                     <div style="flex:1;">
                         <div class="form-group" style="margin-bottom:0;">
                             <label>8. MSME Number</label>
-                            <input type="text" name="msme_number" value="{{ old('msme_number', $vendor->msme_number ?? '') }}" placeholder="MSME registration number"   {{ $disabled }}>
-                                            </div>
+                            <input type="text" name="msme_number" value="{{ old('msme_number', $vendor->msme_number ?? '') }}" placeholder="MSME registration number" {{ $disabled }}>
+                        </div>
                     </div>
 
-                <div style="min-width:200px;">
+                    <div style="min-width:200px;">
                         <label style="font-size:.78rem;font-weight:600;color:#374151;display:block;margin-bottom:.3rem;">MSME Certificate</label>
-                        @if(!$isLocked)<input type="file" name="documents[msme_certificate]" accept=".pdf,.jpg,.jpeg,.png"   style="font-size:.78rem;">@endif
+                        @if(!$isLocked)<input type="file" name="documents[msme_certificate]" accept=".pdf,.jpg,.jpeg,.png" style="font-size:.78rem;">@endif
                         @php $msmeDoc = $documents->where('document_type', 'msme_certificate')->first(); @endphp
                         @if($msmeDoc)<div style="font-size:.68rem;color:#16a34a;margin-top:.2rem;"><i class="fas fa-check-circle"></i> Uploaded</div>@endif
                     </div>
                 </div>
-            {{-- 9. REX Number --}}
-            <div class="form-group">
-                <label>9. REX Number <span style="font-size:.68rem;color:#94a3b8;">(Optional)</span></label>
-                <input type="text"
-                    name="rex_number"
-                    value="{{ old('rex_number', $vendor->rex_number ?? '') }}"
-                    placeholder="Enter 20 character alphanumeric REX"
-                    maxlength="20"
-                    pattern="[A-Za-z0-9]{20}"
-                    title="REX must be exactly 20 alphanumeric characters"
-                    {{ $disabled }}>
-                <span id="rex_error" style="font-size:.72rem;color:#dc2626;"></span>
-                @error('rex_number')
+                {{-- 9. REX Number --}}
+                <div class="form-group">
+                    <label>9. REX Number <span style="font-size:.68rem;color:#94a3b8;">(Optional)</span></label>
+                    <input type="text"
+                        name="rex_number"
+                        value="{{ old('rex_number', $vendor->rex_number ?? '') }}"
+                        placeholder="Enter 20 character alphanumeric REX"
+                        maxlength="20"
+                        pattern="[A-Za-z0-9]{20}"
+                        title="REX must be exactly 20 alphanumeric characters"
+                        {{ $disabled }}>
+                    <span id="rex_number_error" class="error-text"></span>
+                     @error('rex_number')
                     <span style="font-size:.72rem;color:#dc2626;">{{ $message }}</span>
-                @enderror
-            </div>
+                    @enderror
+                </div>
                 {{-- 10. Landline --}}
                 <div class="form-group"><label>10. Landline No</label><input type="text" name="landline" value="{{ old('landline', $vendor->landline ?? '') }}" placeholder="Landline with STD code" {{ $disabled }}></div>
 
@@ -157,13 +180,29 @@
                 {{-- Bank Details --}}
                 <div style="font-size:.9rem;font-weight:700;color:#0d1b2a;margin-bottom:.75rem;"><i class="fas fa-university" style="margin-right:.4rem;color:#1e3a5f;"></i> Bank Details</div>
 
-                <div class="form-group"><label>12. Bank Name <span style="color:#dc2626;">*</span></label><input type="text" name="bank_name" value="{{ old('bank_name', $vendor->bank_name ?? '') }}" required placeholder="Bank name" {{ $disabled }}>@error('bank_name')<span style="font-size:.72rem;color:#dc2626;">{{ $message }}</span>@enderror</div>
+                <div class="form-group"><label>12. Bank Name <span style="color:#dc2626;">*</span></label>
+                    <input type="text" name="bank_name" value="{{ old('bank_name', $vendor->bank_name ?? '') }}" required placeholder="Bank name" {{ $disabled }}>
+                    <span id="bank_name_error" class="error-text"></span>
+                    @error('bank_name')<span style="font-size:.72rem;color:#dc2626;">{{ $message }}</span>@enderror
+                </div>
 
-                <div class="form-group"><label>13. IFSC Code <span style="color:#dc2626;">*</span></label><input type="text" name="bank_ifsc" value="{{ old('bank_ifsc', $vendor->bank_ifsc ?? '') }}" required placeholder="e.g. SBIN0001234" {{ $disabled }}>@error('bank_ifsc')<span style="font-size:.72rem;color:#dc2626;">{{ $message }}</span>@enderror</div>
+                <div class="form-group"><label>13. IFSC Code <span style="color:#dc2626;">*</span></label>
+                    <input type="text" name="bank_ifsc" value="{{ old('bank_ifsc', $vendor->bank_ifsc ?? '') }}" required placeholder="e.g. SBIN0001234" {{ $disabled }}>
+                    <span id="bank_ifsc_error" class="error-text"></span>
+                    @error('bank_ifsc')<span style="font-size:.72rem;color:#dc2626;">{{ $message }}</span>@enderror
+                </div>
 
-                <div class="form-group"><label>14. SWIFT / BIC Code <span style="color:#dc2626;">*</span></label><input type="text" name="bank_swift_code" value="{{ old('bank_swift_code', $vendor->bank_swift_code ?? '') }}" required placeholder="SWIFT/BIC code (mandatory)" {{ $disabled }}>@error('bank_swift_code')<span style="font-size:.72rem;color:#dc2626;">{{ $message }}</span>@enderror</div>
+                <div class="form-group"><label>14. SWIFT / BIC Code <span style="color:#dc2626;">*</span></label>
+                    <input type="text" name="bank_swift_code" value="{{ old('bank_swift_code', $vendor->bank_swift_code ?? '') }}" required placeholder="SWIFT/BIC code (mandatory)" {{ $disabled }}>
+                    <span id="bank_swift_code_error" class="error-text"></span>
+                    @error('bank_swift_code')<span style="font-size:.72rem;color:#dc2626;">{{ $message }}</span>@enderror
+                </div>
 
-                <div class="form-group"><label>15. Account Number <span style="color:#dc2626;">*</span></label><input type="text" name="bank_account_number" value="{{ old('bank_account_number', $vendor->bank_account_number ?? '') }}" required placeholder="Bank account number" {{ $disabled }}>@error('bank_account_number')<span style="font-size:.72rem;color:#dc2626;">{{ $message }}</span>@enderror</div>
+                <div class="form-group"><label>15. Account Number <span style="color:#dc2626;">*</span></label>
+                    <input type="text" name="bank_account_number" value="{{ old('bank_account_number', $vendor->bank_account_number ?? '') }}" required placeholder="Bank account number" {{ $disabled }}>
+                    <span id="bank_account_number_error" class="error-text"></span>
+                    @error('bank_account_number')<span style="font-size:.72rem;color:#dc2626;">{{ $message }}</span>@enderror
+                </div>
 
                 {{-- Vendor Contract — Download template + Upload signed copy --}}
                 <hr style="border:none;border-top:2px solid #e8ecf1;margin:1.5rem 0;">
@@ -196,24 +235,24 @@
                                 Step 2 — Upload Signed Contract <span style="color:#dc2626;">*</span>
                             </div>
                             @if($signedContractDoc)
-                                <div style="font-size:.75rem;color:#166534;margin-bottom:.35rem;">
-                                    Signed contract uploaded.
-                                    <a href="{{ asset('storage/app/public/' . $signedContractDoc->file_path) }}" target="_blank"
-                                        style="color:#1e40af;font-weight:700;text-decoration:none;margin-left:.3rem;">
-                                        <i class="fas fa-eye" style="margin-right:.15rem;"></i> View uploaded file
-                                    </a>
-                                </div>
+                            <div style="font-size:.75rem;color:#166534;margin-bottom:.35rem;">
+                                Signed contract uploaded.
+                                <a href="{{ asset('storage/app/public/' . $signedContractDoc->file_path) }}" target="_blank"
+                                    style="color:#1e40af;font-weight:700;text-decoration:none;margin-left:.3rem;">
+                                    <i class="fas fa-eye" style="margin-right:.15rem;"></i> View uploaded file
+                                </a>
+                            </div>
                             @else
-                                <div style="font-size:.75rem;color:#92400e;margin-bottom:.35rem;">
-                                    No signed contract uploaded yet. Please sign and upload before submitting.
-                                </div>
+                            <div style="font-size:.75rem;color:#92400e;margin-bottom:.35rem;">
+                                No signed contract uploaded yet. Please sign and upload before submitting.
+                            </div>
                             @endif
                             @if(!$isLocked)
-                                <input type="file" name="documents[signed_contract]" accept=".pdf,.jpg,.jpeg,.png" style="font-size:.78rem;">
-                                <div style="font-size:.68rem;color:#64748b;margin-top:.25rem;">Accepted: PDF, JPG, PNG (max 10MB)</div>
+                            <input type="file" name="documents[signed_contract]" accept=".pdf,.jpg,.jpeg,.png" style="font-size:.78rem;">
+                            <div style="font-size:.68rem;color:#64748b;margin-top:.25rem;">Accepted: PDF, JPG, PNG (max 10MB)</div>
                             @endif
                             @error('documents.signed_contract')
-                                <span style="font-size:.72rem;color:#dc2626;display:block;margin-top:.25rem;">{{ $message }}</span>
+                            <span style="font-size:.72rem;color:#dc2626;display:block;margin-top:.25rem;">{{ $message }}</span>
                             @enderror
                         </div>
                     </div>
@@ -268,95 +307,238 @@
         @endif
     </form>
 </div>
+<!-- Frontend Validation -->
+ <script src="https://code.jquery.com/jquery-3.6.4.min.js"></script>
 <script>
-//const gstInput = document.getElementById('gst_number');
-const gstError = document.getElementById('gst_error');
- let gstInput = document.querySelector('[name="gst_number"]') ;
-    let rex = document.querySelector('[name="rex_number"]').value.trim();
+$(document).ready(function() {
 
-function validateGST(gst) {
-    const regex = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/;
-    return regex.test(gst);
-}
+    const form = $('#kycForm');
 
-// Validate on change
-gstInput.addEventListener('change', function () {
-    let gst = this.value.toUpperCase().trim();
-    this.value = gst;
-
-    if (!validateGST(gst)) {
-        gstError.innerText = "Invalid GST number format";
-        this.style.borderColor = "red";
-    } else {
-        gstError.innerText = "";
-        this.style.borderColor = "green";
+    // Helper Functions
+    function showError(fieldName, message) {
+        $(`#${fieldName}_error`).text(message);
+        $(`[name="${fieldName}"]`).addClass('is-invalid');
     }
-});
 
-// Optional: validate while typing
-gstInput.addEventListener('input', function () {
-    let gst = this.value.toUpperCase();
-    this.value = gst;
-
-    if (gst.length === 15) {
-        if (!validateGST(gst)) {
-            gstError.innerText = "Invalid GST number";
-            this.style.borderColor = "red";
-        } else {
-            gstError.innerText = "";
-            this.style.borderColor = "green";
-        }
-    } else {
-        gstError.innerText = "";
-        this.style.borderColor = "";
+    function clearError(fieldName) {
+        $(`#${fieldName}_error`).text('');
+        $(`[name="${fieldName}"]`).removeClass('is-invalid');
     }
-});
 
-// ── REX validation ─────────────────────────────────────
-const rexInput = document.querySelector('[name="rex_number"]');
-const rexError = document.getElementById('rex_error');
+    // ==================== REAL-TIME VALIDATION ====================
 
-function validateREX(val) {
-    // Optional field — blank is valid
-    if (!val) return true;
-    // Must be exactly 20 alphanumeric characters
-    return /^[A-Za-z0-9]{20}$/.test(val);
-}
+    // GST Number
+    $('[name="gst_number"]').on('input', function() {
+        let gst = this.value.toUpperCase().trim();
+        this.value = gst;
 
-if (rexInput) {
-    rexInput.addEventListener('input', function() {
-        this.value = this.value.toUpperCase();
-    });
-    rexInput.addEventListener('change', function() {
-        const val = this.value.trim();
-        if (val && !validateREX(val)) {
-            if (rexError) rexError.innerText = "REX must be exactly 20 alphanumeric characters.";
-            this.style.borderColor = "red";
+        const regex = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/;
+        if (gst.length > 0 && !regex.test(gst)) {
+            showError('gst_number', 'Invalid GST format (e.g. 22AAAAA0000A1Z5)');
         } else {
-            if (rexError) rexError.innerText = "";
-            this.style.borderColor = val ? "green" : "";
+            clearError('gst_number');
         }
     });
-}
 
-// ── Form submit guard ──────────────────────────────────
-document.querySelector('form').addEventListener('submit', function(e) {
-    const gst = (gstInput.value || '').trim().toUpperCase();
-    if (!validateGST(gst)) {
-        e.preventDefault();
-        if (gstError) gstError.innerText = "Invalid GST number format. Example: 22AAAAA0000A1Z5";
-        gstInput.focus();
-        alert("Please enter a valid GST number (15 characters, e.g. 22AAAAA0000A1Z5)");
-        return false;
-    }
-    const rexVal = (rexInput && rexInput.value || '').trim();
-    if (rexVal && !validateREX(rexVal)) {
-        e.preventDefault();
-        if (rexError) rexError.innerText = "REX must be exactly 20 alphanumeric characters.";
-        rexInput.focus();
-        alert("REX Number must be exactly 20 alphanumeric characters, or leave it blank.");
-        return false;
-    }
+    // Company Name
+    $('[name="company_name"]').on('input', function() {
+        if ($(this).val().trim().length < 3) {
+            showError('company_name', 'Company name must be at least 3 characters');
+        } else {
+            clearError('company_name');
+        }
+    });
+
+    // Street Address
+    $('[name="street_address"]').on('input', function() {
+        if ($(this).val().trim().length < 3) {
+            showError('street_address', 'Street address must be at least 3 characters');
+        } else {
+            clearError('street_address');
+        }
+    });
+     $('[name="city"]').on('input', function() {
+        if ($(this).val().trim().length < 3) {
+            showError('city', 'City must be at least 3 characters');
+        } else {
+            clearError('city');
+        }
+    });
+     $('[name="pincode"]').on('input', function() {
+        if ($(this).val().trim().length < 3) {
+            showError('pincode', 'Pincode must be at least 3 characters');
+        } else {
+            clearError('pincode');
+        }
+    });
+    $('[name="province_state"]').on('input', function() {
+        if ($(this).val().trim().length < 3) {
+            showError('province_state', 'Province/State must be at least 3 characters');
+        } else {
+            clearError('province_state');
+        }
+    });
+    // Contact Person
+    $('[name="contact_person"]').on('input', function() {
+        if ($(this).val().trim().length < 3) {
+            showError('contact_person', 'Contact person name must be at least 3 characters');
+        } else {
+            clearError('contact_person');
+        }
+    });
+
+    // Phone
+    $('[name="phone"]').on('input', function() {
+        let phone = $(this).val().trim();
+        if (phone && !/^\+?\d{10,15}$/.test(phone)) {
+            showError('phone', 'Enter valid phone number (10-15 digits)');
+        } else {
+            clearError('phone');
+        }
+    });
+
+    // Email
+    $('[name="email"]').on('input', function() {
+        let email = $(this).val().trim();
+        if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+            showError('email', 'Enter a valid email address');
+        } else {
+            clearError('email');
+        }
+    });
+
+    // REX Number (Optional)
+    $('[name="rex_number"]').on('input', function() {
+        this.value = this.value.toUpperCase().trim();
+    });
+
+    $('[name="rex_number"]').on('change', function() {
+        const val = $(this).val().trim();
+        if (val && !/^[A-Za-z0-9]{20}$/.test(val)) {
+            showError('rex_number', 'REX must be exactly 20 alphanumeric characters');
+        } else {
+            clearError('rex_number');
+        }
+    });
+
+    
+    // Bank Name
+    $('[name="bank_name"]').on('input', function() {
+        if ($(this).val().trim().length < 3) {
+            showError('bank_name', 'Bank name must be at least 3 characters');
+        } else {
+            clearError('bank_name');
+        }
+    });
+
+    // IFSC Code Validation (Indian Format)
+    $('[name="bank_ifsc"]').on('input', function() {
+        let val = $(this).val().toUpperCase().trim();
+        $(this).val(val);
+
+        const ifscRegex = /^[A-Z]{4}0[A-Z0-9]{6}$/;
+        if (val && !ifscRegex.test(val)) {
+            showError('bank_ifsc', 'Invalid IFSC Code (e.g. SBIN0001234)');
+        } else {
+            clearError('bank_ifsc');
+        }
+    });
+
+    // SWIFT / BIC Code Validation
+    $('[name="bank_swift_code"]').on('input', function() {
+        let val = $(this).val().toUpperCase().trim();
+        $(this).val(val);
+
+        const swiftRegex = /^[A-Z]{6}[A-Z0-9]{2}([A-Z0-9]{3})?$/;
+        if (val && !swiftRegex.test(val)) {
+            showError('bank_swift_code', 'Invalid SWIFT/BIC Code (e.g. SBININBB123)');
+        } else {
+            clearError('bank_swift_code');
+        }
+    });
+
+    // Bank Account Number Validation
+    $('[name="bank_account_number"]').on('input', function() {
+        let val = $(this).val().trim();
+        if (val && (val.length < 6 || val.length > 20)) {
+            showError('bank_account_number', 'Account number should be 6-20 digits');
+        } else {
+            clearError('bank_account_number');
+        }
+    });
+
+
+
+    // ==================== FORM SUBMIT VALIDATION ====================
+    form.on('submit', function(e) {
+        let isValid = true;
+
+        // Required Fields
+        const required = {
+            'gst_number': 'GST Number is required',
+            'company_name': 'Company Name is required',
+            'street_address': 'Street Address is required',
+            'city': 'City is required',
+            'province_state': 'Province/State is required',
+            'pincode': 'Pin Code is required',
+            'country': 'Country is required',
+            'contact_person': 'Contact Person is required',
+            'phone': 'Phone Number is required',
+            'email': 'Email is required',
+            'bank_name': 'Bank Name is required',
+            'bank_ifsc': 'IFSC Code is required',
+            'bank_swift_code': 'SWIFT/BIC Code is required',
+            'bank_account_number': 'Account Number is required'
+        };
+
+        $.each(required, function(field, msg) {
+            if (!$('[name="' + field + '"]').val().trim()) {
+                showError(field, msg);
+                isValid = false;
+            }
+        });
+
+        // GST Format Check
+        const gst = $('[name="gst_number"]').val().trim();
+        if (!/^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/.test(gst)) {
+            showError('gst_number', 'Invalid GST Number format');
+            isValid = false;
+        }
+
+        // REX Check (if provided)
+        const rex = $('[name="rex_number"]').val().trim();
+        if (rex && !/^[A-Za-z0-9]{20}$/.test(rex)) {
+            showError('rex_number', 'REX must be exactly 20 alphanumeric characters');
+            isValid = false;
+        }
+
+        if (!isValid) {
+            e.preventDefault();
+            alert("Please fill all required fields correctly.");
+            return false;
+        }
+
+        // Final Confirmation
+        if (!confirm('Are you sure you want to submit the KYC registration form?')) {
+            e.preventDefault();
+            return false;
+        }
+    });
+
 });
 </script>
+
+<style>
+.is-invalid {
+    border-color: #dc2626 !important;
+    box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.1);
+}
+.error-text {
+    font-size: 0.72rem;
+    color: #dc2626;
+    display: block;
+    margin-top: 4px;
+}
+</style>
+  
 @endsection

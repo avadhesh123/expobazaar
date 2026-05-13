@@ -127,8 +127,8 @@
                             <div style="font-size:.82rem;">{{ $con->vendor->company_name ?? '—' }}</div>
                             <div style="font-size:.68rem;color:#94a3b8;">{{ $con->vendor->vendor_code ?? '' }}</div>
                         </td>
-                        <td>{{ $con->factory_location ?? '—' }}</td>
-                        <td>{{ $con->goods_ready_date ? date('d M Y', strtotime($con->goods_ready_date)) : '—' }}</td>
+                        <td>{{ $con->liveSheet->factory_location ?? '—' }}</td>
+                        <td>{{ $con->liveSheet && $con->liveSheet->goods_ready_date ? $con->liveSheet->goods_ready_date->format('d M Y') : '—' }}</td>
                         <td>@php $fl=['US'=>'🇺🇸','NL'=>'🇳🇱','IN'=>'🇮🇳']; @endphp {{ $fl[$con->destination_country] ?? '' }} {{ $con->destination_country }}</td>
                         <td style="text-align:center;font-weight:600;">{{ $con->total_items }}</td>
                         <td style="font-family:monospace;font-weight:700;">{{ number_format($con->total_cbm, 2) }} <span style="font-size:.65rem;color:#94a3b8;">CBM</span></td>
@@ -148,15 +148,21 @@
 
 @push('scripts')
 <script>
-    var fclCapacity = {
-        {
-            $fclCapacity
-        }
-    };
+    var capacities = { 'FCL': 65, 'LCL': 30, 'AIR': 10 };
+    var fclCapacity = capacities[document.querySelector('[name="shipment_type"]').value] || 65;
+
+    // Update capacity when shipment type changes
+    document.querySelector('[name="shipment_type"]').addEventListener('change', function() {
+        fclCapacity = capacities[this.value] || 65;
+        updateCbm();
+    });
 
     function toggleAll(m) {
-        document.querySelectorAll('.con-check').forEach(function(c) {
-            c.checked = m.checked;
+        document.querySelectorAll('.consignment-row').forEach(function(row) {
+            if (row.style.display !== 'none') {
+                var cb = row.querySelector('.con-check');
+                if (cb) cb.checked = m.checked;
+            }
         });
         updateCbm();
     }
@@ -164,7 +170,10 @@
     function updateCbm() {
         var t = 0;
         document.querySelectorAll('.con-check:checked').forEach(function(c) {
-            t += parseFloat(c.dataset.cbm) || 0;
+            var row = c.closest('.consignment-row');
+            if (row && row.style.display !== 'none') {
+                t += parseFloat(c.dataset.cbm) || 0;
+            }
         });
         var p = fclCapacity > 0 ? (t / fclCapacity) * 100 : 0;
         document.getElementById('selectedCbmText').textContent = t.toFixed(2) + ' / ' + fclCapacity + ' CBM';
@@ -175,17 +184,26 @@
     }
 
     function validateShipment() {
-        var c = document.querySelectorAll('.con-check:checked');
-        if (c.length === 0) {
+        var checked = [];
+        document.querySelectorAll('.con-check:checked').forEach(function(c) {
+            var row = c.closest('.consignment-row');
+            if (row && row.style.display !== 'none') checked.push(c);
+        });
+        if (checked.length === 0) {
             alert('Select at least one consignment.');
             return false;
         }
-        return confirm('Create shipment with ' + c.length + ' consignment(s)?');
+        // Uncheck hidden rows before submit
+        document.querySelectorAll('.con-check:checked').forEach(function(c) {
+            var row = c.closest('.consignment-row');
+            if (row && row.style.display === 'none') c.checked = false;
+        });
+        return confirm('Create shipment with ' + checked.length + ' consignment(s)?');
     }
 </script>
 @endpush
 
- 
+
 <script>
 (function() {
     var select = document.getElementById('companyFilter');
@@ -194,6 +212,15 @@
         document.querySelectorAll('.consignment-row').forEach(function(row) {
             row.style.display = (row.getAttribute('data-company-code') === selected) ? '' : 'none';
         });
+        // Uncheck hidden rows and update CBM
+        document.querySelectorAll('.consignment-row').forEach(function(row) {
+            if (row.style.display === 'none') {
+                var cb = row.querySelector('.con-check');
+                if (cb) cb.checked = false;
+            }
+        });
+        document.getElementById('selectAll').checked = false;
+        if (typeof updateCbm === 'function') updateCbm();
     }
     select.addEventListener('change', filterConsignments);
     filterConsignments();

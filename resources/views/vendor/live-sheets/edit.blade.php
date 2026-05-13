@@ -6,7 +6,7 @@
 <div style="display:flex;gap:.5rem;margin-bottom:1.25rem;">
     <a href="{{ route('vendor.live-sheets') }}" class="btn btn-outline btn-sm"><i class="fas fa-arrow-left"></i> Live Sheets</a>
     <a href="{{ route('vendor.live-sheets.download', $liveSheet) }}" class="btn btn-secondary btn-sm"><i class="fas fa-download"></i> Download Pre-filled CSV</a>
-    <a href="{{ route('vendor.live-sheets.blank-template') }}" class="btn btn-outline btn-sm"><i class="fas fa-file-excel" style="color:#16a34a;"></i> Blank Template</a>
+    <!-- <a href="{{ route('vendor.live-sheets.blank-template') }}" class="btn btn-outline btn-sm"><i class="fas fa-file-excel" style="color:#16a34a;"></i> Blank Template</a> -->
 </div>
 
 @if($liveSheet->is_locked)

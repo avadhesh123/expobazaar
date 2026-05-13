@@ -1275,7 +1275,7 @@ class VendorController extends Controller
                 'status'               => 'created',
                 'total_items'          => $items->sum('quantity'),
                 'total_cbm'            => $items->sum('total_cbm'),
-                'total_value'          => $items->sum('total_price'),
+                'total_value'          =>$items->sum('unit_price'),// $items->sum('total_price'),
                 'ex_factory_date'      => $liveSheet->ex_factory_date,
                 'final_inspection_date' => $liveSheet->final_inspection_date,
                 'created_by'           => auth()->id(),
@@ -1348,7 +1348,99 @@ class VendorController extends Controller
     /**
      * Download live sheet template pre-filled with SKUs for vendor to fill
      */
-    public function downloadLiveSheetTemplate(LiveSheet $liveSheet)
+     public function downloadLiveSheetTemplate(LiveSheet $liveSheet)
+    {
+        $vendor = auth()->user()->vendor;
+        if ($liveSheet->vendor_id !== $vendor->id) {
+            abort(403);
+        }
+
+        $currency = '€';
+        if ($vendor->company_code == '2200') {
+            $currency = '$';
+        }
+
+        $liveSheet->load('items.product');
+
+        $headers = "S.no,Vendor SKU,Barcode,Product Name,Product Description (Min 100 words),Hsn & Hts Code,Duty %,Product Length (Inches),Product Width (Inches),Product Height (Inches),Product Weight (Gram),Material Composition,Other Material,Color,Product Finish,Category,Sub Category,Qty In Inner Pack,Inner Carton Length (Inches),Inner Carton Width (Inches),Inner Carton Height (Inches),Qty In Master Pack,Master Carton Length (Inches),Master Carton Width (Inches),Master Carton Height (Inches),Master Carton Weight (Kg),Qty Offered (Units/Sets),Vendor FOB Mumbai ({$currency})\n";
+
+        $csv = $headers;
+
+        // Track totals for numeric columns
+        // Column indexes: 0=Sno, 6=Duty%, 7=Length, 8=Width, 9=Height, 10=Weight,
+        // 17=InnerQty, 18=InnerL, 19=InnerW, 20=InnerH, 21=MasterQty, 22=MasterL,
+        // 23=MasterW, 24=MasterH, 25=MasterWt, 26=QtyOffered, 27=FOB
+        $totals = array_fill(0, 28, 0);
+        $numericCols = [6, 7, 8, 9, 10, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27];
+
+        foreach ($liveSheet->items as $idx => $item) {
+            $p = $item->product;
+            $d = $item->product_details ?? [];
+
+            $row = [
+                $idx + 1,
+                '"' . str_replace('"', '""', $p->sku ?? '') . '"',
+                '', // Barcode
+                '"' . str_replace('"', '""', $p->name ?? '') . '"',
+                '', // Description
+                '', // HSN
+                '', // Duty %
+                $d['length_inches'] ?? '',
+                $d['width_inches'] ?? '',
+                $d['height_inches'] ?? '',
+                $d['weight_grams'] ?? '',
+                '"' . str_replace('"', '""', $d['material'] ?? '') . '"',
+                '', // Other Material
+                '"' . str_replace('"', '""', $d['color'] ?? '') . '"',
+                '"' . str_replace('"', '""', $d['finish'] ?? '') . '"',
+                '"' . str_replace('"', '""', $d['category'] ?? '') . '"',
+                '"' . str_replace('"', '""', $d['sub_category'] ?? '') . '"',
+                '', // Inner pack qty
+                '', // Inner Carton Length
+                '', // Inner Carton Width
+                '', // Inner Carton Height
+                '', // Qty In Master Pack
+                '', // Master Carton Length
+                '', // Master Carton Width
+                '', // Master Carton Height
+                '', // Master Carton Weight
+                '', // Qty Offered
+                '"' . str_replace('"', '""', $p->vendor_price ?? '') . '"',
+            ];
+
+            // Accumulate totals for numeric columns
+            foreach ($numericCols as $ci) {
+                $val = str_replace('"', '', $row[$ci] ?? '');
+                if (is_numeric($val)) {
+                    $totals[$ci] += floatval($val);
+                }
+            }
+
+            $csv .= implode(',', $row) . "\n";
+        }
+
+        // Add Line Total row
+        $totalRow = [];
+        for ($i = 0; $i < 28; $i++) {
+            if ($i === 0) {
+                $totalRow[] = ''; // S.no
+            } elseif ($i === 1) {
+                $totalRow[] = '"LINE TOTAL"';
+            } elseif (in_array($i, $numericCols) && $totals[$i] > 0) {
+                $totalRow[] = round($totals[$i], 2);
+            } else {
+                $totalRow[] = '';
+            }
+        }
+        $csv .= implode(',', $totalRow) . "\n";
+
+        $filename = "live-sheet-{$liveSheet->live_sheet_number}.csv";
+        return response($csv, 200, [
+            'Content-Type' => 'text/csv',
+            'Content-Disposition' => "attachment; filename=\"{$filename}\"",
+        ]);
+    }
+    public function downloadLiveSheetTemplateOLD(LiveSheet $liveSheet)
     {
         $vendor = auth()->user()->vendor;
         //print_r($liveSheet->toArray());exit;
