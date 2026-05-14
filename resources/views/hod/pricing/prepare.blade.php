@@ -49,10 +49,10 @@
                         <th style="min-width:80px;">SAP</th>
                         <th style="min-width:130px;">Vendor Name</th>
                         <th style="min-width:50px;text-align:center;">Qty</th>
-                        <th style="min-width:70px;text-align:right;">FOB</th>
-                        <th style="min-width:70px;text-align:right;">WSP</th>
-                        <th style="min-width:80px;text-align:right;background:#fff7ed;">Last Mile</th>
-                        <th style="min-width:90px;text-align:right;background:#f0fdf4;border-right:2px solid #bbf7d0;">Retail Price</th>
+                        <th style="min-width:70px;text-align:center;">FOB</th>
+                        <th style="min-width:70px;text-align:center;">WSP</th>
+                        <th style="min-width:80px;text-align:center;background:#fff7ed;">Last Mile</th>
+                        <th style="min-width:90px;text-align:center;background:#f0fdf4;border-right:2px solid #bbf7d0;">Retail Price</th>
                         @foreach($channels as $ch)
                         @php $factor = floatval($channelFactors[$ch->id]['factor'] ?? 1.0); @endphp
                         <th style="min-width:100px;text-align:center;font-size:.68rem;padding:.4rem .3rem;">
@@ -71,10 +71,10 @@
                 <tbody>
                     @foreach($items as $idx => $item)
                     @php
-                        $ex = $item['existing'];
-                        $wsp = floatval($item['wsp']);
-                        $lastMile = $ex ? floatval($ex->last_mile ?? 0) : 0;
-                        $retailPrice = $wsp + $lastMile;
+                    $ex = $item['existing'];
+                    $wsp = floatval($item['wsp']);
+                    $lastMile = $ex ? floatval($ex->last_mile ?? 0) : 0;
+                    $retailPrice = $wsp + $lastMile;
                     @endphp
                     <tr>
                         <td style="font-family:monospace;font-weight:600;font-size:.78rem;">
@@ -105,8 +105,8 @@
                         </td>
                         @foreach($channels as $ch)
                         @php
-                            $factor = floatval($channelFactors[$ch->id]['factor'] ?? 1.0);
-                            $channelPrice = round($wsp * $factor, 2);
+                        $factor = floatval($channelFactors[$ch->id]['factor'] ?? 1.0);
+                        $channelPrice = round($wsp * $factor, 2);
                         @endphp
                         <td style="text-align:right;font-family:monospace;font-size:.78rem;" id="ch-{{ $idx }}-{{ $ch->id }}">
                             ${{ number_format($channelPrice, 2) }}
@@ -134,84 +134,120 @@
 </div>
 
 <script>
-var channelFactors = @json(collect($channelFactors)->mapWithKeys(fn($v, $k) => [$k => $v['factor']]));
-var totalRows = {{ $items->count() }};
-var csrfToken = '{{ csrf_token() }}';
-var factorSaveUrl = "{{ route('hod.pricing.update-channel-factor', $asn) }}";
-function updateRow(idx, wsp) {
-    var lastMile = parseFloat(document.querySelector('[name="pricing[' + idx + '][last_mile]"]').value) || 0;
-    var retail = (wsp + lastMile).toFixed(2);
-    document.getElementById('retail-' + idx).innerHTML =
-        '$' + retail + '<input type="hidden" name="pricing[' + idx + '][retail_price]" id="retail-val-' + idx + '" value="' + retail + '">';
-    Object.keys(channelFactors).forEach(function(chId) {
-        rebuildChannelCell(idx, chId, wsp);
-    });
-}
-
-function rebuildChannelCell(idx, chId, wsp) {
-    var factor = channelFactors[chId];
-    var chPrice = (wsp * factor).toFixed(2);
-    var el = document.getElementById('ch-' + idx + '-' + chId);
-    if (el) {
-        el.innerHTML = '$' + chPrice +
-            '<input type="hidden" name="pricing[' + idx + '][channels][' + chId + '][sales_channel_id]" value="' + chId + '">' +
-            '<input type="hidden" name="pricing[' + idx + '][channels][' + chId + '][pricing_factor]" id="factor-hidden-' + idx + '-' + chId + '" value="' + factor + '">' +
-            '<input type="hidden" name="pricing[' + idx + '][channels][' + chId + '][channel_price]" id="ch-val-' + idx + '-' + chId + '" value="' + chPrice + '">';
-    }
-}
-
-function recalcChannel(chId, newFactor) {
-    channelFactors[chId] = newFactor;
-    for (var idx = 0; idx < totalRows; idx++) {
-        var wspInput = document.querySelector('[name="pricing[' + idx + '][wsp]"]');
-        if (!wspInput) continue;
-        rebuildChannelCell(idx, chId, parseFloat(wspInput.value) || 0);
-    }
-}
-
-// ── Debounced AJAX auto-save for factor inputs ──
-var factorTimers = {};
-
-document.querySelectorAll('.factor-input').forEach(function(input) {
-    input.addEventListener('input', function() {
-        var chId = this.getAttribute('data-channel-id');
-        var newFactor = parseFloat(this.value);
-        if (!newFactor || newFactor <= 0) return;
-
-        // Instantly recalculate all rows
-        recalcChannel(chId, newFactor);
-
-        var statusEl = document.querySelector('.factor-status-' + chId);
-        if (statusEl) { statusEl.textContent = 'saving...'; statusEl.style.color = '#e8a838'; }
-
-        // Debounce AJAX save (500ms after last keystroke)
-        clearTimeout(factorTimers[chId]);
-        factorTimers[chId] = setTimeout(function() {
-            fetch(factorSaveUrl, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': csrfToken, 'Accept': 'application/json' },
-                body: JSON.stringify({ channel_id: chId, factor: newFactor })
+   
+const channelFactors = @json(
+    collect($channelFactors ?? [])
+            ->mapWithKeys(function ($item, $key) {
+                return [$key => $item['factor'] ?? $item['pricing_factor'] ?? 1.0];
             })
-            .then(function(r) { return r.json(); })
-            .then(function(data) {
-                if (statusEl) {
-                    if (data.success) {
-                        statusEl.textContent = '✓ saved';
-                        statusEl.style.color = '#16a34a';
-                        input.style.borderColor = '#86efac';
-                        input.style.background = '#f0fdf4';
-                        setTimeout(function() { statusEl.textContent = ''; input.style.borderColor = '#d1d5db'; input.style.background = '#fefce8'; }, 2000);
-                    } else {
-                        statusEl.textContent = '✗ failed';
-                        statusEl.style.color = '#dc2626';
-                    }
-                }
-            })
-            .catch(function() {
-                if (statusEl) { statusEl.textContent = '✗ error'; statusEl.style.color = '#dc2626'; }
-            });
-        }, 500);
+);
+
+//console.log('Raw $channelFactors from PHP:', @json($channelFactors));
+
+//console.log('Channel Factors (Fixed):', channelFactors);
+
+    // Total Rows Count
+    var totalRows = {{ $items->count() }};
+    var csrfToken = '{{ csrf_token() }}';
+    var factorSaveUrl = "{{ route('hod.pricing.update-channel-factor', $asn) }}";
+
+    function updateRow(idx, wsp) {
+        var lastMile = parseFloat(document.querySelector('[name="pricing[' + idx + '][last_mile]"]').value) || 0;
+        var retail = (parseFloat(wsp) + parseFloat(lastMile)).toFixed(2);
+        document.getElementById('retail-' + idx).innerHTML =
+            '$' + retail + '<input type="hidden" name="pricing[' + idx + '][retail_price]" id="retail-val-' + idx + '" value="' + retail + '">';
+        Object.keys(channelFactors).forEach(function(chId) {
+            rebuildChannelCell(idx, chId, wsp);
+        });
+    }
+
+    function rebuildChannelCell(idx, chId, wsp) {
+        var lastMile = parseFloat(document.querySelector('[name="pricing[' + idx + '][last_mile]"]').value) || 0;
+        var factor = channelFactors[chId];
+        var chPrice = ((wsp * factor)+lastMile).toFixed(2);
+        var el = document.getElementById('ch-' + idx + '-' + chId);
+        if (el) {
+
+            console.log('Updating row', idx, 'WSP:', wsp, 'factor:', factor, 'Channel Price:', parseFloat(chPrice).toFixed(2));
+
+            el.innerHTML = '$' + chPrice +
+                '<input type="hidden" name="pricing[' + idx + '][channels][' + chId + '][sales_channel_id]" value="' + chId + '">' +
+                '<input type="hidden" name="pricing[' + idx + '][channels][' + chId + '][pricing_factor]" id="factor-hidden-' + idx + '-' + chId + '" value="' + factor + '">' +
+                '<input type="hidden" name="pricing[' + idx + '][channels][' + chId + '][channel_price]" id="ch-val-' + idx + '-' + chId + '" value="' + chPrice + '">';
+        }
+    }
+
+    function recalcChannel(chId, newFactor) {
+        channelFactors[chId] = newFactor;
+        for (var idx = 0; idx < totalRows; idx++) {
+            var wspInput = document.querySelector('[name="pricing[' + idx + '][wsp]"]');
+            if (!wspInput) continue;
+            rebuildChannelCell(idx, chId, parseFloat(wspInput.value) || 0);
+        }
+    }
+
+    // ── Debounced AJAX auto-save for factor inputs ──
+    var factorTimers = {};
+
+    document.querySelectorAll('.factor-input').forEach(function(input) {
+        input.addEventListener('input', function() {
+            var chId = this.getAttribute('data-channel-id');
+            var newFactor = parseFloat(this.value);
+            if (!newFactor || newFactor <= 0) return;
+
+            // Instantly recalculate all rows
+            recalcChannel(chId, newFactor);
+
+            var statusEl = document.querySelector('.factor-status-' + chId);
+            if (statusEl) {
+                statusEl.textContent = 'saving...';
+                statusEl.style.color = '#e8a838';
+            }
+
+            // Debounce AJAX save (500ms after last keystroke)
+            clearTimeout(factorTimers[chId]);
+            factorTimers[chId] = setTimeout(function() {
+                fetch(factorSaveUrl, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-CSRF-TOKEN': csrfToken,
+                            'Accept': 'application/json'
+                        },
+                        body: JSON.stringify({
+                            channel_id: chId,
+                            factor: newFactor
+                        })
+                    })
+                    .then(function(r) {
+                        return r.json();
+                    })
+                    .then(function(data) {
+                        if (statusEl) {
+                            if (data.success) {
+                                statusEl.textContent = '✓ saved';
+                                statusEl.style.color = '#16a34a';
+                                input.style.borderColor = '#86efac';
+                                input.style.background = '#f0fdf4';
+                                setTimeout(function() {
+                                    statusEl.textContent = '';
+                                    input.style.borderColor = '#d1d5db';
+                                    input.style.background = '#fefce8';
+                                }, 2000);
+                            } else {
+                                statusEl.textContent = '✗ failed';
+                                statusEl.style.color = '#dc2626';
+                            }
+                        }
+                    })
+                    .catch(function() {
+                        if (statusEl) {
+                            statusEl.textContent = '✗ error';
+                            statusEl.style.color = '#dc2626';
+                        }
+                    });
+            }, 500);
+        });
     });
-});
 </script>
 @endsection

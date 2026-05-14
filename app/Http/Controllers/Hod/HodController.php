@@ -70,14 +70,26 @@ class HodController extends Controller
                 foreach ($consignment->liveSheet->items as $lsItem) {
                     if (!$lsItem->product) continue;
                     $d = $lsItem->product_details ?? [];
+
+
+                    $finalFob = (float)($d['final_fob'] ?? $lsItem->unit_price);
+                    $dutyPercent = (float)($d['duty_percent'] ?? 0);
+                    $freightFactor = (float)($d['freight_factor'] ?? 0);
+                    $wspFactor = (float)($d['wsp_factor'] ?? 0);
+
+                    $dutyAmt = $finalFob * ($dutyPercent / 100);
+                    $freightAmt = $freightFactor * $finalFob;
+                    $landedCost = $finalFob + $dutyAmt + $freightAmt;
+                    $wsp = $landedCost * $wspFactor;
+
                     $items->push([
                         'product_id'   => $lsItem->product_id,
                         'sku'          => $lsItem->product->sku ?? '',
                         'sap_code'     => $lsItem->product->sap_code ?? '',
                         'vendor_name'  => $consignment->vendor->company_name ?? '',
                         'quantity'     => $lsItem->quantity ?? 0,
-                        'fob'          => floatval($d['final_fob'] ?? $lsItem->unit_price ?? 0),
-                        'wsp'          => floatval($d['wsp'] ?? 1),
+                        'fob'          => $finalFob,
+                        'wsp'          => floatval($wsp),
                         'product_name' => $lsItem->product->name ?? '',
                         'category'     => $lsItem->product->category->name ?? '',
                         'existing'     => $existingPricing->get($lsItem->product_id),
@@ -455,7 +467,7 @@ class HodController extends Controller
 
         // Save back as JSON
         $channel->update([
-            'pricing_factors' => $oldFactors
+            'pricing_factors' => $oldFactors['pricing_factor']
         ]);
 
         // Logging
