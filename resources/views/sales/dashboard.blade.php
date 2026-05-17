@@ -3,11 +3,12 @@
 @section('page-title', 'Sales Dashboard')
 
 @section('content')
+ 
 <div class="grid-kpi">
-    <div class="kpi-card"><div style="display:flex;justify-content:space-between;align-items:start;"><div><div class="kpi-label">Total Orders</div><div class="kpi-value">{{ number_format($data['order_stats']['total_orders'] ?? 0) }}</div></div><div class="kpi-icon" style="background:#dbeafe;color:#1e40af;"><i class="fas fa-shopping-cart"></i></div></div></div>
-    <div class="kpi-card"><div style="display:flex;justify-content:space-between;align-items:start;"><div><div class="kpi-label">Pending Shipment</div><div class="kpi-value" style="color:#dc2626;">{{ $data['order_stats']['pending_shipment'] ?? 0 }}</div></div><div class="kpi-icon" style="background:#fee2e2;color:#dc2626;"><i class="fas fa-clock"></i></div></div></div>
-    <div class="kpi-card"><div style="display:flex;justify-content:space-between;align-items:start;"><div><div class="kpi-label">This Month Revenue</div><div class="kpi-value" style="color:#166534;font-size:1.4rem;">${{ number_format($data['order_stats']['this_month'] ?? 0, 0) }}</div></div><div class="kpi-icon" style="background:#dcfce7;color:#166534;"><i class="fas fa-chart-line"></i></div></div></div>
-    <div class="kpi-card"><div style="display:flex;justify-content:space-between;align-items:start;"><div><div class="kpi-label">Total Revenue</div><div class="kpi-value" style="font-size:1.4rem;">${{ number_format($data['order_stats']['total_revenue'] ?? 0, 0) }}</div></div><div class="kpi-icon" style="background:#fef3c7;color:#e8a838;"><i class="fas fa-dollar-sign"></i></div></div></div>
+    <div class="kpi-card"><div style="display:flex;justify-content:space-between;align-items:start;"><div><div class="kpi-label">Total Orders</div><div class="kpi-value">{{ number_format($data['kpis']['orders_received'] ?? 0) }}</div></div><div class="kpi-icon" style="background:#dbeafe;color:#1e40af;"><i class="fas fa-shopping-cart"></i></div></div></div>
+    <div class="kpi-card"><div style="display:flex;justify-content:space-between;align-items:start;"><div><div class="kpi-label">Pending Shipment</div><div class="kpi-value" style="color:#dc2626;">{{ $data['kpis']['pending_shipment'] ?? 0 }}</div></div><div class="kpi-icon" style="background:#fee2e2;color:#dc2626;"><i class="fas fa-clock"></i></div></div></div>
+    <div class="kpi-card"><div style="display:flex;justify-content:space-between;align-items:start;"><div><div class="kpi-label">This Month Revenue</div><div class="kpi-value" style="color:#166534;font-size:1.4rem;">${{ number_format($data['kpis']['monthly_sales'] ?? 0, 0) }}</div></div><div class="kpi-icon" style="background:#dcfce7;color:#166534;"><i class="fas fa-chart-line"></i></div></div></div>
+    <div class="kpi-card"><div style="display:flex;justify-content:space-between;align-items:start;"><div><div class="kpi-label">Total Revenue</div><div class="kpi-value" style="font-size:1.4rem;">${{ number_format($data['kpis']['daily_sales'] + ($data['kpis']['monthly_sales'] ?? 0), 0) }}</div></div><div class="kpi-icon" style="background:#fef3c7;color:#e8a838;"><i class="fas fa-dollar-sign"></i></div></div></div>
 </div>
 
 <div class="grid-2">
@@ -18,9 +19,9 @@
             <table class="data-table">
                 <thead><tr><th>Platform</th><th>Orders</th><th>Revenue</th></tr></thead>
                 <tbody>
-                    @foreach($data['by_channel'] ?? [] as $item)
+                    @foreach($data['by_platform'] ?? [] as $item)
                     <tr>
-                        <td style="font-weight:600;">{{ $item['channel']->name }}</td>
+                        <td style="font-weight:600;">{{ $item->salesChannel->name ?? 'Unknown Channel' }}</td>
                         <td style="text-align:center;font-weight:600;">{{ number_format($item['orders']) }}</td>
                         <td style="font-family:monospace;font-weight:700;color:#166534;">${{ number_format($item['revenue'], 2) }}</td>
                     </tr>

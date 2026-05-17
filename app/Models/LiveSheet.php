@@ -24,7 +24,10 @@ class LiveSheet extends Model
         'remarks',
         'ex_factory_date',
         'final_inspection_date',
-         'factory_location',
+        'factory_location',
+        'commission_percentage',
+        'cp_updated_by',
+        'cp_updated_at',
     ];
 
     protected $casts = [
@@ -35,7 +38,8 @@ class LiveSheet extends Model
         'total_cbm' => 'decimal:4',
         'ex_factory_date' => 'date',
         'final_inspection_date' => 'date',
-       
+        'commission_percentage' => 'decimal:2',
+        'cp_updated_at' => 'datetime',
     ];
 
     public function consignment()

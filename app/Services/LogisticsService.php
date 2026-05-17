@@ -2,7 +2,7 @@
 
 namespace App\Services;
 
-use App\Models\{Shipment, Consignment, Asn, Grn, GrnItem, Inventory, InventoryMovement, WarehouseCharge, Warehouse, Product, LiveSheet, ActivityLog, User};
+use App\Models\{Shipment, Consignment, Asn, Grn, GrnItem, Inventory, InventoryMovement, WarehouseCharge, Warehouse, Product, LiveSheet, ActivityLog, User, InventoryLog};
 use App\Notifications\{ShipmentNotification, AsnNotification, GrnNotification, WarehouseNotification};
 use Illuminate\Support\Facades\{DB, Notification};
 
@@ -216,6 +216,13 @@ class LogisticsService
         $inventory->increment('available_quantity', $quantity);
         $inventory->update(['grn_id' => $grn->id, 'consignment_id' => $consignmentId]);
 
+
+        InventoryLog::record($inventory, InventoryLog::ACTION_GRN_RECEIVED, $quantity, [
+            'reference_type' => 'grn',
+            'reference_id'   => $grn->id,
+            'reference_code' => $grn->grn_number,
+        ]);
+
         // Update product stock
         Product::where('id', $productId)->increment('stock_quantity', $quantity);
 
@@ -262,6 +269,12 @@ class LogisticsService
             $source->decrement('quantity', $quantity);
             $source->decrement('available_quantity', $quantity);
 
+            InventoryLog::record($source, InventoryLog::ACTION_TRANSFER_OUT, -$quantity, [
+                'reference_type' => 'transfer',
+                'reference_code' => "To warehouse #{$toWarehouseId}",
+                'metadata'       => ['to_warehouse_id' => $toWarehouseId, 'transportation_cost' => $transportationCost],
+            ]);
+
             // Increase at destination
             $dest = Inventory::firstOrCreate(
                 ['product_id' => $productId, 'warehouse_id' => $toWarehouseId, 'company_code' => $source->company_code],
@@ -269,6 +282,12 @@ class LogisticsService
             );
             $dest->increment('quantity', $quantity);
             $dest->increment('available_quantity', $quantity);
+
+            InventoryLog::record($dest, InventoryLog::ACTION_TRANSFER_IN, $quantity, [
+                'reference_type' => 'transfer',
+                'reference_code' => "From warehouse #{$fromWarehouseId}",
+            ]);
+
             if ($toSubId) {
                 $dest->update(['warehouse_sub_location_id' => $toSubId]);
             }

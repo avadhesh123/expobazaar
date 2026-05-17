@@ -86,6 +86,7 @@ class HodController extends Controller
                         'product_id'   => $lsItem->product_id,
                         'sku'          => $lsItem->product->sku ?? '',
                         'sap_code'     => $lsItem->product->sap_code ?? '',
+					    'vendor_wsp'     => $lsItem->product->vendor_wsp ?? '',
                         'vendor_name'  => $consignment->vendor->company_name ?? '',
                         'quantity'     => $lsItem->quantity ?? 0,
                         'fob'          => $finalFob,
@@ -173,7 +174,7 @@ class HodController extends Controller
         $channelFactors = [];
 
         // Header
-        $csv = "SKU,SAP,Vendor Name,Qty,FOB,WSP,Last Mile,Retail Price";
+        $csv = "SKU,SAP Code,Vendor WSP,Vendor Name,Qty,FOB,WSP,Last Mile,Retail Price";
 
         foreach ($channels as $ch) {
             $csv .= "," . $ch->name;
@@ -207,6 +208,7 @@ class HodController extends Controller
 
                     $csv .= '"' . ($lsItem->product->sku ?? '') . '"';
                     $csv .= ',"' . ($lsItem->product->sap_code ?? '') . '"';
+					$csv .= ',"' . ($lsItem->product->vendor_wsp ?? '') . '"';					
                     $csv .= ',"' . ($consignment->vendor->company_name ?? '') . '"';
                     $csv .= ',' . ($lsItem->quantity ?? 0);
                     $csv .= ',' . number_format($fob, 2);

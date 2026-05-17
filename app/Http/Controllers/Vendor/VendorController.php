@@ -1604,6 +1604,7 @@ class VendorController extends Controller
                     'final_fob'   => $finalFob,
                     'barcode'     => $row['barcode'] ?? null,
                     'sap_code'    => $row['sap_code'] ?? null,
+					'vendor_wsp'    => $row['vendor_wsp'] ?? null,					
                 ];
                 \App\Models\LiveSheetItemChange::trackChanges($item, $newDetails, auth()->user(), 'vendor');
             } catch (\Exception $e) {
@@ -1621,6 +1622,7 @@ class VendorController extends Controller
                 'product_details' => array_merge($item->product_details ?? [], [
                     'sno'              => $row['sno'] ?? null,
                     'sap_code'         => $row['sap_code'] ?? null,
+					'vendor_wsp'       => $row['vendor_wsp'] ?? null,					
                     'barcode'          => $row['barcode'] ?? null,
                     'description'      => $row['description'] ?? null,
                     'hsn_hts_code'     => $row['hsn_code'] ?? null,
@@ -1831,6 +1833,7 @@ class VendorController extends Controller
                     'sno'             => $getVal('sno'),
                     'vendor_sku'      => $sku,
                     'sap_code'        => $getVal('sap_code'),
+					'vendor_wsp'        => $getVal('vendor_wsp'),
                     'barcode'         => $getVal('barcode'),
                     'product_name'    => $getVal('product_name'),
                     'description'     => $getVal('description'),

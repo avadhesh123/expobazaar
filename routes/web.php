@@ -237,16 +237,29 @@ Route::middleware(['auth'])->group(function () {
 
 
     // SALES
+
     Route::prefix('sales')->name('sales.')->middleware('user.type:internal,admin', 'department:sales')->group(function () {
         Route::get('dashboard', [SalesController::class, 'dashboard'])->name('dashboard');
         Route::get('orders', [SalesController::class, 'orders'])->name('orders');
+        Route::get('orders/download', [SalesController::class, 'downloadOrders'])->name('orders.download');
         Route::get('orders/{order}', [SalesController::class, 'showOrder'])->name('orders.show');
         Route::get('upload', [SalesController::class, 'uploadSales'])->name('upload');
         Route::post('upload', [SalesController::class, 'storeSales'])->name('upload.store');
+        Route::post('upload/manual', [SalesController::class, 'storeManualOrders'])->name('upload.manual');
+        Route::get('upload/template', [SalesController::class, 'downloadTemplate'])->name('upload.template');
+        Route::get('to-be-shipped', [SalesController::class, 'toBeShipped'])->name('to-be-shipped');
+        Route::post('to-be-shipped/{order}/update', [SalesController::class, 'updateShipping'])->name('to-be-shipped.update');
+        Route::get('order-management', [SalesController::class, 'orderManagement'])->name('order-management');
+        Route::post('order-management/{order}/update-costs', [SalesController::class, 'updateCosts'])->name('order-management.update-costs');
+
+        Route::get('order-management', [SalesController::class, 'orderManagement'])->name('order-management');
+        Route::post('order-management/{order}/update', [SalesController::class, 'updateOrderManagement'])->name('order-management.update');
+
         Route::get('download-template', [SalesController::class, 'downloadTemplate'])->name('download-template');
         Route::post('orders/{order}/tracking', [SalesController::class, 'updateTracking'])->name('orders.tracking');
         Route::post('orders/bulk-tracking', [SalesController::class, 'bulkUpdateTracking'])->name('orders.bulk-tracking');
     });
+
 
 
     // FINANCE
@@ -272,8 +285,6 @@ Route::middleware(['auth'])->group(function () {
         Route::get('pricing-review', [FinanceController::class, 'pricingReview'])->name('pricing-review');
         Route::post('pricing/{asn}/approve', [FinanceController::class, 'approvePricing'])->name('pricing.approve');
 
-
-
         // Vendor Rate Cards & Charges
         Route::get('vendor-rate-cards', [FinanceController::class, 'vendorRateCards'])->name('vendor-rate-cards');
         Route::post('vendor-rate-cards', [FinanceController::class, 'storeVendorRateCard'])->name('vendor-rate-cards.store');
@@ -287,11 +298,11 @@ Route::middleware(['auth'])->group(function () {
         Route::post('pricing/{asn}/approve', [FinanceController::class, 'approvePricing'])->name('pricing.approve');
 
 
-
         // Live Sheets — SAP Code Update
         Route::get('live-sheets', [FinanceController::class, 'liveSheets'])->name('live-sheets');
         Route::get('live-sheets/{liveSheet}', [FinanceController::class, 'showLiveSheet'])->name('live-sheets.show');
         Route::post('live-sheets/{liveSheet}/sap', [FinanceController::class, 'updateSapCodes'])->name('live-sheets.sap');
+        Route::post('live-sheets/{liveSheet}/commission',   [FinanceController::class, 'updateCommission'])->name('live-sheets.commission.update');
 
         // NEW — Download pre-filled SAP Excel template
         Route::get('live-sheets/{liveSheet}/sap-download', [FinanceController::class, 'downloadSapTemplate'])

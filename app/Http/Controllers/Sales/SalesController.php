@@ -4,107 +4,390 @@ namespace App\Http\Controllers\Sales;
 
 use App\Http\Controllers\Controller;
 use App\Models\{Order, SalesChannel};
-use App\Services\{DashboardService, SalesService};
+use App\Services\{SalesService, DashboardService};
 use Illuminate\Http\Request;
 
 class SalesController extends Controller
 {
     public function __construct(
-        protected DashboardService $dashboardService,
-        protected SalesService $salesService
+        private SalesService $salesService,
+        private DashboardService $dashboardService
     ) {}
+
+    // ═══ DASHBOARD ═══
 
     public function dashboard(Request $request)
     {
-        $companyCode = $request->get('company_code');
-        $data = $this->dashboardService->getSalesDashboard($companyCode);
-        return view('sales.dashboard', compact('data', 'companyCode'));
+        $data = $this->dashboardService->getSalesDashboard($request->company_code);
+        return view('sales.dashboard', compact('data'));
     }
+
+    // ═══ ORDERS LIST ═══
 
     public function orders(Request $request)
     {
-        $orders = Order::with('salesChannel', 'items.product')
-            ->when($request->company_code, fn($q, $v) => $q->where('company_code', $v))
-            ->when($request->sales_channel_id, fn($q, $v) => $q->where('sales_channel_id', $v))
+        $baseQuery = Order::when($request->company_code, fn($q, $v) => $q->where('company_code', $v))
             ->when($request->status, fn($q, $v) => $q->where('status', $v))
-            ->when($request->payment_status, fn($q, $v) => $q->where('payment_status', $v))
-            ->when($request->search, fn($q, $v) => $q->where(function ($s) use ($v) {
-                $s->where('order_number', 'like', "%{$v}%")
-                    ->orWhere('platform_order_id', 'like', "%{$v}%");
-            }))
+            ->when($request->sales_channel_id, fn($q, $v) => $q->where('sales_channel_id', $v))
+            ->when($request->search, fn($q, $v) => $q->where(function ($q2) use ($v) {
+                $q2->where('order_number', 'like', "%{$v}%")
+                    ->orWhere('platform_order_id', 'like', "%{$v}%")
+                    ->orWhere('customer_name', 'like', "%{$v}%");
+            }));
+
+        $orders = (clone $baseQuery)->with('salesChannel', 'items.product')
             ->latest('order_date')->paginate(30)->withQueryString();
 
-        $channels = SalesChannel::active()->orderBy('name')->get();
+        $stats = [
+            'total_orders'   => (clone $baseQuery)->count(),
+            'total_revenue'  => (clone $baseQuery)->sum('total_amount'),
+            'pending_orders' => (clone $baseQuery)->where(function ($q) {
+                $q->whereNull('status')->orWhere('status', 'pending');
+            })->count(),
+            'today_orders'   => (clone $baseQuery)->whereDate('order_date', today())->count(),
+            'today_revenue'  => (clone $baseQuery)->whereDate('order_date', today())->sum('total_amount'),
+        ];
 
-        // KPI stats for the page
-        try {
-            $baseQuery = Order::query()
-                ->when($request->company_code, fn($q, $v) => $q->where('company_code', $v))
-                ->when($request->sales_channel_id, fn($q, $v) => $q->where('sales_channel_id', $v));
 
-            $stats = [
-                'total_orders'    => (clone $baseQuery)->count(),
-                'total_revenue'   => (float) (clone $baseQuery)->sum('total_amount'),
-                'pending_orders'  => (clone $baseQuery)->whereIn('status', ['pending', 'processing', 'new'])->count(),
-                'today_orders'    => (clone $baseQuery)->whereDate('order_date', today())->count(),
-                'today_revenue'   => (float) (clone $baseQuery)->whereDate('order_date', today())->sum('total_amount'),
-                'shipped_orders'  => (clone $baseQuery)->whereIn('status', ['shipped', 'delivered', 'completed'])->count(),
-                'cancelled_orders' => (clone $baseQuery)->whereIn('status', ['cancelled', 'refunded'])->count(),
-                'avg_order_value' => (float) (clone $baseQuery)->avg('total_amount') ?: 0,
-            ];
-        } catch (\Exception $e) {
-            \Log::warning('Sales orders stats failed: ' . $e->getMessage());
-            $stats = [
-                'total_orders'     => 0,
-                'total_revenue'    => 0,
-                'pending_orders'   => 0,
-                'today_orders'     => 0,
-                'today_revenue'    => 0,
-                'shipped_orders'   => 0,
-                'cancelled_orders' => 0,
-                'avg_order_value'  => 0,
-            ];
-        }
+        $currencySymbol = match ($request->company_code) {
+            '2000' => '₹',
+            '2200' => '€',
+            default => '$',
+        };
 
-        return view('sales.orders.index', compact('orders', 'channels', 'stats'));
+        $channels = SalesChannel::active()->get();
+        return view('sales.orders', compact('orders', 'channels', 'stats', 'currencySymbol'));
     }
+
     public function showOrder(Order $order)
     {
-        $order->load('salesChannel', 'items.product.vendor', 'customer', 'receivable', 'chargebacks', 'uploader');
-        return view('sales.orders.show', compact('order'));
+        $order->load('items.product', 'salesChannel');
+        return view('sales.show', compact('order'));
     }
+
+    public function downloadOrders(Request $request)
+    {
+        $orders = Order::with('salesChannel', 'items.product.vendor', 'warehouse')
+            ->when($request->company_code, fn($q, $v) => $q->where('company_code', $v))
+            ->when($request->status, fn($q, $v) => $q->where('status', $v))
+            ->when($request->sales_channel_id, fn($q, $v) => $q->where('sales_channel_id', $v))
+            ->when($request->search, fn($q, $v) => $q->where(function ($q2) use ($v) {
+                $q2->where('order_number', 'like', "%{$v}%")
+                    ->orWhere('platform_order_id', 'like', "%{$v}%")
+                    ->orWhere('customer_name', 'like', "%{$v}%");
+            }))
+            ->latest('order_date')
+            ->get();
+
+        $csv = "Order Number,PO Number,Invoice Number,Order Date,Sales Channel,SKU,SAP Code,Product Name,Vendor Name,Vendor Type,Qty,Unit Price,Order Amount,Vendor Payout Price,Payout Total,Warehouse,Shipping Method,Shipped Qty,Shipped Amount,Tracking ID,Carrier,Shipping Cost,Ship Date,Current Status,Delivery Date,Customer Type,Customer Name,Company Name,Email,Phone,Address,City,State,Zip,Country,Currency,Status\n";
+
+        foreach ($orders as $o) {
+            $firstItem = $o->items->first();
+            $product = $firstItem?->product;
+            $vendor = $product?->vendor;
+
+            $shipMethods = ['1' => 'Store Pickup', '2' => 'Marketplace Label', '3' => 'Seller Label'];
+            $qty = $firstItem?->quantity ?? 0;
+            $payoutPrice = $product?->vendor_payout_price ?? 0;
+
+            $csv .= implode(',', [
+                '"' . ($o->order_number ?? '') . '"',
+                '"' . ($o->platform_order_id ?? '') . '"',
+                '"' . ($o->invoice_number ?? '') . '"',
+                $o->order_date?->format('Y-m-d') ?? '',
+                '"' . ($o->salesChannel?->name ?? '') . '"',
+                '"' . ($firstItem?->sku ?? $product?->sku ?? '') . '"',
+                '"' . ($product?->sap_code ?? '') . '"',
+                '"' . str_replace('"', '""', $product?->name ?? '') . '"',
+                '"' . str_replace('"', '""', $vendor?->company_name ?? '') . '"',
+                '"' . ($vendor?->vendor_type ?? '') . '"',
+                $qty,
+                number_format(floatval($firstItem?->unit_price ?? 0), 2, '.', ''),
+                number_format(floatval($o->total_amount ?? 0), 2, '.', ''),
+                number_format(floatval($payoutPrice), 2, '.', ''),
+                number_format($payoutPrice * $qty, 2, '.', ''),
+                '"' . ($o->warehouse?->name ?? '') . '"',
+                '"' . ($shipMethods[$o->shipping_method] ?? $o->shipping_method ?? '') . '"',
+                $o->shipped_qty ?? '',
+                number_format(floatval($o->shipped_amount ?? 0), 2, '.', ''),
+                '"' . ($o->tracking_id ?? '') . '"',
+                '"' . ($o->carrier ?? '') . '"',
+                number_format(floatval($o->shipping_cost ?? 0), 2, '.', ''),
+                $o->ship_date?->format('Y-m-d') ?? '',
+                '"' . ($o->current_status ?? '') . '"',
+                $o->delivery_date?->format('Y-m-d') ?? '',
+                '"' . ($o->customer_type ?? '') . '"',
+                '"' . str_replace('"', '""', $o->customer_name ?? '') . '"',
+                '"' . str_replace('"', '""', $o->company_name ?? '') . '"',
+                '"' . ($o->customer_email ?? '') . '"',
+                '"' . ($o->customer_phone ?? '') . '"',
+                '"' . str_replace('"', '""', $o->shipping_address ?? '') . '"',
+                '"' . ($o->shipping_city ?? '') . '"',
+                '"' . ($o->shipping_state ?? '') . '"',
+                '"' . ($o->shipping_pincode ?? '') . '"',
+                '"' . ($o->shipping_country ?? '') . '"',
+                $o->currency ?? 'USD',
+                '"' . ($o->status ?? '') . '"',
+            ]) . "\n";
+        }
+
+        $filename = 'Sales-Orders-' . now()->format('Y-m-d') . '.csv';
+        return response($csv, 200, [
+            'Content-Type' => 'text/csv',
+            'Content-Disposition' => "attachment; filename=\"{$filename}\"",
+        ]);
+    }
+
+    // ═══ UPLOAD (FILE) ═══
+
     public function uploadSales()
     {
         $channels = SalesChannel::active()->get();
         return view('sales.upload', compact('channels'));
     }
 
+    public function downloadTemplate()
+    {
+        $csv = "Order Date,PO Number / Order ID,Invoice Number,Sales Channel,Vendor Name,Vendor Type,SAP code,Style Code,Per Unit Sales Price,Order Qty,Order Amount,Warehouse Name,Shipping Method,Customer Type,Customer Name,Company Name,Shipping Address,City,State,Zip Code,Country,Phone Number,Email\n";
+        $csv .= "2026-05-10,70981308,,Amazon,,,,SKU1234,2.40,1,,,,CFL,John Doe,My Company,123 Main St,New York,NY,10001,US,1234567890,john@example.com\n";
+
+        return response($csv, 200, [
+            'Content-Type' => 'text/csv',
+            'Content-Disposition' => 'attachment; filename="Sales-Upload-Template.csv"',
+        ]);
+    }
+
     public function storeSales(Request $request)
     {
         $request->validate([
             'company_code' => 'required|in:2000,2100,2200',
-            'orders' => 'required|array|min:1',
+            'sales_file'   => 'required|file|max:10240',
         ]);
-        $result = $this->salesService->uploadSalesData($request->orders, $request->company_code, auth()->user());
-        $msg = count($result['created']) . ' orders created.';
-        if (count($result['errors']) > 0) {
-            $msg .= ' ' . count($result['errors']) . ' errors.';
-        }
-        return redirect()->route('sales.orders')->with('success', $msg)->with('upload_errors', $result['errors']);
-    }
-    /**
-     * Download upload template as CSV
-     */
-    public function downloadTemplate()
-    {
-        $csv = "sales_channel,platform_order_id,order_date,customer_name,customer_email,customer_phone,shipping_address,shipping_city,shipping_state,shipping_country,shipping_pincode,sku,quantity,unit_price,subtotal,shipping,tax,discount,total_amount,currency\n";
-        $csv .= "Amazon,AMZ-12345,2026-03-01,John Doe,john@example.com,+1234567890,123 Main St,New York,NY,US,10001,SKU-001,2,29.99,59.98,5.00,3.60,0.00,68.58,USD\n";
 
-        return response($csv, 200, [
-            'Content-Type' => 'text/csv',
-            'Content-Disposition' => 'attachment; filename="sales-upload-template.csv"',
-        ]);
+        $file = $request->file('sales_file');
+        $ext = strtolower($file->getClientOriginalExtension());
+        if (!in_array($ext, ['csv', 'xlsx', 'xls'])) {
+            return back()->with('error', 'File must be CSV or XLSX format.');
+        }
+
+        try {
+            $fullPath = $file->getRealPath();
+
+            if (in_array($ext, ['xlsx', 'xls'])) {
+                $reader = new \PhpOffice\PhpSpreadsheet\Reader\Xlsx();
+                $reader->setReadDataOnly(false);
+                $spreadsheet = $reader->load($fullPath);
+                $rows = $spreadsheet->getActiveSheet()->toArray(null, true, true, false);
+            } else {
+                $rows = [];
+                if (($handle = fopen($fullPath, 'r')) !== false) {
+                    while (($row = fgetcsv($handle)) !== false) {
+                        $rows[] = $row;
+                    }
+                    fclose($handle);
+                }
+            }
+
+            if (count($rows) < 2) {
+                return back()->with('error', 'File is empty or has no data rows.');
+            }
+
+            $result = $this->salesService->processUploadedRows($rows, $request->company_code);
+
+            \App\Models\ActivityLog::log('uploaded', 'sales_data', auth()->user(), null, [
+                'company_code' => $request->company_code,
+                'created' => $result['created'],
+                'errors' => count($result['errors']),
+            ], "Sales data uploaded: {$result['created']} orders created");
+
+            return back()->with('upload_result', $result)->with(
+                $result['created'] > 0 ? 'success' : 'error',
+                "{$result['created']} order(s) created from {$result['total_rows']} rows." .
+                    (count($result['errors']) > 0 ? ' ' . count($result['errors']) . ' error(s).' : '')
+            );
+        } catch (\Exception $e) {
+            \Log::error('Sales upload failed: ' . $e->getMessage());
+            return back()->with('error', 'Upload failed: ' . $e->getMessage());
+        }
     }
+
+    // ═══ MANUAL ENTRY ═══
+
+    public function storeManualOrders(Request $request)
+    {
+        $request->validate([
+            'company_code'                      => 'required|in:2000,2100,2200',
+            'orders'                            => 'required|array|min:1',
+            'orders.*.platform_order_id'        => 'required|string',
+            'orders.*.order_date'               => 'required|date',
+            'orders.*.total_amount'             => 'required|numeric|min:0.01',
+            'orders.*.items'                    => 'required|array|min:1',
+            'orders.*.items.*.sku'              => 'required|string',
+            'orders.*.items.*.quantity'          => 'required|integer|min:1',
+            'orders.*.items.*.unit_price'        => 'required|numeric|min:0',
+        ]);
+
+        $result = $this->salesService->processManualOrders($request->orders, $request->company_code);
+
+        \App\Models\ActivityLog::log('created', 'order', auth()->user(), null, [
+            'company_code' => $request->company_code,
+            'created' => $result['created'],
+            'errors' => count($result['errors']),
+        ], "Manual sales entry: {$result['created']} orders created");
+
+        $msg = "{$result['created']} order(s) created.";
+        if (!empty($result['errors'])) {
+            $msg .= ' ' . count($result['errors']) . ' error(s): ' . implode('; ', array_slice($result['errors'], 0, 5));
+        }
+        if ($result['created'] > 0) {
+            return redirect()->route('sales.orders')->with($result['created'] > 0 ? 'success' : 'error', $msg);
+        }
+        return back()->with($result['created'] > 0 ? 'success' : 'error', $msg);
+
+        //return redirect('/sales/orders')->with($result['created'] > 0 ? 'success' : 'error', $msg);
+    }
+
+    // ═══ TO BE SHIPPED ═══
+
+    public function toBeShipped(Request $request)
+    {
+        $orders = Order::with('items.product', 'salesChannel', 'warehouse')
+            ->where('status', '!=', 'cancelled')
+            ->where(function ($q) {
+                $q->whereNull('shipping_method')->orWhere('shipping_method', '!=', 'store_pickup');
+            })
+            ->where(function ($q) {
+                $q->whereNull('tracking_id')->orWhere('tracking_id', '');
+            })
+            ->when($request->company_code, fn($q, $v) => $q->where('company_code', $v))
+            ->when($request->channel_id, fn($q, $v) => $q->where('sales_channel_id', $v))
+            ->latest('order_date')
+            ->paginate(30)->withQueryString();
+
+        $orders->getCollection()->transform(function ($order) {
+            $orderDate = $order->order_date ? \Carbon\Carbon::parse($order->order_date) : now();
+            $order->ageing_days = $orderDate->diffInDays(now());
+            $order->is_overdue = $order->ageing_days > 2;
+            return $order;
+        });
+
+        $channels = SalesChannel::active()->get();
+        $stats = [
+            'total_pending' => $orders->total(),
+            'overdue'       => $orders->getCollection()->where('is_overdue', true)->count(),
+            'total_value'   => $orders->getCollection()->sum('total_amount'),
+        ];
+
+        return view('sales.to-be-shipped', compact('orders', 'channels', 'stats'));
+    }
+
+    public function updateShipping(Request $request, Order $order)
+    {
+        $request->validate([
+            'shipped_qty'   => 'required|integer|min:1',
+            'tracking_id'   => 'required|string|max:100',
+            'shipping_cost' => 'nullable|numeric|min:0',
+            'carrier'       => 'required|in:Fedex,UPS,USPS,LTL,Other',
+        ]);
+
+        $this->salesService->shipOrder(
+            $order,
+            intval($request->shipped_qty),
+            $request->tracking_id,
+            $request->shipping_cost ? floatval($request->shipping_cost) : null,
+            $request->carrier
+        );
+
+        return back()->with('success', "Order {$order->order_number} marked as shipped. Tracking: {$request->tracking_id}");
+    }
+
+    // ═══ ORDER MANAGEMENT ═══
+
+    public function orderManagement(Request $request)
+    {
+        $orders = Order::with('items.product', 'salesChannel', 'warehouse')
+            ->where(function ($q) {
+                $q->whereNotNull('tracking_id')->where('tracking_id', '!=', '');
+            })
+            ->when($request->company_code, fn($q, $v) => $q->where('company_code', $v))
+            ->when($request->channel_id, fn($q, $v) => $q->where('sales_channel_id', $v))
+            ->when($request->status, fn($q, $v) => $q->where('current_status', $v))
+            ->when($request->search, fn($q, $v) => $q->where(function ($q2) use ($v) {
+                $q2->where('platform_order_id', 'like', "%{$v}%")
+                    ->orWhere('tracking_id', 'like', "%{$v}%")
+                    ->orWhere('invoice_number', 'like', "%{$v}%");
+            }))
+            ->latest('ship_date')->latest('shipped_date')
+            ->paginate(30)->withQueryString();
+
+        $orders->getCollection()->transform(function ($order) {
+            $shipDate = $order->ship_date ?? $order->shipped_date;
+            $order->ageing_days = 0;
+            $order->ageing_label = '';
+            $order->ageing_color = '#16a34a';
+
+            if ($shipDate && $order->current_status !== 'delivered') {
+                $days = \Carbon\Carbon::parse($shipDate)->diffInDays(now());
+                $order->ageing_days = $days;
+                if ($days >= 10) {
+                    $order->ageing_label = 'CRITICAL';
+                    $order->ageing_color = '#7c2d12';
+                } elseif ($days >= 7) {
+                    $order->ageing_label = 'OVERDUE';
+                    $order->ageing_color = '#dc2626';
+                } elseif ($days >= 5) {
+                    $order->ageing_label = 'DUE';
+                    $order->ageing_color = '#e8a838';
+                } else {
+                    $order->ageing_label = 'ON TIME';
+                    $order->ageing_color = '#16a34a';
+                }
+            } elseif ($order->current_status === 'delivered') {
+                $order->ageing_label = 'DELIVERED';
+                $order->ageing_color = '#16a34a';
+            }
+            return $order;
+        });
+
+        $channels = SalesChannel::active()->get();
+        $stats = [
+            'total'      => $orders->total(),
+            'in_transit'  => Order::whereNotNull('tracking_id')->where('tracking_id', '!=', '')
+                ->where(function ($q) {
+                    $q->whereIn('current_status', ['in_transit', 'shipped'])->orWhereNull('current_status');
+                })->count(),
+            'delivered'   => Order::where('current_status', 'delivered')->count(),
+            'overdue'     => $orders->getCollection()->filter(fn($o) => in_array($o->ageing_label, ['OVERDUE', 'CRITICAL']))->count(),
+        ];
+
+        return view('sales.order-management', compact('orders', 'channels', 'stats'));
+    }
+
+    public function updateOrderManagement(Request $request, Order $order)
+    {
+        $request->validate([
+            'ship_date'                => 'nullable|date',
+            'current_status'           => 'nullable|in:in_transit,out_for_delivery,delivered,returned,exception',
+            'delivery_date'            => 'nullable|date',
+            'material_cost'            => 'nullable|numeric|min:0',
+            'order_processing_charges' => 'nullable|numeric|min:0',
+            'remarks'                  => 'nullable|string|max:500',
+        ]);
+
+        $this->salesService->updateOrderManagement($order, $request->only([
+            'ship_date',
+            'current_status',
+            'delivery_date',
+            'material_cost',
+            'order_processing_charges',
+            'remarks',
+        ]));
+
+        return back()->with('success', "Order {$order->order_number} updated.");
+    }
+
+    // ═══ TRACKING ═══
+
     public function updateTracking(Request $request, Order $order)
     {
         $request->validate(['tracking_id' => 'required|string']);

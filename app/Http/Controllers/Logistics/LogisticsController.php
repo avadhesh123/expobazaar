@@ -301,7 +301,7 @@ class LogisticsController extends Controller
             ->when($request->warehouse_id, fn($q, $v) => $q->where('warehouse_id', $v))
             ->when($request->vendor_id, fn($q, $v) => $q->whereHas('product', fn($pq) => $pq->where('vendor_id', $v)))
             ->when($request->search, fn($q, $v) => $q->whereHas('product', fn($pq) => $pq->where('sku', 'like', "%{$v}%")->orWhere('name', 'like', "%{$v}%")))
-            ->where('quantity', '>', 0);
+            ;//->where('quantity', '>', 0);
 
         $inventory = $query->paginate(50)->appends($request->query());
 

@@ -3,7 +3,7 @@
 namespace App\Http\Controllers\Finance;
 
 use App\Http\Controllers\Controller;
-use App\Models\{FinanceReceivable, Chargeback, VendorPayout, Vendor, Order, SalesChannel};
+use App\Models\{FinanceReceivable, Chargeback, VendorPayout, Vendor, Order, SalesChannel,LiveSheet};
 use App\Services\{DashboardService, FinanceService, VendorService};
 use Illuminate\Http\Request;
 
@@ -79,14 +79,26 @@ class FinanceController extends Controller
                 !$user->isAdmin() && !empty($userCompanyCodes),
                 fn($q) => $q->whereIn('company_code', $userCompanyCodes)
             )
-            ->when($request->company_code,fn($q, $v) => $q->where('company_code', $v))
-            ->when($request->status, fn($q, $v) => $q->where('payment_status', $v))
+            ->when($request->company_code, fn($q, $v) => $q->where('company_code', $v))
+            ->when(!empty($request->status), fn($q, $v) => $q->where('payment_status', $v))
             ->when($request->channel_id, fn($q, $v) => $q->where('channel_id', $v))
-            ->when($request->payment === 'unpaid', fn($q) => $q->where('payment_status', 'unpaid'))
+            //  ->when($request->payment === 'unpaid', fn($q) => $q->where('payment_status', 'unpaid'))
             ->orderByRaw("FIELD(payment_status, 'unpaid', 'partial', 'paid') ASC")
             ->latest()
             ->paginate(30);
 
+        // $sql = $receivables->toSql();
+        // $bindings = $receivables->getBindings();
+
+        // foreach ($bindings as $binding) {
+        //     $value = is_numeric($binding) ? $binding : "'".addslashes($binding)."'";
+        //     $sql = preg_replace('/\?/', $value, $sql, 1);
+        // }
+
+        // dd("Final SQL Query:", $sql);
+
+        //  //print $receivables->appends($request->query()); 
+        //   exit;
         //        $channels = SalesChannel::where('is_active', true)->get();
 
         $channels = SalesChannel::where('is_active', true)
@@ -101,18 +113,18 @@ class FinanceController extends Controller
 
         // Fix: $summary was never built — blade was crashing with "Undefined variable: summary"
         $summary = [
-            'unpaid_count'     => FinanceReceivable::where('payment_status', 'unpaid') 
-            ->when($request->company_code,fn($q, $v) => $q->where('company_code', $v))->count(),
-            'unpaid_total'     => FinanceReceivable::where('payment_status', 'unpaid') 
-            ->when($request->company_code,fn($q, $v) => $q->where('company_code', $v))->sum('net_receivable'),
-            'partial_count'    => FinanceReceivable::where('payment_status', 'partial') 
-            ->when($request->company_code,fn($q, $v) => $q->where('company_code', $v))->count(),
-            'partial_total'    => FinanceReceivable::where('payment_status', 'partial') 
-            ->when($request->company_code,fn($q, $v) => $q->where('company_code', $v))->sum('net_receivable'),
-            'total_deductions' => FinanceReceivable::when($request->company_code,fn($q, $v) => $q->where('company_code', $v))->sum('platform_commission')
-                + FinanceReceivable::when($request->company_code,fn($q, $v) => $q->where('company_code', $v))->sum('platform_fee')
-                + FinanceReceivable::when($request->company_code,fn($q, $v) => $q->where('company_code', $v))->sum('insurance_charge')
-                + FinanceReceivable::when($request->company_code,fn($q, $v) => $q->where('company_code', $v))->sum('other_deductions'),
+            'unpaid_count'     => FinanceReceivable::where('payment_status', 'unpaid')
+                ->when($request->company_code, fn($q, $v) => $q->where('company_code', $v))->count(),
+            'unpaid_total'     => FinanceReceivable::where('payment_status', 'unpaid')
+                ->when($request->company_code, fn($q, $v) => $q->where('company_code', $v))->sum('net_receivable'),
+            'partial_count'    => FinanceReceivable::where('payment_status', 'partial')
+                ->when($request->company_code, fn($q, $v) => $q->where('company_code', $v))->count(),
+            'partial_total'    => FinanceReceivable::where('payment_status', 'partial')
+                ->when($request->company_code, fn($q, $v) => $q->where('company_code', $v))->sum('net_receivable'),
+            'total_deductions' => FinanceReceivable::when($request->company_code, fn($q, $v) => $q->where('company_code', $v))->sum('platform_commission')
+                + FinanceReceivable::when($request->company_code, fn($q, $v) => $q->where('company_code', $v))->sum('platform_fee')
+                + FinanceReceivable::when($request->company_code, fn($q, $v) => $q->where('company_code', $v))->sum('insurance_charge')
+                + FinanceReceivable::when($request->company_code, fn($q, $v) => $q->where('company_code', $v))->sum('other_deductions'),
         ];
 
         return view('finance.receivables.index', compact('receivables', 'channels', 'summary'));
@@ -161,10 +173,10 @@ class FinanceController extends Controller
 
 
         $stats = [
-            'total'        => Chargeback::when($request->company_code,fn($q, $v) => $q->where('company_code', $v))->count(),
-            'pending'      => Chargeback::when($request->company_code,fn($q, $v) => $q->where('company_code', $v))->where('status', 'pending_confirmation')->count(),
-            'confirmed'    => Chargeback::when($request->company_code,fn($q, $v) => $q->where('company_code', $v))->where('status', 'confirmed')->count(),
-            'total_amount' => Chargeback::when($request->company_code,fn($q, $v) => $q->where('company_code', $v))->where('status', 'confirmed')->sum('amount'),
+            'total'        => Chargeback::when($request->company_code, fn($q, $v) => $q->where('company_code', $v))->count(),
+            'pending'      => Chargeback::when($request->company_code, fn($q, $v) => $q->where('company_code', $v))->where('status', 'pending_confirmation')->count(),
+            'confirmed'    => Chargeback::when($request->company_code, fn($q, $v) => $q->where('company_code', $v))->where('status', 'confirmed')->count(),
+            'total_amount' => Chargeback::when($request->company_code, fn($q, $v) => $q->where('company_code', $v))->where('status', 'confirmed')->sum('amount'),
         ];
 
         // Fix #2: $vendors was never passed — blade vendor filter crashed with Undefined variable
@@ -249,7 +261,7 @@ class FinanceController extends Controller
             ->when(
                 !$user->isAdmin() && !empty($userCompanyCodes),
                 fn($q) => $q->whereIn('company_code', $userCompanyCodes)
-            )            
+            )
             ->when($request->company_code, fn($q, $v) => $q->where('company_code', $v))
             ->when($request->vendor_id, fn($q, $v) => $q->where('vendor_id', $v))
             ->when($request->status, fn($q, $v) => $q->where('status', $v))
@@ -467,8 +479,10 @@ class FinanceController extends Controller
             'sap_codes'              => 'required|array',
             'sap_codes.*.item_id'    => 'required|exists:live_sheet_items,id',
             'sap_codes.*.sap_code'   => 'nullable|string|max:50|regex:/^[A-Za-z0-9\-_]+$/',
+            'sap_codes.*.vendor_wsp' => 'nullable|numeric|min:0|decimal:0,2',
         ], [
             'sap_codes.*.sap_code.regex' => 'SAP code can only contain letters, numbers, hyphens and underscores.',
+            'sap_codes.*.vendor_wsp.decimal' => 'Vendor WSP must be a valid decimal number with up to 2 decimal places.',
         ]);
 
         // ── Pre-validation: check uniqueness across all products and live sheets ──
@@ -523,18 +537,22 @@ class FinanceController extends Controller
             if ($item && $item->live_sheet_id === $liveSheet->id) {
                 $details = $item->product_details ?? [];
                 $details['sap_code'] = $row['sap_code'];
+                $details['vendor_wsp'] = $row['vendor_wsp'];
                 $item->update(['product_details' => $details]);
 
                 if (!empty($row['sap_code']) && $item->product) {
                     $item->product->update(['sap_code' => $row['sap_code']]);
                 }
+                if (!empty($row['vendor_wsp']) && $item->product) {
+                    $item->product->update(['vendor_wsp' => $row['vendor_wsp']]);
+                }
                 $updated++;
             }
         }
 
-        \App\Models\ActivityLog::log('updated', 'live_sheet', $liveSheet, null, ['sap_codes_updated' => $updated], 'SAP codes updated by Finance');
+        \App\Models\ActivityLog::log('updated', 'live_sheet', $liveSheet, null, ['sap_codes_updated' => $updated], 'SAP codes and Vendor WSP updated by Finance');
 
-        return back()->with('success', "{$updated} SAP code(s) updated successfully.");
+        return back()->with('success', "{$updated} SAP code and Vendor WSP(s) updated successfully.");
     }
     /**
      * Download pre-filled SAP template CSV for a live sheet
@@ -543,18 +561,21 @@ class FinanceController extends Controller
     {
         $liveSheet->load('items.product');
 
-        $csv = "Item ID,SKU,Product Name,Current SAP Code,New SAP Code\n";
+        $csv = "Item ID,SKU,Product Name,Current SAP Code,New SAP Code,Current Vendor WSP,New Vendor WSP\n";
 
         foreach ($liveSheet->items as $item) {
             $d = $item->product_details ?? [];
             $currentSap = $item->product->sap_code ?? $d['sap_code'] ?? '';
+            $currentPayout = $item->product->vendor_wsp ?? $d['vendor_wsp'] ?? '';
 
             $csv .= implode(',', [
                 $item->id,
                 '"' . ($item->product->sku ?? '') . '"',
                 '"' . str_replace('"', '""', $item->product->name ?? '') . '"',
                 '"' . $currentSap . '"',
-                '', // New SAP Code — to be filled by finance
+                '', // New SAP Code
+                $currentPayout,
+                '', // New Vendor Payout Price
             ]) . "\n";
         }
 
@@ -564,11 +585,144 @@ class FinanceController extends Controller
             'Content-Disposition' => "attachment; filename=\"{$filename}\"",
         ]);
     }
-
     /**
      * Upload filled SAP CSV and apply codes to products
      */
     public function uploadSapCodes(Request $request, \App\Models\LiveSheet $liveSheet)
+    {
+        $request->validate([
+            'sap_file' => 'required|file|max:5120',
+        ]);
+
+        $file = $request->file('sap_file');
+        $ext = strtolower($file->getClientOriginalExtension());
+        if (!in_array($ext, ['csv', 'txt', 'xlsx'])) {
+            return back()->with('error', 'File must be CSV or XLSX format.');
+        }
+
+        try {
+            $fullPath = $file->getRealPath();
+
+            if ($ext === 'xlsx') {
+                $reader = new \PhpOffice\PhpSpreadsheet\Reader\Xlsx();
+                $reader->setReadDataOnly(false);
+                $spreadsheet = $reader->load($fullPath);
+                $rows = $spreadsheet->getActiveSheet()->toArray();
+            } else {
+                $rows = [];
+                if (($handle = fopen($fullPath, 'r')) !== false) {
+                    while (($row = fgetcsv($handle)) !== false) {
+                        $rows[] = $row;
+                    }
+                    fclose($handle);
+                }
+            }
+
+            // File read from temp upload path, no cleanup needed
+
+            if (count($rows) < 2) {
+                return back()->with('error', 'File is empty or has no data rows.');
+            }
+
+            // Find column indexes
+            $header = array_map(fn($h) => strtolower(trim($h ?? '')), $rows[0]);
+            $itemIdCol = null;
+            $sapCol = null;
+            $payoutCol = null;
+
+            foreach ($header as $i => $h) {
+                if (in_array($h, ['item id', 'item_id', 'id'])) $itemIdCol = $i;
+                if (in_array($h, ['new sap code', 'new_sap_code', 'sap code', 'sap_code'])) $sapCol = $i;
+                if (in_array($h, ['new vendor payout price', 'vendor_wsp', 'vendor payout price', 'vendor wsp', 'wsp'])) $payoutCol = $i;
+            }
+
+            if ($sapCol === null && $payoutCol === null) {
+                return back()->with('error', 'CSV must have a "New SAP Code" or "New Vendor WSP" column.');
+            }
+
+            $updated = 0;
+            $errors = [];
+            $sapCodes = [];
+
+            for ($i = 1; $i < count($rows); $i++) {
+                $row = $rows[$i];
+                $sapCode = $sapCol !== null ? trim($row[$sapCol] ?? '') : '';
+                $payoutPrice = $payoutCol !== null ? trim($row[$payoutCol] ?? '') : '';
+
+                if ($sapCode === '' && $payoutPrice === '') continue;
+
+                $itemId = $itemIdCol !== null ? intval($row[$itemIdCol] ?? 0) : null;
+                if (!$itemId) continue;
+
+                // SAP uniqueness check
+                if ($sapCode !== '' && in_array($sapCode, $sapCodes)) {
+                    $errors[] = "Row " . ($i + 1) . ": Duplicate SAP code '{$sapCode}'.";
+                    continue;
+                }
+                if ($sapCode !== '') $sapCodes[] = $sapCode;
+
+                // Validate payout price
+                if ($payoutPrice !== '' && !is_numeric($payoutPrice)) {
+                    $errors[] = "Row " . ($i + 1) . ": Invalid payout price '{$payoutPrice}'.";
+                    continue;
+                }
+
+                $item = \App\Models\LiveSheetItem::where('id', $itemId)
+                    ->where('live_sheet_id', $liveSheet->id)
+                    ->first();
+
+                if (!$item) continue;
+
+                // Check SAP against existing products
+                if ($sapCode !== '') {
+                    $dup = \App\Models\Product::where('sap_code', $sapCode)
+                        ->when($item->product_id, fn($q) => $q->where('id', '!=', $item->product_id))
+                        ->first();
+
+                    if ($dup) {
+                        $errors[] = "Row " . ($i + 1) . ": SAP '{$sapCode}' already used by {$dup->sku}.";
+                        continue;
+                    }
+                }
+
+                // Update product
+                if ($item->product_id) {
+                    $productUpdate = [];
+                    if ($sapCode !== '') $productUpdate['sap_code'] = $sapCode;
+                    if ($payoutPrice !== '') $productUpdate['vendor_wsp'] = floatval($payoutPrice);
+                    if (!empty($productUpdate)) {
+                        \App\Models\Product::where('id', $item->product_id)->update($productUpdate);
+                    }
+                }
+
+                // Update live sheet item product_details
+                $d = $item->product_details ?? [];
+                if ($sapCode !== '') $d['sap_code'] = $sapCode;
+                if ($payoutPrice !== '') $d['vendor_wsp'] = floatval($payoutPrice);
+                $item->update(['product_details' => $d]);
+                $updated++;
+            }
+
+            \App\Models\ActivityLog::log('uploaded', 'sap_codes', $liveSheet, null, [
+                'updated' => $updated,
+                'errors' => count($errors),
+            ], "SAP codes or Vendor payout price uploaded via CSV: {$updated} updated");
+
+            $msg = "{$updated} SAP code,Vendor payout price(s) updated.";
+            if (!empty($errors)) {
+                $msg .= " Errors: " . implode('; ', array_slice($errors, 0, 5));
+            }
+
+            return back()->with($updated > 0 ? 'success' : 'error', $msg);
+        } catch (\Exception $e) {
+            \Log::error('SAP upload or Vendor payout price failed: ' . $e->getMessage());
+            return back()->with('error', 'Upload failed: ' . $e->getMessage());
+        }
+    }
+    /**
+     * Upload filled SAP CSV and apply codes to products
+     */
+    public function uploadSapCodes1(Request $request, \App\Models\LiveSheet $liveSheet)
     {
         $request->validate([
             'sap_file' => 'required|file|max:5120',
@@ -667,7 +821,8 @@ class FinanceController extends Controller
             }
 
             \App\Models\ActivityLog::log('uploaded', 'sap_codes', $liveSheet, null, [
-                'updated' => $updated, 'errors' => count($errors),
+                'updated' => $updated,
+                'errors' => count($errors),
             ], "SAP codes uploaded via CSV: {$updated} updated");
 
             $msg = "{$updated} SAP code(s) updated.";
@@ -676,7 +831,6 @@ class FinanceController extends Controller
             }
 
             return back()->with($updated > 0 ? 'success' : 'error', $msg);
-
         } catch (\Exception $e) {
             \Log::error('SAP upload failed: ' . $e->getMessage());
             return back()->with('error', 'Upload failed: ' . $e->getMessage());
@@ -699,7 +853,7 @@ class FinanceController extends Controller
             ->when(!$user->isAdmin() && !empty($userCompanyCodes), function ($q) use ($userCompanyCodes) {
                 return $q->whereIn('company_code', $userCompanyCodes);
             })
-             ->when(  $request->company_code, fn($q, $v) => $q->where('company_code', $v))
+            ->when($request->company_code, fn($q, $v) => $q->where('company_code', $v))
             ->when($request->vendor_id, fn($q, $v) => $q->where('vendor_id', $v))
             ->orderByDesc('created_at')
             ->paginate(30)
@@ -864,5 +1018,22 @@ class FinanceController extends Controller
         }
         $mn = date('M', mktime(0, 0, 0, $month, 1));
         return response($csv, 200, ['Content-Type' => 'text/csv', 'Content-Disposition' => "attachment; filename=\"vendor-charges-{$mn}-{$year}.csv\""]);
+    }
+    public function updateCommission(Request $request, LiveSheet $liveSheet)
+    {
+        $request->validate([
+            'commission_percentage' => 'required|numeric|min:0|max:100'
+        ]);
+
+        $liveSheet->update([
+            'commission_percentage' => $request->commission_percentage,
+            'cp_updated_by' => auth()->id(),
+            'cp_updated_at' => now(),
+        ]);
+        file_put_contents(storage_path('logs/commission_updates.log'), "LiveSheet ID: {$liveSheet->id}, New Commission: {$request->commission_percentage}%, Updated By: " . auth()->user()->name . " at " . now() . "\n", FILE_APPEND);
+        return response()->json([
+            'success' => true,
+            'message' => 'Commission percentage updated successfully.'
+        ]);
     }
 }

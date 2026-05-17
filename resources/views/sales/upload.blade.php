@@ -26,9 +26,34 @@
     <strong>Important:</strong> Sales channel must exist in the Sales Channel Master. Orders with unrecognized channels will be rejected.
     Available channels: @foreach($channels as $ch)<span style="padding:.1rem .3rem;background:#dbeafe;border-radius:3px;font-size:.72rem;margin:.1rem;">{{ $ch->name }}</span>@endforeach
 </div>
-
+<div class="card" style="margin-bottom:1.25rem;">
+    <div class="card-header">
+        <h3><i class="fas fa-upload" style="margin-right:.5rem;color:#e8a838;"></i> Upload Sales File</h3>
+        <a href="{{ route('sales.upload.template') }}" class="btn btn-outline btn-sm"><i class="fas fa-download"></i> Download Template</a>
+    </div>
+    <div class="card-body">
+        <form method="POST" action="{{ route('sales.upload.store') }}" enctype="multipart/form-data">
+            @csrf
+            <div style="display:flex;flex-wrap:wrap;gap:1rem;align-items:flex-end;">
+                <div style="min-width:120px;">
+                    <label style="font-size:.7rem;font-weight:600;color:#64748b;display:block;margin-bottom:.25rem;">Company Code *</label>
+                    <select name="company_code" required style="padding:.4rem .5rem;border:1px solid #d1d5db;border-radius:8px;font-size:.82rem;">
+                        <option value="2000">🇮🇳 2000</option>
+                        <option value="2100" selected>🇺🇸 2100</option>
+                        <option value="2200">🇳🇱 2200</option>
+                    </select>
+                </div>
+                <div style="flex:1;min-width:250px;">
+                    <label style="font-size:.7rem;font-weight:600;color:#64748b;display:block;margin-bottom:.25rem;">Sales File (CSV / XLSX) *</label>
+                    <input type="file" name="sales_file" required accept=".csv,.xlsx,.xls" style="font-size:.82rem;">
+                </div>
+                <button type="submit" class="btn btn-primary" onclick="return confirm('Upload and process sales data?')"><i class="fas fa-upload" style="margin-right:.3rem;"></i> Upload & Process</button>
+            </div>
+        </form>
+    </div>
+</div>
 {{-- Manual Entry Form --}}
-<form method="POST" action="{{ route('sales.upload.store') }}" id="salesForm">
+<form method="POST" action="{{ route('sales.upload.manual') }}" id="salesForm">
     @csrf
 
     <div class="card" style="margin-bottom:1.25rem;">
@@ -117,8 +142,24 @@ function addOrderRow() {
 function validateSales() {
     var rows = document.querySelectorAll('#ordersBody tr');
     if (rows.length === 0) { alert('Add at least one order.'); return false; }
-    return confirm('Upload ' + rows.length + ' order(s)?');
+    return confirm('Create ' + rows.length + ' order(s)?');
 }
+
+ 
+$(document).on('input', 'input[name*="[quantity]"], input[name*="[unit_price]"]', function() {
+    var name = $(this).attr('name');
+    var match = name.match(/orders\[(\d+)\]\[items\]\[(\d+)\]/);
+    if (!match) return;
+
+    var orderIdx = match[1];
+    var itemIdx = match[2];
+
+    var qty = parseFloat($('input[name="orders[' + orderIdx + '][items][' + itemIdx + '][quantity]"]').val()) || 0;
+    var price = parseFloat($('input[name="orders[' + orderIdx + '][items][' + itemIdx + '][unit_price]"]').val()) || 0;
+
+    $('input[name="orders[' + orderIdx + '][total_amount]"]').val((qty * price).toFixed(2));
+});
+ 
 </script>
 @endpush
 @endsection

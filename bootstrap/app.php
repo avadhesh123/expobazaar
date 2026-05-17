@@ -16,6 +16,7 @@ return Application::configure(basePath: dirname(__DIR__))
             'permission' => \App\Http\Middleware\CheckPermission::class, 
             'user.type' => \App\Http\Middleware\CheckUserType::class,
             'department' => \App\Http\Middleware\CheckDepartment::class,
+            'module'     => \App\Http\Middleware\CheckDepartment::class,
             'company.code' => \App\Http\Middleware\CheckCompanyCode::class,
             'vendor.kyc.approved' => \App\Http\Middleware\VendorKycApproved::class,
         ]);

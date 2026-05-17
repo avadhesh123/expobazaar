@@ -41,7 +41,7 @@ class LiveSheetItemChange extends Model
     {
         $trackedFields = [
             'target_fob', 'final_qty', 'final_fob', 'freight_factor', 'wsp_factor', 'comments',
-            'vendor_fob', 'qty_offered', 'barcode', 'sap_code',
+            'vendor_fob', 'qty_offered', 'barcode', 'sap_code','vendor_wsp',
         ];
 
         $oldDetails = $item->product_details ?? [];

@@ -12,7 +12,7 @@ class Product extends Model
     use SoftDeletes;
 
     protected $fillable = [
-        'sku', 'sap_code', 'name', 'description', 'category_id', 'vendor_id', 'company_code',
+        'sku', 'sap_code','vendor_wsp', 'name', 'description', 'category_id', 'vendor_id', 'company_code',
         'length', 'width', 'height', 'weight', 'cbm', 'color', 'material',
         'variations', 'vendor_price', 'fob_price', 'currency', 'thumbnail', 'images',
         'status', 'hsn_code', 'barcode', 'stock_quantity', 'reserved_quantity',
@@ -20,6 +20,7 @@ class Product extends Model
     ];
 
     protected $casts = [
+		'vendor_wsp'=>'decimal:2',
         'variations' => 'array',
         'images' => 'array',
         'platform_listing_status' => 'array',

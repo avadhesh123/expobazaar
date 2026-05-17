@@ -8,7 +8,7 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Order extends Model
 {
-    use HasFactory, \App\Traits\FiltersByCompany, SoftDeletes;
+    use HasFactory, SoftDeletes;
 
     protected $fillable = [
         'order_number', 'platform_order_id', 'sales_channel_id', 'customer_id',
@@ -18,12 +18,18 @@ class Order extends Model
         'customer_name', 'customer_email', 'shipping_address', 'shipping_city',
         'shipping_state', 'shipping_country', 'shipping_pincode',
         'payment_status', 'status', 'uploaded_by', 'remarks',
+        'invoice_number', 'customer_phone', 'customer_type', 'company_name',
+        'shipping_method', 'warehouse_id',
+        'shipped_qty', 'shipped_amount', 'shipping_cost', 'carrier',
+        'ship_date', 'current_status', 'delivery_date', 'material_cost', 'order_processing_charges',
     ];
 
     protected $casts = [
         'order_date' => 'date',
         'shipped_date' => 'date',
         'delivered_date' => 'date',
+        'ship_date' => 'date',
+        'delivery_date' => 'date',
     ];
 
     public function salesChannel() { return $this->belongsTo(SalesChannel::class); }
@@ -32,6 +38,7 @@ class Order extends Model
     public function receivable() { return $this->hasOne(FinanceReceivable::class); }
     public function chargebacks() { return $this->hasMany(Chargeback::class); }
     public function uploader() { return $this->belongsTo(User::class, 'uploaded_by'); }
+    public function warehouse() { return $this->belongsTo(\App\Models\Warehouse::class); }
 
     public function scopeByCompanyCode($query, $code) { return $query->where('company_code', $code); }
     public function scopeUnpaid($query) { return $query->where('payment_status', 'unpaid'); }
