@@ -1,107 +1,235 @@
 @extends('layouts.app')
 @section('title', 'Payout Detail')
-@section('page-title', 'Payout Detail — ' . ($payout->vendor->company_name ?? ''))
+@section('page-title', 'Vendor Payout — ' . ($payout->vendor->company_name ?? 'Vendor'))
 
 @section('content')
-<div style="display:flex;gap:.5rem;margin-bottom:1.25rem;">
-    <a href="{{ route('finance.payouts') }}" class="btn btn-outline btn-sm"><i class="fas fa-arrow-left"></i> All Payouts</a>
-    @if($payout->status === 'paid')<a href="{{ route('finance.payouts.advice', $payout) }}" class="btn btn-secondary btn-sm"><i class="fas fa-file-download"></i> Download Payment Advice</a>@endif
-</div>
+@php
+$currency = match($payout->company_code) { '2000' => '₹', '2200' => '€', default => '$' };
+$monthName = \Carbon\Carbon::create($payout->payout_year, $payout->payout_month)->format('F Y');
+@endphp
 
-{{-- Header --}}
+{{-- Payout Header --}}
 <div class="card" style="margin-bottom:1.25rem;">
-    <div class="card-body" style="padding:1.25rem 1.4rem;">
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem;">
+    <div class="card-body" style="padding:1rem 1.4rem;">
+        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:1rem;font-size:.82rem;">
             <div>
-                <div style="font-size:1.1rem;font-weight:800;color:#0d1b2a;">{{ $payout->vendor->company_name ?? '—' }}</div>
-                <div style="font-size:.82rem;color:#64748b;">{{ $payout->vendor->vendor_code ?? '' }} · {{ $payout->company_code }} · {{ date('F',mktime(0,0,0,$payout->payout_month,1)) }} {{ $payout->payout_year }}</div>
+                <div style="font-size:.65rem;color:#64748b;font-weight:600;text-transform:uppercase;">Vendor</div>
+                <div style="font-weight:700;">{{ $payout->vendor->company_name ?? '—' }}</div>
             </div>
-            @php $sc = ['calculated'=>'badge-warning','approved'=>'badge-info','payment_pending'=>'badge-warning','paid'=>'badge-success','invoice_received'=>'badge-success']; @endphp
-            <span class="badge {{ $sc[$payout->status] ?? 'badge-gray' }}" style="font-size:.85rem;padding:.35rem .85rem;">{{ ucfirst(str_replace('_',' ',$payout->status)) }}</span>
+            <div>
+                <div style="font-size:.65rem;color:#64748b;font-weight:600;text-transform:uppercase;">Period</div>
+                <div style="font-weight:600;">{{ $monthName }}</div>
+            </div>
+            <div>
+                <div style="font-size:.65rem;color:#64748b;font-weight:600;text-transform:uppercase;">Company</div>
+                <div style="font-weight:600;">{{ $payout->company_code }}</div>
+            </div>
+            <div>
+                <div style="font-size:.65rem;color:#64748b;font-weight:600;text-transform:uppercase;">Status</div>
+                <div>@php $sc = ['draft'=>'badge-gray','calculated'=>'badge-warning','approved'=>'badge-success','paid'=>'badge-info']; @endphp<span class="badge {{ $sc[$payout->status] ?? 'badge-gray' }}">{{ ucfirst($payout->status) }}</span></div>
+            </div>
         </div>
-
-        {{-- Payout Breakdown --}}
-        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(155px,1fr));gap:.75rem;">
-            <div style="padding:.7rem;background:#dcfce7;border-radius:8px;text-align:center;"><div style="font-size:.62rem;color:#166534;font-weight:600;text-transform:uppercase;">Total Sales</div><div style="font-size:1.15rem;font-weight:800;color:#166534;font-family:monospace;">${{ number_format($payout->total_sales, 2) }}</div></div>
-            <div style="padding:.7rem;background:#fee2e2;border-radius:8px;text-align:center;"><div style="font-size:.62rem;color:#dc2626;font-weight:600;text-transform:uppercase;">Storage</div><div style="font-size:1.05rem;font-weight:700;color:#dc2626;font-family:monospace;">-${{ number_format($payout->total_storage_charges, 2) }}</div></div>
-            <div style="padding:.7rem;background:#fee2e2;border-radius:8px;text-align:center;"><div style="font-size:.62rem;color:#dc2626;font-weight:600;text-transform:uppercase;">Inward</div><div style="font-size:1.05rem;font-weight:700;color:#dc2626;font-family:monospace;">-${{ number_format($payout->total_inward_charges, 2) }}</div></div>
-            <div style="padding:.7rem;background:#fee2e2;border-radius:8px;text-align:center;"><div style="font-size:.62rem;color:#dc2626;font-weight:600;text-transform:uppercase;">Logistics</div><div style="font-size:1.05rem;font-weight:700;color:#dc2626;font-family:monospace;">-${{ number_format($payout->total_logistics_charges, 2) }}</div></div>
-            <div style="padding:.7rem;background:#fef3c7;border-radius:8px;text-align:center;"><div style="font-size:.62rem;color:#92400e;font-weight:600;text-transform:uppercase;">Platform Ded.</div><div style="font-size:1.05rem;font-weight:700;color:#92400e;font-family:monospace;">-${{ number_format($payout->total_platform_deductions, 2) }}</div></div>
-            <div style="padding:.7rem;background:#fef2f2;border-radius:8px;text-align:center;"><div style="font-size:.62rem;color:#991b1b;font-weight:600;text-transform:uppercase;">Chargebacks</div><div style="font-size:1.05rem;font-weight:700;color:#991b1b;font-family:monospace;">-${{ number_format($payout->total_chargebacks, 2) }}</div></div>
-            <div style="padding:.7rem;background:{{ $payout->net_payout >= 0 ? '#dcfce7' : '#fee2e2' }};border-radius:8px;text-align:center;border:2px solid {{ $payout->net_payout >= 0 ? '#16a34a' : '#dc2626' }};"><div style="font-size:.62rem;color:{{ $payout->net_payout >= 0 ? '#166534' : '#dc2626' }};font-weight:600;text-transform:uppercase;">Net Payout</div><div style="font-size:1.25rem;font-weight:800;color:{{ $payout->net_payout >= 0 ? '#166534' : '#dc2626' }};font-family:monospace;">${{ number_format($payout->net_payout, 2) }}</div></div>
-        </div>
-
-        @if($payout->payment_date)
-        <div style="margin-top:.75rem;padding:.5rem .75rem;background:#f0fdf4;border-radius:6px;font-size:.82rem;color:#166534;">
-            <i class="fas fa-check-circle" style="margin-right:.2rem;"></i> Paid on {{ $payout->payment_date->format('d M Y') }} · Ref: {{ $payout->payment_reference ?? '—' }} · Method: {{ ucfirst($payout->payment_method ?? '—') }}
-        </div>
-        @endif
     </div>
 </div>
 
-{{-- Orders for this period --}}
+{{-- KPIs --}}
+<div style="display:flex;gap:1rem;margin-bottom:1.25rem;">
+    <div class="kpi-card" style="flex:1;border-left:3px solid #1e40af;">
+        <div class="kpi-label">Total Qty</div>
+        <div class="kpi-value" style="color:#1e40af;">{{ number_format($payoutSummary['total_qty']) }}</div>
+    </div>
+    <div class="kpi-card" style="flex:1;border-left:3px solid #16a34a;">
+        <div class="kpi-label">Total Sales</div>
+        <div class="kpi-value" style="color:#16a34a;">{{ $currency }}{{ number_format($payoutSummary['total_sales'], 2) }}</div>
+    </div>
+    <div class="kpi-card" style="flex:1;border-left:3px solid #e8a838;">
+        <div class="kpi-label">EB Commission</div>
+        <div class="kpi-value" style="color:#e8a838;">{{ $currency }}{{ number_format($payoutSummary['total_commission'], 2) }}</div>
+    </div>
+    <div class="kpi-card" style="flex:1;border-left:3px solid #7c3aed;">
+        <div class="kpi-label">Net Payout</div>
+        <div class="kpi-value" style="color:#7c3aed;">{{ $currency }}{{ number_format($payoutSummary['total_payout'], 2) }}</div>
+    </div>
+</div>
+
+{{-- SKU-Level Breakdown --}}
 <div class="card" style="margin-bottom:1.25rem;">
-    <div class="card-header"><h3><i class="fas fa-shopping-cart" style="margin-right:.5rem;color:#1e3a5f;"></i> Orders ({{ $orders->count() }})</h3><span style="font-size:.78rem;color:#64748b;">${{ number_format($orders->sum('total_amount'), 2) }} total</span></div>
+    <div class="card-header">
+        <h3><i class="fas fa-list-alt" style="margin-right:.5rem;color:#1e3a5f;"></i> SKU-Level Payout Breakdown</h3><span style="font-size:.78rem;color:#64748b;">{{ $lineItems->count() }} items</span>
+    </div>
     <div class="card-body" style="padding:0;overflow-x:auto;">
-        <table class="data-table">
-            <thead><tr><th>Order #</th><th>Platform</th><th>Date</th><th>Items</th><th>Amount</th></tr></thead>
-            <tbody>
-                @foreach($orders->take(20) as $order)
-                <tr>
-                    <td style="font-weight:600;font-family:monospace;font-size:.8rem;">{{ $order->order_number }}</td>
-                    <td><span class="badge badge-info">{{ $order->salesChannel->name ?? '—' }}</span></td>
-                    <td style="font-size:.82rem;">{{ $order->order_date->format('d M Y') }}</td>
-                    <td style="text-align:center;">{{ $order->items->count() }}</td>
-                    <td style="font-family:monospace;font-weight:600;">${{ number_format($order->total_amount, 2) }}</td>
+        <table class="data-table" style="font-size:.78rem;">
+            <thead>
+                <tr style="background:#f0f4f8;">
+                    <th style="width:40px;">S.No</th>
+                    <th>SKU</th>
+                    <th>Channel</th>
+                    <th style="text-align:right;">Vendor WSP</th>
+                    <th style="text-align:center;">QTY</th>
+                    <th style="text-align:right;">Sale Amount</th>
+                    <th style="text-align:right;">EB Commission</th>
+                    <th style="text-align:right;background:#f5f3ff;">Net Payout</th>
                 </tr>
-                @endforeach
-                @if($orders->count() > 20)<tr><td colspan="5" style="text-align:center;color:#94a3b8;font-size:.82rem;">... and {{ $orders->count() - 20 }} more orders</td></tr>@endif
+            </thead>
+            <tbody>
+                @forelse($lineItems as $idx => $li)
+                <tr>
+                    <td style="text-align:center;color:#94a3b8;font-weight:600;">{{ $idx + 1 }}</td>
+                    <td style="font-family:monospace;font-weight:600;">{{ $li->sku }}</td>
+                    <td style="font-size:.72rem;">{{ $li->channel }}</td>
+                    <td style="text-align:right;font-family:monospace;">{{ number_format($li->vendor_wsp, 2) }}</td>
+                    <td style="text-align:center;font-weight:600;">{{ $li->qty }}</td>
+                    <td style="text-align:right;font-family:monospace;">{{ $currency }}{{ number_format($li->sale_amount, 2) }}</td>
+                    <td style="text-align:right;font-family:monospace;color:#e8a838;">{{ $currency }}{{ number_format($li->commission, 2) }}</td>
+                    <td style="text-align:right;font-family:monospace;font-weight:700;background:#f5f3ff;color:#7c3aed;">{{ $currency }}{{ number_format($li->net_payout, 2) }}</td>
+                </tr>
+                @empty
+                <tr>
+                    <td colspan="8" style="text-align:center;padding:2rem;color:#94a3b8;">No order items found for this period.</td>
+                </tr>
+                @endforelse
             </tbody>
+            @if($lineItems->isNotEmpty())
+            <tfoot>
+                <tr style="background:#f0f4f8;font-weight:700;">
+                    <td colspan="3" style="text-align:right;">TOTAL</td>
+                    <td></td>
+                    <td style="text-align:center;">{{ number_format($payoutSummary['total_qty']) }}</td>
+                    <td style="text-align:right;font-family:monospace;">{{ $currency }}{{ number_format($payoutSummary['total_sales'], 2) }}</td>
+                    <td style="text-align:right;font-family:monospace;color:#e8a838;">{{ $currency }}{{ number_format($payoutSummary['total_commission'], 2) }}</td>
+                    <td style="text-align:right;font-family:monospace;color:#7c3aed;background:#f5f3ff;">{{ $currency }}{{ number_format($payoutSummary['total_payout'], 2) }}</td>
+                </tr>
+            </tfoot>
+            @endif
         </table>
     </div>
 </div>
 
-<div class="grid-2">
+{{-- Deductions --}}
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:1.25rem;margin-bottom:1.25rem;">
     {{-- Warehouse Charges --}}
     <div class="card">
-        <div class="card-header"><h3><i class="fas fa-warehouse" style="margin-right:.5rem;color:#e8a838;"></i> Warehouse Charges</h3></div>
+        <div class="card-header">
+            <h3><i class="fas fa-warehouse" style="margin-right:.5rem;color:#e8a838;"></i>Vendor Warehouse Charges</h3>
+        </div>
         <div class="card-body" style="padding:0;">
-            <table class="data-table">
-                <thead><tr><th>Warehouse</th><th>Type</th><th>Amount</th></tr></thead>
+            <table class="data-table" style="font-size:.78rem;">
+                <thead>
+                    <tr style="background:#f0f4f8;">
+                        <th>Warehouse</th>
+                        <th>GRN</th>
+                        <th>Inward</th>
+                        <th>Storage</th>
+                        <th>Fulfillment</th>
+                        <th>Pick & Pack</th>
+                        <th>Material</th>
+                        <th>Total Charges</th>
+                     </tr>
+                </thead>
                 <tbody>
                     @forelse($warehouseCharges as $wc)
                     <tr>
-                        <td style="font-size:.82rem;">{{ $wc->warehouse->name ?? '—' }}</td>
-                        <td><span class="badge badge-info">{{ ucfirst(str_replace('_',' ',$wc->charge_type)) }}</span></td>
-                        <td style="font-family:monospace;font-weight:600;color:#dc2626;">${{ number_format($wc->calculated_amount, 2) }}</td>
-                    </tr>
+                        <td>{{ $wc->warehouse->name ?? '—' }}</td>
+                        <td>{{ $wc->grn->grn_number ?? '—' }}</td>
+                        <td><span class="badge badge-gray">{{ ucfirst($wc->inward_charge ?? '—') }}</span></td>
+                        <td><span class="badge badge-gray">{{ ucfirst($wc->storage_charge ?? '—') }}</span></td>
+                        <td><span class="badge badge-gray">{{ ucfirst($wc->fulfillment_charge ?? '—') }}</span></td>
+                        <td><span class="badge badge-gray">{{ ucfirst($wc->pick_pack_charge ?? '—') }}</span></td>
+                        <td><span class="badge badge-gray">{{ ucfirst($wc->material_cost ?? '—') }}</span></td>
+                        <td><span class="badge badge-gray">{{ ucfirst($wc->total_charges ?? '—') }}</span></td>
+
+                     </tr>
                     @empty
-                    <tr><td colspan="3" style="text-align:center;color:#94a3b8;padding:1rem;">No charges.</td></tr>
+                    <tr>
+                        <td colspan="8" style="text-align:center;color:#94a3b8;padding:1rem;">No warehouse charges</td>
+                    </tr>
                     @endforelse
                 </tbody>
+                @if($warehouseCharges->isNotEmpty())
+                <tfoot>
+                    <tr style="background:#f0f4f8;font-weight:700;">
+                        <td colspan="7" style="text-align:right;">Total</td>
+                        <td>{{ $currency }}{{ number_format($warehouseCharges->sum(fn($c) => floatval($c->total_charges ?? $c->amount ?? 0)), 2) }}</td>
+                    </tr>
+                </tfoot>
+                @endif
             </table>
         </div>
     </div>
 
     {{-- Chargebacks --}}
     <div class="card">
-        <div class="card-header"><h3><i class="fas fa-exclamation-triangle" style="margin-right:.5rem;color:#dc2626;"></i> Chargebacks</h3></div>
+        <div class="card-header">
+            <h3><i class="fas fa-exclamation-triangle" style="margin-right:.5rem;color:#dc2626;"></i> Chargebacks</h3>
+        </div>
         <div class="card-body" style="padding:0;">
-            <table class="data-table">
-                <thead><tr><th>Order</th><th>Reason</th><th>Amount</th></tr></thead>
+            <table class="data-table" style="font-size:.78rem;">
+                <thead>
+                    <tr style="background:#f0f4f8;">
+                        <th>Order</th>
+                        <th>Reason</th>
+                        <th style="text-align:right;">Amount</th>
+                    </tr>
+                </thead>
                 <tbody>
                     @forelse($chargebacks as $cb)
                     <tr>
-                        <td style="font-family:monospace;font-size:.8rem;">{{ $cb->order->order_number ?? '—' }}</td>
-                        <td style="font-size:.82rem;">{{ $cb->reason }}</td>
-                        <td style="font-family:monospace;font-weight:600;color:#dc2626;">${{ number_format($cb->amount, 2) }}</td>
+                        <td style="font-family:monospace;font-size:.72rem;">{{ $cb->order->order_number ?? '—' }}</td>
+                        <td style="font-size:.72rem;">{{ Str::limit($cb->reason ?? '—', 30) }}</td>
+                        <td style="text-align:right;font-family:monospace;font-weight:600;color:#dc2626;">-{{ $currency }}{{ number_format(floatval($cb->amount), 2) }}</td>
                     </tr>
                     @empty
-                    <tr><td colspan="3" style="text-align:center;color:#94a3b8;padding:1rem;">No chargebacks.</td></tr>
+                    <tr>
+                        <td colspan="3" style="text-align:center;color:#94a3b8;padding:1rem;">No chargebacks</td>
+                    </tr>
                     @endforelse
                 </tbody>
+                @if($chargebacks->isNotEmpty())
+                <tfoot>
+                    <tr style="background:#f0f4f8;font-weight:700;">
+                        <td colspan="2" style="text-align:right;">Total</td>
+                        <td style="text-align:right;font-family:monospace;color:#dc2626;">-{{ $currency }}{{ number_format($chargebacks->sum('amount'), 2) }}</td>
+                    </tr>
+                </tfoot>
+                @endif
             </table>
         </div>
     </div>
+</div>
+
+{{-- Final Payout Summary --}}
+@php
+$totalWhCharges = $warehouseCharges->sum(fn($c) => floatval($c->calculated_amount ?? $c->amount ?? 0));
+$totalChargebacks = $chargebacks->sum('amount');
+$finalPayout = $payoutSummary['total_payout'] - $totalWhCharges - $totalChargebacks;
+@endphp
+<div class="card">
+    <div class="card-header">
+        <h3><i class="fas fa-calculator" style="margin-right:.5rem;color:#7c3aed;"></i> Final Payout Summary</h3>
+    </div>
+    <div class="card-body" style="padding:1rem 1.4rem;">
+        <table style="width:100%;max-width:500px;font-size:.85rem;">
+            <tr>
+                <td style="padding:.4rem 0;">Total Sales (Vendor WSP × QTY)</td>
+                <td style="text-align:right;font-family:monospace;font-weight:600;">{{ $currency }}{{ number_format($payoutSummary['total_payout'], 2) }}</td>
+            </tr>
+            <tr>
+                <td style="padding:.4rem 0;color:#dc2626;">— Warehouse Charges</td>
+                <td style="text-align:right;font-family:monospace;color:#dc2626;">{{ $currency }}{{ number_format($warehouseCharges->sum(fn($c) => floatval($c->total_charges ?? $c->amount ?? 0)), 2) }}</td>
+            </tr>
+            <tr>
+                <td style="padding:.4rem 0;color:#dc2626;">— Chargebacks</td>
+                <td style="text-align:right;font-family:monospace;color:#dc2626;">-{{ $currency }}{{ number_format($totalChargebacks, 2) }}</td>
+            </tr>
+            <tr style="border-top:2px solid #1e3a5f;">
+                <td style="padding:.6rem 0;font-weight:800;font-size:1rem;">NET PAYOUT</td>
+                <td style="text-align:right;font-family:monospace;font-weight:800;font-size:1.1rem;color:#7c3aed;">{{ $currency }}{{ number_format($finalPayout, 2) }}</td>
+            </tr>
+        </table>
+    </div>
+</div>
+
+<div style="margin-top:1rem;display:flex;gap:.5rem;">
+    <a href="{{ route('finance.payouts') }}" class="btn btn-outline"><i class="fas fa-arrow-left"></i> Back to Payouts</a>
 </div>
 @endsection

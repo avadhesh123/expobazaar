@@ -32,7 +32,7 @@
             <div style="padding:.5rem .75rem;background:#fef2f2;border-radius:6px;margin-bottom:.75rem;font-size:.78rem;color:#991b1b;"><i class="fas fa-info-circle" style="margin-right:.2rem;"></i> On raising a chargeback, a notification will be sent to the Sourcing team for confirmation. Once confirmed, it will be reflected in the vendor's login and deducted from their monthly payout.</div>
             <form method="POST" action="" id="chargebackForm" style="display:flex;flex-wrap:wrap;gap:.75rem;align-items:flex-end;">
                 @csrf
-                <div class="form-group" style="margin-bottom:0;"><label>Order ID *</label><input type="text" id="cbOrderId" required placeholder="Enter order ID" style="width:120px;"></div>
+                <div class="form-group" style="margin-bottom:0;"><label>Order ID *</label><input type="text" name="order_number" id="cbOrderId" required placeholder="Enter order ID" style="width:120px;"></div>
                 <div class="form-group" style="margin-bottom:0;"><label>Amount ($) *</label><input type="number" step="0.01" min="0.01" name="amount" required placeholder="0.00" style="width:100px;font-family:monospace;"></div>
                 <div class="form-group" style="margin-bottom:0;min-width:180px;"><label>Reason *</label><input type="text" name="reason" required placeholder="e.g. Damaged, Wrong item, Missing..."></div>
                 <div class="form-group" style="margin-bottom:0;min-width:200px;"><label>Description</label><input type="text" name="description" placeholder="Additional details..."></div>

@@ -49,71 +49,70 @@
                     <th>Action</th>
                 </tr>
             </thead>
-            <tbody>
-                @forelse($orders as $o)
-                @php
-                    $firstItem = $o->items->first();
-                    $sku = $firstItem->sku ?? $firstItem->product->sku ?? '—';
-                    $unitPrice = $firstItem ? floatval($firstItem->unit_price) : 0;
-                    $orderQty = $firstItem ? intval($firstItem->quantity) : 0;
-                    $shipMethods = ['1'=>'Store Pickup','2'=>'Marketplace Label','3'=>'Seller Label'];
-                @endphp
-                <form method="POST" action="{{ route('sales.to-be-shipped.update', $o) }}">
-                    @csrf
-                    <tr style="{{ $o->is_overdue ? 'background:#fef2f2;' : '' }}">
-                        <td style="font-size:.78rem;">{{ $o->order_date?->format('d M Y') ?? '—' }}</td>
-                        <td style="font-family:monospace;font-weight:600;">{{ $o->platform_order_id ?? '—' }}</td>
-                        <td style="font-family:monospace;font-size:.72rem;">{{ $o->invoice_number ?? '—' }}</td>
-                        <td style="font-size:.72rem;">{{ $o->salesChannel->name ?? '—' }}</td>
-                        <td style="font-family:monospace;font-size:.78rem;">{{ $sku }}</td>
-                        <td style="text-align:right;font-family:monospace;">${{ number_format($unitPrice, 2) }}</td>
-                        <td style="text-align:center;font-weight:600;">{{ $orderQty }}</td>
-                        <td style="text-align:right;font-family:monospace;font-weight:600;">${{ number_format(floatval($o->total_amount), 2) }}</td>
-                        <td style="font-size:.72rem;">
-                            @php $wh = $o->warehouse_id ? \App\Models\Warehouse::find($o->warehouse_id) : null; @endphp
-                            {{ $wh->name ?? '—' }}
-                        </td>
-                        <td style="font-size:.72rem;">{{ $shipMethods[$o->shipping_method] ?? $o->shipping_method ?? '—' }}</td>
-                        {{-- Editable fields --}}
-                        <td style="background:#fff7ed;">
-                            <input type="number" name="shipped_qty" value="{{ $o->shipped_qty ?? $orderQty }}" min="1" max="{{ $orderQty }}" required
-                                style="width:55px;padding:.2rem .3rem;border:1px solid #fed7aa;border-radius:4px;font-size:.78rem;font-family:monospace;text-align:center;">
-                        </td>
-                        <td style="text-align:right;font-family:monospace;background:#fff7ed;color:#64748b;" id="shippedAmt-{{ $o->id }}">
-                            ${{ number_format($unitPrice * $orderQty, 2) }}
-                        </td>
-                        <td style="background:#fff7ed;">
-                            <input type="text" name="tracking_id" value="{{ $o->tracking_id }}" required placeholder="Enter tracking..."
-                                style="width:90px;padding:.2rem .3rem;border:1px solid #fed7aa;border-radius:4px;font-size:.78rem;">
-                        </td>
-                        <td style="background:#fff7ed;">
-                            <input type="number" step="0.01" name="shipping_cost" value="{{ $o->shipping_cost }}" placeholder="0.00"
-                                style="width:65px;padding:.2rem .3rem;border:1px solid #fed7aa;border-radius:4px;font-size:.78rem;font-family:monospace;text-align:right;">
-                        </td>
-                        <td style="background:#fff7ed;">
-                            <select name="carrier" required style="padding:.2rem .3rem;border:1px solid #fed7aa;border-radius:4px;font-size:.75rem;">
-                                <option value="">Select</option>
-                                @foreach(['Fedex','UPS','USPS','LTL','Other'] as $c)
-                                <option value="{{ $c }}" {{ ($o->carrier ?? '') === $c ? 'selected' : '' }}>{{ $c }}</option>
-                                @endforeach
-                            </select>
-                        </td>
-                        <td style="text-align:center;">
-                            @if($o->is_overdue)
-                                <span style="font-weight:700;color:#dc2626;font-size:.82rem;">{{ round($o->ageing_days,2) }}d</span>
-                                <div style="font-size:.55rem;color:#dc2626;">OVERDUE</div>
-                            @else
-                                <span style="font-weight:600;color:#16a34a;">{{ round($o->ageing_days,2) }}d</span>
-                            @endif
-                        </td>
-                        <td>
-                            <button type="submit" class="btn btn-success btn-sm" onclick="return confirm('Mark as shipped?')" title="Ship"><i class="fas fa-truck"></i></button>
-                        </td>
-                    </tr>
-                </form>
-                @empty
-                <tr><td colspan="17" style="text-align:center;padding:3rem;color:#94a3b8;"><i class="fas fa-check-circle" style="font-size:2rem;color:#16a34a;display:block;margin-bottom:.5rem;"></i>All orders have been shipped!</td></tr>
-                @endforelse
+            <tbody> 
+
+@forelse($orders as $o)
+    @foreach($o->items as $item)
+    <form method="POST" action="{{ route('sales.to-be-shipped.update', $o) }}">
+        @csrf
+        <tr style="{{ $o->is_overdue ? 'background:#fef2f2;' : '' }}">
+            @if($loop->first)
+            <td rowspan="{{ $o->items->count() }}" style="font-size:.78rem;">{{ $o->order_date?->format('d M Y') }}</td>
+            <td rowspan="{{ $o->items->count() }}" style="font-family:monospace;font-weight:600;">{{ $o->platform_order_id ?? '—' }}</td>
+            <td rowspan="{{ $o->items->count() }}" style="font-family:monospace;font-size:.72rem;">{{ $o->invoice_number ?? '—' }}</td>
+            <td rowspan="{{ $o->items->count() }}" style="font-size:.72rem;">{{ $o->salesChannel->name ?? '—' }}</td>
+            @endif
+            <td style="font-family:monospace;font-size:.78rem;">{{ $item->sku ?? $item->product->sku ?? '—' }}</td>
+            <td style="text-align:right;font-family:monospace;">${{ number_format(floatval($item->unit_price), 2) }}</td>
+            <td style="text-align:center;font-weight:600;">{{ $item->quantity }}</td>
+            <td style="text-align:right;font-family:monospace;">${{ number_format(floatval($item->total_price), 2) }}</td>
+            @if($loop->first)
+            <td rowspan="{{ $o->items->count() }}" style="font-size:.72rem;">{{ $o->warehouse->name ?? '—' }}</td>
+            <td rowspan="{{ $o->items->count() }}" style="font-size:.72rem;"> {{ strtoupper($o->shipping_method)}}</td>
+            @endif
+            <td style="background:#fff7ed;">
+                <input type="number" name="items[{{ $item->id }}][shipped_qty]"
+                    value="{{ $item->shipped_qty ?? $item->quantity }}"
+                    min="0" max="{{ $item->quantity }}" required
+                    style="width:55px;padding:.2rem .3rem;border:1px solid #fed7aa;border-radius:4px;font-size:.78rem;text-align:center;">
+            </td>
+            <td style="text-align:right;font-family:monospace;background:#fff7ed;" class="shipped-amt">
+                ${{ number_format(floatval($item->unit_price) * intval($item->quantity), 2) }}
+            </td>
+            @if($loop->first)
+            <td rowspan="{{ $o->items->count() }}" style="background:#fff7ed;">
+                <input type="text" name="tracking_id" required placeholder="Tracking..."
+                    style="width:90px;padding:.2rem .3rem;border:1px solid #fed7aa;border-radius:4px;font-size:.78rem;">
+            </td>
+            <td rowspan="{{ $o->items->count() }}" style="background:#fff7ed;">
+                <input type="number" step="0.01" name="shipping_cost" placeholder="0.00"
+                    style="width:65px;padding:.2rem .3rem;border:1px solid #fed7aa;border-radius:4px;font-size:.78rem;text-align:right;">
+            </td>
+            <td rowspan="{{ $o->items->count() }}" style="background:#fff7ed;">
+                <select name="carrier" required style="padding:.2rem .3rem;border:1px solid #fed7aa;border-radius:4px;font-size:.75rem;">
+                    <option value="">Select</option>
+                    @foreach(['Fedex','UPS','USPS','LTL','Other'] as $c)
+                    <option value="{{ $c }}">{{ $c }}</option>
+                    @endforeach
+                </select>
+            </td>
+            <td rowspan="{{ $o->items->count() }}" style="text-align:center;">
+                @if($o->is_overdue)
+                    <span style="font-weight:700;color:#dc2626;">{{ round($o->ageing_days,2) }}d</span>
+                    <div style="font-size:.55rem;color:#dc2626;">OVERDUE</div>
+                @else
+                    <span style="font-weight:600;color:#16a34a;">{{ round($o->ageing_days,2) }}d</span>
+                @endif
+            </td>
+            <td rowspan="{{ $o->items->count() }}">
+                <button type="submit" class="btn btn-success btn-sm" onclick="return confirm('Mark as shipped?')"><i class="fas fa-truck"></i></button>
+            </td>
+            @endif
+        </tr>
+    @endforeach
+    </form>
+@empty<tr><td colspan="17" style="text-align:center;padding:3rem;color:#94a3b8;">All orders have been shipped!</td></tr>
+@endforelse
             </tbody>
         </table>
     </div>

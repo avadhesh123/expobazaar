@@ -63,16 +63,7 @@ class SalesService
                 ? SalesChannel::where('name', 'LIKE', "%{$channelName}%")->orWhere('slug', $channelName)->first()
                 : null;
 
-            $shippingMethod = strtolower($orderData['shipping_method'] ?? '');
-            $shipMethod = '';
-            if (str_contains($shippingMethod, 'store') || $shippingMethod === '1') {
-                $shipMethod = 'store_pickup';
-            } elseif (str_contains($shippingMethod, 'marketplace') || $shippingMethod === '2') {
-                $shipMethod = 'marketplace_label';
-            } elseif (str_contains($shippingMethod, 'eb') || $shippingMethod === '3') {
-                $shipMethod = 'eb_label';
-            }
-
+            $shipMethod = strtolower($orderData['shipping_method'] ?? '');
             // Create order
             $order = Order::create([
                 'order_number'      => $this->generateOrderNumber($companyCode),
@@ -107,20 +98,21 @@ class SalesService
             // Create order items and reserve inventory
             foreach ($items as $item) {
                 $product = $item['product'] instanceof Product ? $item['product'] : Product::find($item['product_id']);
-
+                $quantity  = intval($item['quantity'] ?? $item['qty'] ?? 1);
                 OrderItem::create([
                     'order_id'    => $order->id,
                     'product_id'  => $product->id,
                     'vendor_id'   => $product->vendor_id,
                     'sku'         => $item['sku'] ?? $product->sku,
-                    'quantity'    => $item['quantity'] ?? $item['qty'] ?? 1,
+                    'quantity'    => $quantity,
+                    'shipped_qty' => ($shipMethod === 'sp') ? ($quantity) : 0,
+                    'shipped_amount' => ($shipMethod === 'sp') ? ($quantity * ($item['unit_price'] ?? 0)) : 0,
                     'unit_price'  => $item['unit_price'] ?? 0,
-                    'total_price' => $item['total_price'] ?? $item['line_total'] ?? round(($item['unit_price'] ?? 0) * ($item['quantity'] ?? $item['qty'] ?? 1), 2),
+                    'total_price' =>   $item['line_total'] ?? round(($item['unit_price'] ?? 0) * ($quantity), 2),
                 ]);
 
                 // Reserve inventory
-                $qty = intval($item['quantity'] ?? $item['qty'] ?? 1);
-                $this->reserveInventory($product->id, $companyCode, $qty, $order);
+                $this->reserveInventory($product->id, $companyCode, $quantity, $order);
             }
 
             // Create finance receivable
@@ -182,6 +174,179 @@ class SalesService
      * Process uploaded file rows and create orders
      */
     public function processUploadedRows(array $rows, string $companyCode): array
+    {
+        $header = array_map(fn($h) => strtolower(trim($h ?? '')), $rows[0]);
+        $colMap = [];
+        $colAliases = [
+            'order_date'    => ['order date', 'date', 'order_date'],
+            'po_number'     => ['po number / order id', 'po number', 'order id', 'po_number', 'order_id'],
+            'channel'       => ['sales channel', 'channel', 'platform'],
+            'sku'           => ['style code', 'sku', 'style_code', 'vendor sku'],
+            'unit_price'    => ['per unit sales price', 'unit price', 'price', 'unit_price', 'sales price'],
+            'qty'           => ['order qty', 'qty', 'quantity', 'order_qty'],
+            'ship_method'   => ['shipping method', 'ship method', 'shipping_method'],
+            'cust_type'     => ['customer type', 'customer_type'],
+            'cust_name'     => ['customer name', 'customer_name'],
+            'company_name'  => ['company name', 'company_name'],
+            'address'       => ['shipping address', 'address'],
+            'city'          => ['city'],
+            'state'         => ['state'],
+            'zip'           => ['zip code', 'zip', 'pincode', 'zip_code'],
+            'country'       => ['country'],
+            'phone'         => ['phone number', 'phone', 'phone_number'],
+            'email'         => ['email'],
+        ];
+
+        foreach ($colAliases as $key => $aliases) {
+            foreach ($header as $i => $h) {
+                if (in_array($h, $aliases)) {
+                    $colMap[$key] = $i;
+                    break;
+                }
+            }
+        }
+
+        $missing = [];
+        foreach (['order_date', 'po_number', 'sku', 'unit_price', 'qty'] as $req) {
+            if (!isset($colMap[$req])) $missing[] = $req;
+        }
+        if (!empty($missing)) {
+            return ['created' => 0, 'errors' => ['Missing required columns: ' . implode(', ', $missing)], 'total_rows' => 0];
+        }
+
+        $get = function ($row, $key) use ($colMap) {
+            return isset($colMap[$key]) ? trim($row[$colMap[$key]] ?? '') : '';
+        };
+
+        $parseDate = function ($val) {
+            if (empty($val)) return null;
+            if (is_numeric($val) && $val > 25000 && $val < 60000) {
+                return \Carbon\Carbon::createFromFormat('Y-m-d', '1899-12-30')
+                    ->addDays(intval($val))->toDateString();
+            }
+            try {
+                return \Carbon\Carbon::parse($val)->toDateString();
+            } catch (\Exception $e) {
+                return null;
+            }
+        };
+
+        // ── Step 1: Group rows by PO number ──
+        $grouped = [];
+        $errors = [];
+        $totalRows = count($rows) - 1;
+
+        for ($i = 1; $i < count($rows); $i++) {
+            $row = $rows[$i];
+            $rowNum = $i + 1;
+
+            $sku = $get($row, 'sku');
+            if (empty($sku)) continue;
+
+            $poNumber = $get($row, 'po_number');
+            $orderDate = $parseDate($get($row, 'order_date'));
+            $unitPrice = $get($row, 'unit_price');
+            $qty = $get($row, 'qty');
+
+            if (empty($orderDate)) {
+                $errors[] = "Row {$rowNum}: Order Date is empty.";
+                continue;
+            }
+            if (empty($poNumber)) {
+                $errors[] = "Row {$rowNum}: PO Number is empty.";
+                continue;
+            }
+            if (!is_numeric($unitPrice)) {
+                $errors[] = "Row {$rowNum}: Invalid unit price '{$unitPrice}'.";
+                continue;
+            }
+            if (!is_numeric($qty) || intval($qty) < 1) {
+                $errors[] = "Row {$rowNum}: Invalid quantity '{$qty}'.";
+                continue;
+            }
+
+            $product = \App\Models\Product::where('sku', $sku)->first();
+            if (!$product) {
+                $errors[] = "Row {$rowNum}: SKU '{$sku}' not found.";
+                continue;
+            }
+            if (empty($product->sap_code)) {
+                $errors[] = "Row {$rowNum}: SKU '{$sku}' has no SAP code.";
+                continue;
+            }
+
+            $qty = intval($qty);
+            $availableStock = \App\Models\Inventory::where('product_id', $product->id)
+                ->where('company_code', $companyCode)->sum('available_quantity');
+            if ($availableStock < $qty) {
+                $errors[] = "Row {$rowNum}: SKU '{$sku}' insufficient inventory. Available: {$availableStock}, Ordered: {$qty}.";
+                continue;
+            }
+
+            // Group by PO number
+            if (!isset($grouped[$poNumber])) {
+                // Check duplicate PO in database
+                $existing = \App\Models\Order::where('platform_order_id', $poNumber)
+                    ->where('company_code', $companyCode)->first();
+                if ($existing) {
+                    $errors[] = "Row {$rowNum}: PO '{$poNumber}' already exists (Order #{$existing->order_number}).";
+                    continue;
+                }
+
+                $warehouseId = \App\Models\Inventory::where('product_id', $product->id)->value('warehouse_id');
+
+                $grouped[$poNumber] = [
+                    'order_data' => [
+                        'platform_order_id' => $poNumber,
+                        'order_date'        => $orderDate,
+                        'sales_channel'     => $get($row, 'channel'),
+                        'customer_name'     => $get($row, 'cust_name') ?: null,
+                        'customer_email'    => $get($row, 'email') ?: null,
+                        'customer_phone'    => $get($row, 'phone') ?: null,
+                        'customer_type'     => $get($row, 'cust_type') ?: null,
+                        'company_name'      => $get($row, 'company_name') ?: null,
+                        'shipping_address'  => $get($row, 'address') ?: null,
+                        'shipping_city'     => $get($row, 'city') ?: null,
+                        'shipping_state'    => $get($row, 'state') ?: null,
+                        'shipping_country'  => $get($row, 'country') ?: null,
+                        'shipping_pincode'  => $get($row, 'zip') ?: null,
+                        'shipping_method'   => $get($row, 'ship_method') ?: null,
+                        'warehouse_id'      => $warehouseId,
+                    ],
+                    'items' => [],
+                    'total_amount' => 0,
+                ];
+            }
+
+            $lineTotal = round(floatval($unitPrice) * $qty, 2);
+            $grouped[$poNumber]['items'][] = [
+                'product'    => $product,
+                'sku'        => $sku,
+                'qty'        => $qty,
+                'unit_price' => floatval($unitPrice),
+                'line_total' => $lineTotal,
+            ];
+            $grouped[$poNumber]['total_amount'] += $lineTotal;
+        }
+
+        // ── Step 2: Create one order per PO with all its items ──
+        $created = 0;
+
+        foreach ($grouped as $poNumber => $group) {
+            try {
+                $group['order_data']['total_amount'] = $group['total_amount'];
+                $group['order_data']['subtotal'] = $group['total_amount'];
+
+                $this->createOrder($group['order_data'], $group['items'], $companyCode);
+                $created++;
+            } catch (\Exception $e) {
+                $errors[] = "PO '{$poNumber}': Failed — " . $e->getMessage();
+            }
+        }
+
+        return ['created' => $created, 'errors' => $errors, 'total_rows' => $totalRows];
+    }
+    public function processUploadedRows1(array $rows, string $companyCode): array
     {
         $header = array_map(fn($h) => strtolower(trim($h ?? '')), $rows[0]);
         $colMap = [];
@@ -444,7 +609,84 @@ class SalesService
     /**
      * Mark order as shipped with full details
      */
-    public function shipOrder(Order $order, int $shippedQty, string $trackingId, ?float $shippingCost, string $carrier): Order
+    /**
+     * Mark order as shipped with per-item shipped quantities
+     */
+    public function shipOrder(Order $order, array $itemShippedQtys, string $trackingId, ?float $shippingCost, string $carrier): Order
+    {
+        return DB::transaction(function () use ($order, $itemShippedQtys, $trackingId, $shippingCost, $carrier) {
+
+            // Update each item's shipped_qty and deduct inventory
+            $orderShippedQty = 0;
+            $orderShippedAmount = 0;
+
+            foreach ($itemShippedQtys as $itemId => $shippedQty) {
+                $item = OrderItem::find($itemId);
+                if (!$item || $item->order_id !== $order->id) continue;
+
+                $shippedQty = intval($shippedQty);
+                if ($shippedQty <= 0) continue;
+
+                $shippedAmount = round(floatval($item->unit_price) * $shippedQty, 2);
+                $orderShippedQty += $shippedQty;
+                $orderShippedAmount += $shippedAmount;
+
+                $item->update([
+                    'shipped_qty'    => $shippedQty,
+                    'shipped_amount' => $shippedAmount,
+                ]);
+
+                // Deduct from reserved inventory per item
+                if ($item->product_id) {
+                    $inventory = Inventory::where('product_id', $item->product_id)
+                        ->where('company_code', $order->company_code)->first();
+
+                    if ($inventory) {
+                        $inventory->decrement('quantity', $shippedQty);
+                        $inventory->decrement('reserved_quantity', $shippedQty);
+
+                        InventoryLog::record($inventory, InventoryLog::ACTION_ORDER_SHIPPED, -$shippedQty, [
+                            'change_available' => 0,
+                            'change_reserved'  => -$shippedQty,
+                            'reference_type'   => 'order',
+                            'reference_id'     => $order->id,
+                            'reference_code'   => $order->order_number,
+                            'metadata'         => [
+                                'item_id'     => $item->id,
+                                'sku'         => $item->sku,
+                                'tracking_id' => $trackingId,
+                                'carrier'     => $carrier,
+                            ],
+                        ]);
+                    }
+
+                    Product::where('id', $item->product_id)->decrement('stock_quantity', $shippedQty);
+                }
+            }
+
+            // Update order-level summary
+            $order->update([
+                'shipped_qty'       => $orderShippedQty,
+                'shipped_amount'    => $orderShippedAmount,
+                'tracking_id'       => $trackingId,
+                'shipping_cost'     => $shippingCost,
+                'carrier'           => $carrier,
+                'shipping_provider' => $carrier,
+                'shipment_status'   => 'shipped',
+                'status'            => 'shipped',
+                'shipped_date'      => now(),
+            ]);
+
+            ActivityLog::log('shipped', 'order', $order, null, [
+                'tracking_id' => $trackingId,
+                'carrier'     => $carrier,
+                'items'       => $itemShippedQtys,
+            ], "Order {$order->order_number} shipped via {$carrier}");
+
+            return $order;
+        });
+    }
+    public function shipOrder1(Order $order, int $shippedQty, string $trackingId, ?float $shippingCost, string $carrier): Order
     {
         $firstItem = $order->items->first();
         $unitPrice = $firstItem ? floatval($firstItem->unit_price) : 0;

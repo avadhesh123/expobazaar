@@ -1275,7 +1275,7 @@ class VendorController extends Controller
                 'status'               => 'created',
                 'total_items'          => $items->sum('quantity'),
                 'total_cbm'            => $items->sum('total_cbm'),
-                'total_value'          =>$items->sum('unit_price'),// $items->sum('total_price'),
+                'total_value'          => $items->sum('unit_price'), // $items->sum('total_price'),
                 'ex_factory_date'      => $liveSheet->ex_factory_date,
                 'final_inspection_date' => $liveSheet->final_inspection_date,
                 'created_by'           => auth()->id(),
@@ -1348,7 +1348,7 @@ class VendorController extends Controller
     /**
      * Download live sheet template pre-filled with SKUs for vendor to fill
      */
-     public function downloadLiveSheetTemplate(LiveSheet $liveSheet)
+    public function downloadLiveSheetTemplate(LiveSheet $liveSheet)
     {
         $vendor = auth()->user()->vendor;
         if ($liveSheet->vendor_id !== $vendor->id) {
@@ -1604,7 +1604,7 @@ class VendorController extends Controller
                     'final_fob'   => $finalFob,
                     'barcode'     => $row['barcode'] ?? null,
                     'sap_code'    => $row['sap_code'] ?? null,
-					'vendor_wsp'    => $row['vendor_wsp'] ?? null,					
+                    'vendor_wsp'    => $row['vendor_wsp'] ?? null,
                 ];
                 \App\Models\LiveSheetItemChange::trackChanges($item, $newDetails, auth()->user(), 'vendor');
             } catch (\Exception $e) {
@@ -1622,7 +1622,7 @@ class VendorController extends Controller
                 'product_details' => array_merge($item->product_details ?? [], [
                     'sno'              => $row['sno'] ?? null,
                     'sap_code'         => $row['sap_code'] ?? null,
-					'vendor_wsp'       => $row['vendor_wsp'] ?? null,					
+                    'vendor_wsp'       => $row['vendor_wsp'] ?? null,
                     'barcode'          => $row['barcode'] ?? null,
                     'description'      => $row['description'] ?? null,
                     'hsn_hts_code'     => $row['hsn_code'] ?? null,
@@ -1714,7 +1714,7 @@ class VendorController extends Controller
                 }
 
                 if ($rowHasFormula) {
-                    $formulaErrors[] = "Row {$row}: " . implode(", ", $formulaDetails)  ;
+                    $formulaErrors[] = "Row {$row}: " . implode(", ", $formulaDetails);
                 }
             }
 
@@ -1725,7 +1725,7 @@ class VendorController extends Controller
                 $errorMsg .= "The following cells contain formulas:\n";
                 $errorMsg .= implode("\n", array_slice($formulaErrors, 0, 10));
 
-              //  $errorMsg .= implode("\n", $formulaErrors);
+                //  $errorMsg .= implode("\n", $formulaErrors);
 
                 if (count($formulaErrors) > 10) {
                     $errorMsg .= "\n... and " . (count($formulaErrors) - 10) . " more cells.";
@@ -1833,7 +1833,7 @@ class VendorController extends Controller
                     'sno'             => $getVal('sno'),
                     'vendor_sku'      => $sku,
                     'sap_code'        => $getVal('sap_code'),
-					'vendor_wsp'        => $getVal('vendor_wsp'),
+                    'vendor_wsp'        => $getVal('vendor_wsp'),
                     'barcode'         => $getVal('barcode'),
                     'product_name'    => $getVal('product_name'),
                     'description'     => $getVal('description'),
@@ -1962,13 +1962,144 @@ class VendorController extends Controller
     public function salesReport(Request $request)
     {
         $vendor = auth()->user()->vendor;
+        $orders = Order::where('status', 'shipped')
+            ->whereHas('items', fn($q) => $q->where('vendor_id', $vendor->id))
+            ->with(['salesChannel', 'receivable', 'items' => fn($q) => $q->where('vendor_id', $vendor->id)->with('product')])
+            ->get();
+
+
+        // Before the loop — build FIFO commission map per product for this vendor
+        $vendorLiveSheets = \App\Models\LiveSheet::where('vendor_id', $vendor->id)
+            ->where('status', 'locked') // Only consider locked sheets for commission (approved but not yet paid out)
+            ->orderBy('approved_at', 'asc') // FIFO — oldest first
+            ->with(['items' => fn($q) => $q->select('id', 'live_sheet_id', 'product_id', 'quantity', 'product_details')])
+            ->get();
+
+        // Build FIFO queue with BOTH vendor_wsp and commission per batch
+        $fifoQueue = [];
+        foreach ($vendorLiveSheets as $ls) {
+            $commPercent = floatval($ls->commission_percentage ?? 0);
+            foreach ($ls->items as $lsItem) {
+                $pid = $lsItem->product_id;
+                $d = $lsItem->product_details ?? [];
+                $batchWsp = floatval($d['wsp'] ?? $d['vendor_wsp'] ?? $lsItem->unit_price ?? 0);
+
+                if (!isset($fifoQueue[$pid])) {
+                    $fifoQueue[$pid] = [];
+                }
+                $fifoQueue[$pid][] = [
+                    'live_sheet_id' => $ls->id,
+                    'vendor_wsp'    => $batchWsp,
+                    'commission'    => $commPercent,
+                    'remaining_qty' => intval($lsItem->quantity),
+                ];
+            }
+        }
+        // echo '<pre>';
+        // print_r($fifoQueue);
+        // print_r($vendorLiveSheets->toArray());
+        // echo '</pre>';
+        // exit;
+        // Now we have a FIFO queue of batches with both WSP and commission percentage for each
+        $priorSold = \App\Models\OrderItem::where('vendor_id', $vendor->id)
+            ->select('product_id', \DB::raw('SUM(quantity) as sold'))
+            ->groupBy('product_id')
+            ->pluck('sold', 'product_id');
+
+        // Deduct prior sold (same as before)
+        foreach ($priorSold as $pid => $soldQty) {
+            if (!isset($fifoQueue[$pid])) {
+                continue;
+            }
+            $remaining = intval($soldQty);
+            foreach ($fifoQueue[$pid] as &$batch) {
+                if ($remaining <= 0) {
+                    break;
+                }
+                $deduct = min($remaining, $batch['remaining_qty']);
+                $batch['remaining_qty'] -= $deduct;
+                $remaining -= $deduct;
+            }
+            unset($batch);
+        }
+
+        // Build line items — FIFO for both WSP and commission
+        $lineItems = collect();
+        foreach ($orders as $order) {
+            foreach ($order->items as $item) {
+                print_r($item->toArray());
+                $product = $item->product;
+                $pid = $product->id;
+                $qty = intval($item->shipped_qty);
+                $qtyToAllocate = $qty;
+
+                $totalSaleAmount = 0;
+                $totalCommission = 0;
+                $totalPayout = 0;
+                $details = [];
+
+                if (isset($fifoQueue[$pid])) {
+                    foreach ($fifoQueue[$pid] as &$batch) {
+                        if ($qtyToAllocate <= 0) {
+                            break;
+                        }
+                        if ($batch['remaining_qty'] <= 0) {
+                            continue;
+                        }
+
+                        $allocate = min($qtyToAllocate, $batch['remaining_qty']);
+                        $batchSale = round($batch['vendor_wsp'] * $allocate, 2);
+                        $batchComm = round(($batch['commission'] / 100) * $batchSale, 2);
+                        $batchPayout = round($batchSale - $batchComm, 2);
+
+                        $totalSaleAmount += $batchSale;
+                        $totalCommission += $batchComm;
+                        $totalPayout += $batchPayout;
+
+                        $details[] = "{$allocate}u × \${$batch['vendor_wsp']} @ {$batch['commission']}%";
+
+                        $batch['remaining_qty'] -= $allocate;
+                        $qtyToAllocate -= $allocate;
+                    }
+                    unset($batch);
+                }
+
+                // Unallocated qty — fallback to product.vendor_wsp, 0% commission
+                if ($qtyToAllocate > 0) {
+                    $fallbackWsp = floatval($product->vendor_wsp ?? $product->fob_price ?? 0);
+                    $fallbackSale = round($fallbackWsp * $qtyToAllocate, 2);
+                    $totalSaleAmount += $fallbackSale;
+                    $totalPayout += $fallbackSale;
+                    $details[] = "{$qtyToAllocate}u × \${$fallbackWsp} @ 0%";
+                }
+
+                // Weighted average WSP for display
+                $avgWsp = $qty > 0 ? round($totalSaleAmount / $qty, 2) : 0;
+
+                $lineItems->push((object)[
+                    'order_id'      => $order->id,
+                    'order_number'  => $order->order_number,
+                    'sku'           => $item->sku ?? $product->sku ?? '—',
+                    'channel'       => $order->salesChannel->name ?? '—',
+                    'vendor_wsp'    => $avgWsp,
+                    'qty'           => $qty,
+                    'sale_amount'   => round($totalSaleAmount, 2),
+                    'commission'    => round($totalCommission, 2),
+                    'net_payout'    => round($totalPayout, 2),
+                    'fifo_detail'   => implode(' + ', $details),
+                ]);
+            }
+        }
+exit;
+//print_r($lineItems->toArray());exit;
+
         $orders = Order::whereHas('items', fn($q) => $q->where('vendor_id', $vendor->id))
             ->with('salesChannel', 'items')
             ->when($request->month, fn($q, $v) => $q->whereMonth('order_date', $v))
             ->when($request->year, fn($q, $v) => $q->whereYear('order_date', $v))
             ->latest('order_date')->paginate(25);
         $totalSales = Order::whereHas('items', fn($q) => $q->where('vendor_id', $vendor->id))->sum('total_amount');
-        return view('vendor.sales.index', compact('orders', 'vendor', 'totalSales'));
+        return view('vendor.sales.index', compact('orders', 'vendor', 'totalSales','lineItems'));
     }
     public function grn(Request $request)
     {

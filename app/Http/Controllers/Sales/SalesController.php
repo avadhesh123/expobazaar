@@ -107,7 +107,7 @@ class SalesController extends Controller
                 number_format(floatval($payoutPrice), 2, '.', ''),
                 number_format($payoutPrice * $qty, 2, '.', ''),
                 '"' . ($o->warehouse?->name ?? '') . '"',
-                '"' . ($shipMethods[$o->shipping_method] ?? $o->shipping_method ?? '') . '"',
+                '"' . (strtoupper($o->shipping_method ?? '')) . '"',
                 $o->shipped_qty ?? '',
                 number_format(floatval($o->shipped_amount ?? 0), 2, '.', ''),
                 '"' . ($o->tracking_id ?? '') . '"',
@@ -140,8 +140,25 @@ class SalesController extends Controller
 
     // ═══ UPLOAD (FILE) ═══
 
-    public function uploadSales()
+    public function uploadSales(Request $request)
     {
+        // AJAX SKU check
+        if ($request->has('check_sku')) {
+            $sku = trim($request->check_sku);
+            $product = \App\Models\Product::where('sku', $sku)->first();
+            if ($product) {
+                $stock = \App\Models\Inventory::where('product_id', $product->id)->sum('available_quantity');
+                return response()->json([
+                    'found'    => true,
+                    'name'     => $product->name,
+                    'sap_code' => $product->sap_code ?? '',
+                    'stock'    => intval($stock),
+                    'price'    => floatval($product->fob_price ?? $product->vendor_price ?? 0),
+                ]);
+            }
+            return response()->json(['found' => false]);
+        }
+
         $channels = SalesChannel::active()->get();
         return view('sales.upload', compact('channels'));
     }
@@ -203,7 +220,7 @@ class SalesController extends Controller
             return back()->with('upload_result', $result)->with(
                 $result['created'] > 0 ? 'success' : 'error',
                 "{$result['created']} order(s) created from {$result['total_rows']} rows." .
-                    (count($result['errors']) > 0 ? ' ' . count($result['errors']) . ' error(s).' : '')
+                    (count($result['errors']) > 0 ? ' ' . implode(", ", $result['errors'])   : '')
             );
         } catch (\Exception $e) {
             \Log::error('Sales upload failed: ' . $e->getMessage());
@@ -214,6 +231,48 @@ class SalesController extends Controller
     // ═══ MANUAL ENTRY ═══
 
     public function storeManualOrders(Request $request)
+    {
+        $request->validate([
+            'company_code'                      => 'required|in:2000,2100,2200',
+            'orders'                            => 'required|array|min:1',
+            'orders.*.platform_order_id'        => 'required|string',
+            'orders.*.order_date'               => 'required|date',
+            'orders.*.total_amount'             => 'required|numeric|min:0.01',
+            'orders.*.shipping_method'          => 'nullable|in:SP,MPL,EBL',
+            'orders.*.payment_status'           => 'nullable|in:unpaid,paid,partial,refunded',
+            'orders.*.customer_name'            => 'nullable|string|max:200',
+            'orders.*.customer_email'           => 'nullable|email|max:200',
+            'orders.*.customer_phone'           => 'nullable|string|max:50',
+            'orders.*.customer_type'            => 'nullable|string|max:50',
+            'orders.*.company_name'             => 'nullable|string|max:200',
+            'orders.*.shipping_address'         => 'nullable|string|max:500',
+            'orders.*.shipping_city'            => 'nullable|string|max:100',
+            'orders.*.shipping_state'           => 'nullable|string|max:100',
+            'orders.*.shipping_country'         => 'nullable|string|max:100',
+            'orders.*.shipping_pincode'         => 'nullable|string|max:20',
+            'orders.*.items'                    => 'required|array|min:1',
+            'orders.*.items.*.sku'              => 'required|string',
+            'orders.*.items.*.quantity'          => 'required|integer|min:1',
+            'orders.*.items.*.unit_price'        => 'required|numeric|min:0',
+        ]);
+
+        $result = $this->salesService->processManualOrders($request->orders, $request->company_code);
+
+        \App\Models\ActivityLog::log('created', 'order', auth()->user(), null, [
+            'company_code' => $request->company_code,
+            'created' => $result['created'],
+            'errors' => count($result['errors']),
+        ], "Manual sales entry: {$result['created']} orders created");
+
+        $msg = "{$result['created']} order(s) created.";
+        if (!empty($result['errors'])) {
+            $msg .= ' ' . count($result['errors']) . ' error(s): ' . implode('; ', array_slice($result['errors'], 0, 5));
+        }
+
+        return redirect()->route('sales.orders')->with($result['created'] > 0 ? 'success' : 'error', $msg);
+    }
+
+    public function storeManualOrders1(Request $request)
     {
         $request->validate([
             'company_code'                      => 'required|in:2000,2100,2200',
@@ -254,7 +313,7 @@ class SalesController extends Controller
         $orders = Order::with('items.product', 'salesChannel', 'warehouse')
             ->where('status', '!=', 'cancelled')
             ->where(function ($q) {
-                $q->whereNull('shipping_method')->orWhere('shipping_method', '!=', 'store_pickup');
+                $q->whereNull('shipping_method')->orWhere('shipping_method', '!=', 'sp');
             })
             ->where(function ($q) {
                 $q->whereNull('tracking_id')->orWhere('tracking_id', '');
@@ -280,8 +339,29 @@ class SalesController extends Controller
 
         return view('sales.to-be-shipped', compact('orders', 'channels', 'stats'));
     }
-
     public function updateShipping(Request $request, Order $order)
+    {
+        $request->validate([
+            'items'                  => 'required|array|min:1',
+            'items.*.shipped_qty'    => 'required|integer|min:0',
+            'tracking_id'            => 'required|string|max:100',
+            'shipping_cost'          => 'nullable|numeric|min:0',
+            'carrier'                => 'required|in:Fedex,UPS,USPS,LTL,Other',
+        ]);
+
+        $itemQtys = collect($request->items)->mapWithKeys(fn($data, $itemId) => [$itemId => $data['shipped_qty']])->toArray();
+
+        $this->salesService->shipOrder(
+            $order,
+            $itemQtys,
+            $request->tracking_id,
+            $request->shipping_cost ? floatval($request->shipping_cost) : null,
+            $request->carrier
+        );
+
+        return back()->with('success', "Order {$order->order_number} marked as shipped. Tracking: {$request->tracking_id}");
+    }
+    public function updateShipping1(Request $request, Order $order)
     {
         $request->validate([
             'shipped_qty'   => 'required|integer|min:1',
@@ -351,6 +431,8 @@ class SalesController extends Controller
 
         $channels = SalesChannel::active()->get();
         $stats = [
+            'total_shipped'  => $orders->getCollection()->whereNotNull('tracking_id')->where('tracking_id', '!=', '')->count(),
+            'critical'     => $orders->getCollection()->filter(fn($o) => $o->ageing_label === 'CRITICAL')->count(),
             'total'      => $orders->total(),
             'in_transit'  => Order::whereNotNull('tracking_id')->where('tracking_id', '!=', '')
                 ->where(function ($q) {
