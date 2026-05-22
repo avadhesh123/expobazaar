@@ -7,7 +7,7 @@
     <a href="{{ route('finance.vendor-charges') }}" class="btn btn-outline btn-sm"><i class="fas fa-arrow-left"></i> Back</a>
 </div>
 
-@php $sym = $statement['currency'] === 'EUR' ? '€' : '$'; @endphp
+{{-- Statement Header --}}
 
 <div class="card" style="margin-bottom:1.25rem;">
     <div class="card-body" style="padding:1.25rem 1.4rem;">
@@ -25,31 +25,44 @@
 
 {{-- Charges Breakdown --}}
 <div class="card" style="margin-bottom:1.25rem;">
-    <div class="card-header"><h3>Charges by GRN / Consignment</h3></div>
+    <div class="card-header">
+        <h3>Charges by GRN / Consignment</h3>
+    </div>
     <div class="card-body" style="padding:0;overflow-x:auto;">
         <table class="data-table">
-            <thead><tr><th>GRN #</th><th>Warehouse</th><th>Inward</th><th>Storage</th><th>Fulfillment</th><th>Pick & Pack</th><th>Material</th><th>Total</th></tr></thead>
+            <thead>
+                <tr>
+                    <th>GRN #</th>
+                    <th>Warehouse</th>
+                    <th>Inward</th>
+                    <th>Storage</th>
+                    <th>Fulfillment</th>
+                    <th>Pick & Pack</th>
+                    <th>Material</th>
+                    <th>Total</th>
+                </tr>
+            </thead>
             <tbody>
                 @foreach($statement['charges'] as $c)
                 <tr>
                     <td style="font-family:monospace;font-weight:600;">{{ $c->grn->grn_number ?? '—' }}</td>
                     <td style="font-size:.82rem;">{{ $c->warehouse->name ?? '—' }}</td>
-                    <td style="font-family:monospace;">{{ $sym }}{{ number_format(floatval($c->inward_charge), 2) }}</td>
-                    <td style="font-family:monospace;">{{ $sym }}{{ number_format(floatval($c->storage_charge), 2) }}</td>
-                    <td style="font-family:monospace;">{{ $sym }}{{ number_format(floatval($c->fulfillment_charge), 2) }}</td>
-                    <td style="font-family:monospace;">{{ $sym }}{{ number_format(floatval($c->pick_pack_charge), 2) }}</td>
-                    <td style="font-family:monospace;">{{ $sym }}{{ number_format(floatval($c->material_cost), 2) }}</td>
-                    <td style="font-family:monospace;font-weight:700;">{{ $sym }}{{ number_format(floatval($c->total_charges), 2) }}</td>
+                    <td style="font-family:monospace;">{{ $activeCurrencySymbol }}{{ number_format(floatval($c->inward_charge), 2) }}</td>
+                    <td style="font-family:monospace;">{{ $activeCurrencySymbol }}{{ number_format(floatval($c->storage_charge), 2) }}</td>
+                    <td style="font-family:monospace;">{{ $activeCurrencySymbol }}{{ number_format(floatval($c->fulfillment_charge), 2) }}</td>
+                    <td style="font-family:monospace;">{{ $activeCurrencySymbol }}{{ number_format(floatval($c->pick_pack_charge), 2) }}</td>
+                    <td style="font-family:monospace;">{{ $activeCurrencySymbol }}{{ number_format(floatval($c->material_cost), 2) }}</td>
+                    <td style="font-family:monospace;font-weight:700;">{{ $activeCurrencySymbol }}{{ number_format(floatval($c->total_charges), 2) }}</td>
                 </tr>
                 @endforeach
                 <tr style="background:#f0f4f8;font-weight:800;">
                     <td colspan="2">GRAND TOTAL</td>
-                    <td style="font-family:monospace;">{{ $sym }}{{ number_format(floatval($statement['totals']['inward']), 2) }}</td>
-                    <td style="font-family:monospace;">{{ $sym }}{{ number_format(floatval($statement['totals']['storage']), 2) }}</td>
-                    <td style="font-family:monospace;">{{ $sym }}{{ number_format(floatval($statement['totals']['fulfillment']), 2) }}</td>
-                    <td style="font-family:monospace;">{{ $sym }}{{ number_format(floatval($statement['totals']['pick_pack']), 2) }}</td>
-                    <td style="font-family:monospace;">{{ $sym }}{{ number_format(floatval($statement['totals']['material']), 2) }}</td>
-                    <td style="font-family:monospace;font-size:1rem;color:#dc2626;">{{ $sym }}{{ number_format(floatval($statement['totals']['total']), 2) }}</td>
+                    <td style="font-family:monospace;">{{ $activeCurrencySymbol }}{{ number_format(floatval($statement['totals']['inward']), 2) }}</td>
+                    <td style="font-family:monospace;">{{ $activeCurrencySymbol }}{{ number_format(floatval($statement['totals']['storage']), 2) }}</td>
+                    <td style="font-family:monospace;">{{ $activeCurrencySymbol }}{{ number_format(floatval($statement['totals']['fulfillment']), 2) }}</td>
+                    <td style="font-family:monospace;">{{ $activeCurrencySymbol }}{{ number_format(floatval($statement['totals']['pick_pack']), 2) }}</td>
+                    <td style="font-family:monospace;">{{ $activeCurrencySymbol }}{{ number_format(floatval($statement['totals']['material']), 2) }}</td>
+                    <td style="font-family:monospace;font-size:1rem;color:#dc2626;">{{ $activeCurrencySymbol }}{{ number_format(floatval($statement['totals']['total']), 2) }}</td>
                 </tr>
             </tbody>
         </table>
@@ -58,12 +71,23 @@
 
 {{-- Payout Summary --}}
 <div class="card">
-    <div class="card-header"><h3>Payout Summary</h3></div>
+    <div class="card-header">
+        <h3>Payout Summary</h3>
+    </div>
     <div class="card-body">
         <table style="width:50%;min-width:300px;">
-            <tr><td style="padding:.5rem;font-size:.88rem;">Gross Payout (Sales)</td><td style="font-family:monospace;font-weight:600;text-align:right;padding:.5rem;">{{ $sym }}{{ number_format($statement['gross_payout'], 2) }}</td></tr>
-            <tr style="color:#dc2626;"><td style="padding:.5rem;font-size:.88rem;">Less: Warehouse Charges</td><td style="font-family:monospace;font-weight:600;text-align:right;padding:.5rem;">-{{ $sym }}{{ number_format($statement['totals']['total'], 2) }}</td></tr>
-            <tr style="border-top:2px solid #0d1b2a;font-weight:800;font-size:1.1rem;"><td style="padding:.75rem .5rem;">Net Payout</td><td style="font-family:monospace;text-align:right;padding:.75rem .5rem;color:{{ $statement['net_payout'] >= 0 ? '#166534' : '#dc2626' }};">{{ $sym }}{{ number_format($statement['net_payout'], 2) }}</td></tr>
+            <tr>
+                <td style="padding:.5rem;font-size:.88rem;">Gross Payout (Sales)</td>
+                <td style="font-family:monospace;font-weight:600;text-align:right;padding:.5rem;">{{ $activeCurrencySymbol }}{{ number_format($statement['gross_payout'], 2) }}</td>
+            </tr>
+            <tr style="color:#dc2626;">
+                <td style="padding:.5rem;font-size:.88rem;">Less: Warehouse Charges</td>
+                <td style="font-family:monospace;font-weight:600;text-align:right;padding:.5rem;">-{{ $activeCurrencySymbol }}{{ number_format($statement['totals']['total'], 2) }}</td>
+            </tr>
+            <tr style="border-top:2px solid #0d1b2a;font-weight:800;font-size:1.1rem;">
+                <td style="padding:.75rem .5rem;">Net Payout</td>
+                <td style="font-family:monospace;text-align:right;padding:.75rem .5rem;color:{{ $statement['net_payout'] >= 0 ? '#166534' : '#dc2626' }};">{{ $activeCurrencySymbol }}{{ number_format($statement['net_payout'], 2) }}</td>
+            </tr>
         </table>
     </div>
 </div>

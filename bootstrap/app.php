@@ -10,15 +10,24 @@ return Application::configure(basePath: dirname(__DIR__))
     ->withRouting(
         web: __DIR__ . '/../routes/web.php',
         commands: __DIR__ . '/../routes/console.php',
-    )
+    )->withProviders([
+        \App\Providers\CompanyServiceProvider::class,
+    ])
     ->withMiddleware(function (Middleware $middleware) {
         $middleware->alias([
-            'permission' => \App\Http\Middleware\CheckPermission::class, 
+            'permission' => \App\Http\Middleware\CheckPermission::class,
             'user.type' => \App\Http\Middleware\CheckUserType::class,
             'department' => \App\Http\Middleware\CheckDepartment::class,
             'module'     => \App\Http\Middleware\CheckDepartment::class,
             'company.code' => \App\Http\Middleware\CheckCompanyCode::class,
             'vendor.kyc.approved' => \App\Http\Middleware\VendorKycApproved::class,
+            'active.company'  => \App\Http\Middleware\SetActiveCompany::class,
+
+        ]);
+
+        // Add to web middleware group so it runs on every request
+        $middleware->web(append: [
+            \App\Http\Middleware\SetActiveCompany::class,
         ]);
 
         // Tell the 'auth' middleware where to redirect unauthenticated users

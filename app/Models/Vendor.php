@@ -162,7 +162,8 @@ class Vendor extends Model
         $prefix = match ($companyCode) {
             '2000' => 'VIN',
             '2100' => 'VUS',
-            '2200' => 'VNL',
+            '2200' => 'VEU',
+            '2400' => 'VGB',
             default => 'VXX',
         };
         $lastVendor = self::where('company_code', $companyCode)->orderBy('id', 'desc')->first();

@@ -16,6 +16,7 @@ class WarehouseChargeCalculationService
             '2000' => 'INR',
             '2100' => 'EUR',
             '2200' => 'USD',
+            '2400' => 'GBP',
             default => 'USD'   // fallback
         };
 

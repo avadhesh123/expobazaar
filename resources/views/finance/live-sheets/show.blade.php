@@ -212,8 +212,8 @@
                             <td style="font-family:monospace;font-weight:600;font-size:.82rem;">{{ $item->product->sku ?? '—' }}</td>
                             <td style="font-size:.82rem;font-weight:500;">{{ $item->product->name ?? '—' }}</td>
                             <td style="font-size:.78rem;">{{ $d['category'] ?? '—' }}</td>
-                            <td style="font-family:monospace;font-weight:600;">{{ $currencyInfo['symbol'] . number_format($item->unit_price, 2) }}</td>
-                            <td style="font-family:monospace;text-align:center;font-weight:600;">{{ $currencyInfo['symbol'] . number_format($wsp, 2) }}</td>
+                            <td style="font-family:monospace;font-weight:600;">{{ $activeCurrencySymbol . number_format($item->unit_price, 2) }}</td>
+                            <td style="font-family:monospace;text-align:center;font-weight:600;">{{ $activeCurrencySymbol . number_format($wsp, 2) }}</td>
                             <td style="text-align:center;">{{ $item->quantity }}</td>
                             <td style="font-family:monospace;font-size:.78rem;">{{ $d['barcode'] ?? '—' }}</td>
                             <td style="background:#eff6ff;">

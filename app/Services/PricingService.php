@@ -31,10 +31,12 @@ class PricingService
                         $channelId    = $chData['sales_channel_id'];
                         $factor       = floatval($chData['pricing_factor'] ?? 1.0);
                         $channelPrice = floatval($chData['channel_price'] ?? ($wsp * $factor));
+
                         $costPrice    = $fob;
                         $sellingPrice = $channelPrice;
                         $margin       = $sellingPrice > 0
                             ? round((($sellingPrice - $costPrice) / $sellingPrice) * 100, 2) : 0;
+
 
                         $pricing = PlatformPricing::updateOrCreate(
                             [
@@ -43,6 +45,11 @@ class PricingService
                                 'sales_channel_id' => $channelId,
                             ],
                             [
+                                'inward'         => $data['inward'] ?? 0,
+                                'fulfillment'     => $data['fulfillment'] ?? 0,
+                                'storage'         => $data['storage'] ?? 0,
+                                'ad_budget'       => $data['ad_budget'] ?? 0,
+                                'final_wsp'       => $data['final_wsp'] ?? 0,
                                 'company_code'    => $asn->company_code,
                                 'cost_price'      => $costPrice,
                                 'fob_price'       => $fob,
@@ -62,6 +69,7 @@ class PricingService
                         $pricings[] = $pricing;
                     }
                 } else {
+
                     // Fallback: no channels submitted, save product-level data only
                     $pricing = PlatformPricing::updateOrCreate(
                         [
@@ -69,6 +77,11 @@ class PricingService
                             'product_id' => $productId,
                         ],
                         [
+                            'inward'         => $data['inward'] ?? 0,
+                            'fulfillment'     => $data['fulfillment'] ?? 0,
+                            'storage'         => $data['storage'] ?? 0,
+                            'ad_budget'       => $data['ad_budget'] ?? 0,
+                            'final_wsp'       => $data['final_wsp'] ?? 0,
                             'company_code'   => $asn->company_code,
                             'cost_price'     => $fob,
                             'fob_price'      => $fob,
@@ -86,8 +99,7 @@ class PricingService
                     $pricings[] = $pricing;
                 }
             }
-
-            $asn->update(['status' => 'pricing_done']);
+           $asn->update(['status' => 'pricing_done']);
         });
 
         // Notify Finance for review

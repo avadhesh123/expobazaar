@@ -418,7 +418,8 @@ class SourcingController extends Controller
 
         $country = match ($liveSheet->company_code) {
             '2100' => 'US',
-            '2200' => 'NL',
+            '2200' => 'EU',
+            '2400' => 'GB',
             default => 'IN',
         };
 

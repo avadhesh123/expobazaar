@@ -67,6 +67,8 @@ class FinanceService
                 'amount' => $data['amount'],
                 'reason' => $data['reason'],
                 'description' => $data['description'] ?? null,
+                'chargeback_items' => $data['chargeback_items'] ?? null,
+                
                 'status' => 'pending_confirmation',
                 'raised_by' => auth()->id(),
             ]);

@@ -4,7 +4,7 @@
 
 @section('content')
 @php
-$currency = match($payout->company_code) { '2000' => '₹', '2200' => '€', default => '$' };
+//$currency = match($payout->company_code) { '2000' => '₹', '2200' => '€', default => '$' };
 $monthName = \Carbon\Carbon::create($payout->payout_year, $payout->payout_month)->format('F Y');
 @endphp
 
@@ -40,15 +40,15 @@ $monthName = \Carbon\Carbon::create($payout->payout_year, $payout->payout_month)
     </div>
     <div class="kpi-card" style="flex:1;border-left:3px solid #16a34a;">
         <div class="kpi-label">Total Sales</div>
-        <div class="kpi-value" style="color:#16a34a;">{{ $currency }}{{ number_format($payoutSummary['total_sales'], 2) }}</div>
+        <div class="kpi-value" style="color:#16a34a;">{{ $activeCurrencySymbol }}{{ number_format($payoutSummary['total_sales'], 2) }}</div>
     </div>
     <div class="kpi-card" style="flex:1;border-left:3px solid #e8a838;">
         <div class="kpi-label">EB Commission</div>
-        <div class="kpi-value" style="color:#e8a838;">{{ $currency }}{{ number_format($payoutSummary['total_commission'], 2) }}</div>
+        <div class="kpi-value" style="color:#e8a838;">{{ $activeCurrencySymbol }}{{ number_format($payoutSummary['total_commission'], 2) }}</div>
     </div>
     <div class="kpi-card" style="flex:1;border-left:3px solid #7c3aed;">
         <div class="kpi-label">Net Payout</div>
-        <div class="kpi-value" style="color:#7c3aed;">{{ $currency }}{{ number_format($payoutSummary['total_payout'], 2) }}</div>
+        <div class="kpi-value" style="color:#7c3aed;">{{ $activeCurrencySymbol }}{{ number_format($payoutSummary['total_payout'], 2) }}</div>
     </div>
 </div>
 
@@ -79,9 +79,9 @@ $monthName = \Carbon\Carbon::create($payout->payout_year, $payout->payout_month)
                     <td style="font-size:.72rem;">{{ $li->channel }}</td>
                     <td style="text-align:right;font-family:monospace;">{{ number_format($li->vendor_wsp, 2) }}</td>
                     <td style="text-align:center;font-weight:600;">{{ $li->qty }}</td>
-                    <td style="text-align:right;font-family:monospace;">{{ $currency }}{{ number_format($li->sale_amount, 2) }}</td>
-                    <td style="text-align:right;font-family:monospace;color:#e8a838;">{{ $currency }}{{ number_format($li->commission, 2) }}</td>
-                    <td style="text-align:right;font-family:monospace;font-weight:700;background:#f5f3ff;color:#7c3aed;">{{ $currency }}{{ number_format($li->net_payout, 2) }}</td>
+                    <td style="text-align:right;font-family:monospace;">{{ $activeCurrencySymbol }}{{ number_format($li->sale_amount, 2) }}</td>
+                    <td style="text-align:right;font-family:monospace;color:#e8a838;">{{ $activeCurrencySymbol }}{{ number_format($li->commission, 2) }}</td>
+                    <td style="text-align:right;font-family:monospace;font-weight:700;background:#f5f3ff;color:#7c3aed;">{{ $activeCurrencySymbol }}{{ number_format($li->net_payout, 2) }}</td>
                 </tr>
                 @empty
                 <tr>
@@ -95,9 +95,9 @@ $monthName = \Carbon\Carbon::create($payout->payout_year, $payout->payout_month)
                     <td colspan="3" style="text-align:right;">TOTAL</td>
                     <td></td>
                     <td style="text-align:center;">{{ number_format($payoutSummary['total_qty']) }}</td>
-                    <td style="text-align:right;font-family:monospace;">{{ $currency }}{{ number_format($payoutSummary['total_sales'], 2) }}</td>
-                    <td style="text-align:right;font-family:monospace;color:#e8a838;">{{ $currency }}{{ number_format($payoutSummary['total_commission'], 2) }}</td>
-                    <td style="text-align:right;font-family:monospace;color:#7c3aed;background:#f5f3ff;">{{ $currency }}{{ number_format($payoutSummary['total_payout'], 2) }}</td>
+                    <td style="text-align:right;font-family:monospace;">{{ $activeCurrencySymbol }}{{ number_format($payoutSummary['total_sales'], 2) }}</td>
+                    <td style="text-align:right;font-family:monospace;color:#e8a838;">{{ $activeCurrencySymbol }}{{ number_format($payoutSummary['total_commission'], 2) }}</td>
+                    <td style="text-align:right;font-family:monospace;color:#7c3aed;background:#f5f3ff;">{{ $activeCurrencySymbol }}{{ number_format($payoutSummary['total_payout'], 2) }}</td>
                 </tr>
             </tfoot>
             @endif
@@ -149,7 +149,7 @@ $monthName = \Carbon\Carbon::create($payout->payout_year, $payout->payout_month)
                 <tfoot>
                     <tr style="background:#f0f4f8;font-weight:700;">
                         <td colspan="7" style="text-align:right;">Total</td>
-                        <td>{{ $currency }}{{ number_format($warehouseCharges->sum(fn($c) => floatval($c->total_charges ?? $c->amount ?? 0)), 2) }}</td>
+                        <td>{{ $activeCurrencySymbol }}{{ number_format($warehouseCharges->sum(fn($c) => floatval($c->total_charges ?? $c->amount ?? 0)), 2) }}</td>
                     </tr>
                 </tfoot>
                 @endif
@@ -176,7 +176,7 @@ $monthName = \Carbon\Carbon::create($payout->payout_year, $payout->payout_month)
                     <tr>
                         <td style="font-family:monospace;font-size:.72rem;">{{ $cb->order->order_number ?? '—' }}</td>
                         <td style="font-size:.72rem;">{{ Str::limit($cb->reason ?? '—', 30) }}</td>
-                        <td style="text-align:right;font-family:monospace;font-weight:600;color:#dc2626;">-{{ $currency }}{{ number_format(floatval($cb->amount), 2) }}</td>
+                        <td style="text-align:right;font-family:monospace;font-weight:600;color:#dc2626;">-{{ $activeCurrencySymbol }}{{ number_format(floatval($cb->amount), 2) }}</td>
                     </tr>
                     @empty
                     <tr>
@@ -188,7 +188,7 @@ $monthName = \Carbon\Carbon::create($payout->payout_year, $payout->payout_month)
                 <tfoot>
                     <tr style="background:#f0f4f8;font-weight:700;">
                         <td colspan="2" style="text-align:right;">Total</td>
-                        <td style="text-align:right;font-family:monospace;color:#dc2626;">-{{ $currency }}{{ number_format($chargebacks->sum('amount'), 2) }}</td>
+                        <td style="text-align:right;font-family:monospace;color:#dc2626;">-{{ $activeCurrencySymbol }}{{ number_format($chargebacks->sum('amount'), 2) }}</td>
                     </tr>
                 </tfoot>
                 @endif
@@ -211,19 +211,19 @@ $finalPayout = $payoutSummary['total_payout'] - $totalWhCharges - $totalChargeba
         <table style="width:100%;max-width:500px;font-size:.85rem;">
             <tr>
                 <td style="padding:.4rem 0;">Total Sales (Vendor WSP × QTY)</td>
-                <td style="text-align:right;font-family:monospace;font-weight:600;">{{ $currency }}{{ number_format($payoutSummary['total_payout'], 2) }}</td>
+                <td style="text-align:right;font-family:monospace;font-weight:600;">{{ $activeCurrencySymbol }}{{ number_format($payoutSummary['total_payout'], 2) }}</td>
             </tr>
             <tr>
                 <td style="padding:.4rem 0;color:#dc2626;">— Warehouse Charges</td>
-                <td style="text-align:right;font-family:monospace;color:#dc2626;">{{ $currency }}{{ number_format($warehouseCharges->sum(fn($c) => floatval($c->total_charges ?? $c->amount ?? 0)), 2) }}</td>
+                <td style="text-align:right;font-family:monospace;color:#dc2626;">{{ $activeCurrencySymbol }}{{ number_format($warehouseCharges->sum(fn($c) => floatval($c->total_charges ?? $c->amount ?? 0)), 2) }}</td>
             </tr>
             <tr>
                 <td style="padding:.4rem 0;color:#dc2626;">— Chargebacks</td>
-                <td style="text-align:right;font-family:monospace;color:#dc2626;">-{{ $currency }}{{ number_format($totalChargebacks, 2) }}</td>
+                <td style="text-align:right;font-family:monospace;color:#dc2626;">-{{ $activeCurrencySymbol }}{{ number_format($totalChargebacks, 2) }}</td>
             </tr>
             <tr style="border-top:2px solid #1e3a5f;">
                 <td style="padding:.6rem 0;font-weight:800;font-size:1rem;">NET PAYOUT</td>
-                <td style="text-align:right;font-family:monospace;font-weight:800;font-size:1.1rem;color:#7c3aed;">{{ $currency }}{{ number_format($finalPayout, 2) }}</td>
+                <td style="text-align:right;font-family:monospace;font-weight:800;font-size:1.1rem;color:#7c3aed;">{{ $activeCurrencySymbol }}{{ number_format($finalPayout, 2) }}</td>
             </tr>
         </table>
     </div>

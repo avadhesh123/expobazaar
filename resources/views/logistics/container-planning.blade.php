@@ -65,33 +65,12 @@
                         <option value="AIR">AIR (10 CBM)</option>
                     </select></div>
                 <div><label style="font-size:.7rem;font-weight:600;color:#64748b;display:block;margin-bottom:.25rem;">Company</label>
-                    @php
-            $user = auth()->user();
-            $userCompanyCodes = $user->company_codes ?? [];
-
-            // Convert to array if stored as JSON string
-            if (is_string($userCompanyCodes)) {
-            $userCompanyCodes = json_decode($userCompanyCodes, true) ?? [];
-            }
-
-            $allowedCompanies = array_filter(array_map('strval', $userCompanyCodes));
-            @endphp
-                <select name="company_code"  id="companyFilter" required style="padding:.4rem .5rem;border:1px solid #d1d5db;border-radius:8px;font-size:.82rem;font-family:inherit;">
-                        @if($user->isAdmin())
-                    <!-- Admin sees all companies -->
-                    <option value="2000" {{ request('company_code')==='2000'?'selected':'' }}>🇮🇳 2000 India</option>
-                    <option value="2100" {{ request('company_code')==='2100'?'selected':'' }}>🇺🇸 2100 USA</option>
-                    <option value="2200" {{ request('company_code')==='2200'?'selected':'' }}>🇳🇱 2200 NL</option>
-                    @else
-                    <!-- Normal user sees only assigned companies -->
-                    @foreach($allowedCompanies as $code)
-                    <option value="{{ $code }}" {{ request('company_code') === $code ? 'selected' : '' }}>
-                        {{ $code === '2000' ? '🇮🇳 2000 India' : ($code === '2100' ? '🇺🇸 2100 USA' : '🇳🇱 2200 NL') }}
-                    </option>
-                    @endforeach
-                    @endif
-      
-                    </select></div>
+                    
+                <span style="padding:.15rem .4rem;background:{{ $activeCode === '2000' ? '#dcfce7' : ($activeCode === '2100' ? '#dbeafe' : '#fef3c7') }};border-radius:5px;font-size:.78rem;font-weight:600;">
+                     {{ $activeCode === '2000' ? '🇮🇳 2000 India' : ($activeCode === '2100' ? '🇺🇸 2100 USA' : '🇳🇱 2200 NL') }}
+                </span>
+                 <input type="hidden" name="company_code"  value="{{ $activeCode }}">  
+                </div>
                 <div><label style="font-size:.7rem;font-weight:600;color:#64748b;display:block;margin-bottom:.25rem;">Container #</label><input type="text" name="container_number" placeholder="Optional" style="width:120px;padding:.4rem .5rem;border:1px solid #d1d5db;border-radius:8px;font-size:.82rem;"></div>
                 <button type="submit" class="btn btn-primary"><i class="fas fa-ship" style="margin-right:.3rem;"></i> Create Shipment</button>
             </div>

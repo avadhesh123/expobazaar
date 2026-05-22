@@ -28,14 +28,13 @@ class WarehouseChargesService
                 continue;
             }
 
-            $currency = match ($vendor->company_code) {
+            $currency = match (session('active_company') ?: $vendor->company_code) {
                 '2000' => 'INR',
                 '2100' => 'EUR',
                 '2200' => 'USD',
+                '2400' => 'GBP',
                 default => 'USD'   // fallback
             };
-
-            //  $currency = $vendor->company_code === '2200' ? 'EUR' : 'USD';
 
             // Get all GRNs for this vendor (via products)
             $vendorProductIds = $vendor->products()->pluck('id');
@@ -85,7 +84,7 @@ class WarehouseChargesService
                             'vendor_id'      => $vendor->id,
                             'grn_id'         => $grn->id,
                             'warehouse_id'   => $grn->warehouse_id,
-                            'company_code'   => $vendor->company_code,
+                            'company_code'   => session('active_company') ?: $vendor->company_code,
                             'currency'       => $currency,
                             'charge_month'   => $month,
                             'charge_year'    => $year,
@@ -148,7 +147,9 @@ class WarehouseChargesService
      */
     private function calculateGrnCharges(Vendor $vendor, Grn $grn, VendorRateCard $rc, int $month, int $year, string $periodStart, string $periodEnd): array
     {
-        $vendorProductIds = $vendor->products()->pluck('id')->toArray();
+        $vendorProductIds = $vendor->products()
+            ->when(session('active_company'), fn($q) => $q->where('company_code', session('active_company')))
+            ->pluck('id')->toArray();
         $grnItems = $grn->items->whereIn('product_id', $vendorProductIds);
         $sym = $rc->getCurrencySymbol();
 
@@ -287,15 +288,17 @@ class WarehouseChargesService
     /**
      * Generate vendor monthly statement
      */
-    public function getVendorStatement(int $vendorId, int $month, int $year): array
+    public function getVendorStatement(int $vendorId, int $month, int $year, string $companyCode): array
     {
         $vendor = Vendor::findOrFail($vendorId);
         $charges = VendorMonthlyCharge::where('vendor_id', $vendorId)
             ->byMonth($month, $year)
             ->with('grn', 'warehouse', 'rateCard')
+            ->when($companyCode, fn($q) => $q->where('company_code', $companyCode))
             ->get();
 
         $grossPayout = \App\Models\VendorPayout::where('vendor_id', $vendorId)
+            ->when($companyCode, fn($q) => $q->where('company_code', $companyCode))
             ->where('payout_month', $month)
             ->where('payout_year', $year)
             ->sum('total_sales');
@@ -317,7 +320,7 @@ class WarehouseChargesService
             'gross_payout'   => floatval($grossPayout),
             'net_payout'     => floatval($grossPayout) - $totalCharges,
             'is_negative'    => (floatval($grossPayout) - $totalCharges) < 0,
-            'currency'       => $vendor->company_code === '2200' ? 'EUR' : 'USD',
+            'currency'       => $companyCode === '2000' ? 'INR' : ($companyCode === '2100' ? 'EUR' : 'USD'),
         ];
     }
 }

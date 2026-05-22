@@ -11,17 +11,31 @@ class CompanyScope implements Scope
     public function apply(Builder $builder, Model $model): void
     {
         $user = auth()->user();
-        if (!$user) return;
+        if (!$user) {
+            return;
+        }
 
-        // Admins see everything
-        if ($user->isAdmin()) return;
-
-        $companyCodes = $user->company_codes ?? [];
-        if (empty($companyCodes)) return;
-
-        // Get the correct column name (some models use 'company_code', some 'company_codes')
         $column = $model->getTable() . '.company_code';
 
-        $builder->whereIn($column, $companyCodes);
+        // If a specific company is selected in session, filter to that
+        $activeCompany = session('active_company');
+        if ($activeCompany) {
+            $builder->where($column, $activeCompany);
+            return;
+        }
+
+        // Admins with no specific selection see everything
+        if ($user->isAdmin()) {
+            return;
+        }
+
+        // Non-admin users without selection: filter to their assigned companies
+        $companyCodes = $user->company_codes ?? [];
+        if (is_string($companyCodes)) {
+            $companyCodes = json_decode($companyCodes, true) ?? [];
+        }
+        if (!empty($companyCodes)) {
+            $builder->whereIn($column, $companyCodes);
+        }
     }
 }

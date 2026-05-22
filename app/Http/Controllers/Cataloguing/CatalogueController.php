@@ -16,7 +16,8 @@ class CatalogueController extends Controller
 
     public function dashboard(Request $request)
     {
-        $companyCode = $request->get('company_code');
+       // $companyCode = $request->get('company_code');
+        $companyCode = session('company_code'); // For view to highlight selected code
         $data = $this->dashboardService->getCataloguingDashboard($companyCode);
         return view('cataloguing.dashboard', compact('data', 'companyCode'));
     }
@@ -24,48 +25,38 @@ class CatalogueController extends Controller
     public function pricingSheets(Request $request)
     {
         $user = auth()->user();
-        $userCompanyCodes = $user->company_codes ?? [];   // Array
-
-        if (is_string($userCompanyCodes)) {
-            $userCompanyCodes = json_decode($userCompanyCodes, true) ?? [];
-        }
-        $userCompanyCodes = array_filter(array_map('strval', $userCompanyCodes));
+      
+        $companyCode = session('active_company'); // For view to highlight selected code
 
         $pricings = PlatformPricing::with('product.category', 'product.vendor', 'salesChannel', 'asn')
-            ->where('status', 'approved')
-            ->when(!$user->isAdmin() && !empty($userCompanyCodes), function ($q) use ($userCompanyCodes) {
-                return $q->whereIn('company_code', $userCompanyCodes);
+            ->whereIn('status', ['approved','submitted'])
+            ->when(!$user->isAdmin() && !empty($companyCode), function ($q) use ($companyCode) {
+                return $q->where('company_code', $companyCode);
             })
-            ->when($request->company_code, fn($q, $v) => $q->where('company_code', $v))
-            ->when($request->channel_id, fn($q, $v) => $q->where('sales_channel_id', $v))
+             ->when($request->channel_id, fn($q, $v) => $q->where('sales_channel_id', $v))
             ->when($request->asn_id, fn($q, $v) => $q->where('asn_id', $v))
             ->when($request->search, function ($q, $v) {
                 $q->whereHas('product', fn($p) => $p->where('sku', 'LIKE', "%{$v}%")->orWhere('name', 'LIKE', "%{$v}%"));
             })
-            ->latest()->paginate(30)->withQueryString();
-
-        // Load product_details from live sheet items for each pricing
-        $pricings->getCollection()->transform(function ($p) {
-            $p->pd = [];
-            if ($p->product) {
-                $lsItem = \App\Models\LiveSheetItem::where('product_id', $p->product_id)->latest()->first();
-                $p->pd = $lsItem ? ($lsItem->product_details ?? []) : [];
-            }
-            return $p;
-        });
+            ->latest()->paginate(30);//->withQueryString();
+            
+            $pricings->setCollection(
+                $pricings->getCollection()->groupBy('product_id')
+            );        
+ 
+ 
 
         $channels = SalesChannel::active()
-            ->when(!$user->isAdmin() && !empty($userCompanyCodes), function ($q) use ($userCompanyCodes) {
-                return $q->whereJsonContains('company_codes', $userCompanyCodes);
+            ->when(!$user->isAdmin() && !empty($companyCode), function ($q) use ($companyCode) {
+                return $q->whereJsonContains('company_codes', $companyCode);
             })
-            ->when($request->company_code, fn($q, $v) => $q->where('company_code', $v))
-            ->orderBy('name')->get();
+             ->orderBy('name')->get();
             
         $asns = \App\Models\Asn::orderBy('asn_number', 'desc')
-            ->when(!$user->isAdmin() && !empty($userCompanyCodes), function ($q) use ($userCompanyCodes) {
-                return $q->whereIn('company_code', $userCompanyCodes);
+            ->when(!$user->isAdmin() && !empty($companyCode), function ($q) use ($companyCode) {
+                return $q->where('company_code', $companyCode);
             })
-            ->when($request->company_code, fn($q, $v) => $q->where('company_code', $v))
+           // ->when($request->company_code, fn($q, $v) => $q->where('company_code', $v))
             ->limit(100)->get(['id', 'asn_number']);
 
         return view('cataloguing.pricing-sheets', compact('pricings', 'channels', 'asns'));

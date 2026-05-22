@@ -16,14 +16,16 @@ class Product extends Model
         'length', 'width', 'height', 'weight', 'cbm', 'color', 'material',
         'variations', 'vendor_price', 'fob_price', 'currency', 'thumbnail', 'images',
         'status', 'hsn_code', 'barcode', 'stock_quantity', 'reserved_quantity',
-        'shopify_url', 'platform_listing_status',
+        'shopify_url', 'platform_listing_status','product_details_dropship','eb_wsp','comments',
     ];
 
     protected $casts = [
 		'vendor_wsp'=>'decimal:2',
+		'eb_wsp'=>'decimal:2',
         'variations' => 'array',
         'images' => 'array',
         'platform_listing_status' => 'array',
+        'product_details_dropship' => 'array',
         'vendor_price' => 'decimal:2',
         'fob_price' => 'decimal:2',
         'cbm' => 'decimal:4',
@@ -94,7 +96,8 @@ class Product extends Model
         $prefix = match($companyCode) {
             '2000' => 'IN',
             '2100' => 'US',
-            '2200' => 'NL',
+            '2200' => 'EU',
+            '2400' => 'GB',
             default => 'XX',
         };
         $catPrefix = str_pad($categoryId, 3, '0', STR_PAD_LEFT);

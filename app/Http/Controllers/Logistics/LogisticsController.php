@@ -18,7 +18,7 @@ class LogisticsController extends Controller
     public function dashboard(Request $request)
     {
         $companyCode = $request->get('company_code');
-        $data = $this->dashboardService->getLogisticsDashboard($companyCode ?? '2100');
+        $data = $this->dashboardService->getLogisticsDashboard();
         return view('logistics.dashboard', compact('data', 'companyCode'));
     }
 
@@ -26,24 +26,20 @@ class LogisticsController extends Controller
     public function containerPlanning(Request $request)
     {
         $user = auth()->user();
-        $userCompanyCodes = $user->company_codes ?? [];   // Array
 
-        // Convert to array if it's stored as JSON string
-        if (is_string($userCompanyCodes)) {
-            $userCompanyCodes = json_decode($userCompanyCodes, true) ?? [];
-        }
+        $activeCode = session('active_company');
 
         $consignments = Consignment::with('vendor', 'liveSheet')
-            ->where('status', 'created')
-            ->when(!$user->isAdmin() && !empty($userCompanyCodes), function ($q) use ($userCompanyCodes) {
-                return $q->whereIn('company_code', $userCompanyCodes);
+            ->where('status', 'created')           
+            ->when(!$user->isAdmin() && !empty($activeCode), function ($q) use ($activeCode) {
+                return $q->where('company_code', $activeCode);
             })
             ->when($request->company_code, fn($q, $v) => $q->where('company_code', $v))
             ->whereDoesntHave('shipments')
             ->when($request->company_code, fn($q, $v) => $q->where('company_code', $v))
             ->get();
         $totalCbm = $consignments->sum('total_cbm');
-        return view('logistics.container-planning', compact('consignments', 'totalCbm'));
+        return view('logistics.container-planning', compact('consignments', 'totalCbm', 'activeCode'));
     }
 
     public function createShipment(Request $request)
@@ -51,7 +47,7 @@ class LogisticsController extends Controller
         $request->validate([
             'consignment_ids' => 'required|array|min:1',
             'shipment_type'   => 'required|in:FCL,LCL,AIR',
-            'company_code'    => 'required|in:2000,2100,2200',
+            'company_code'    => 'required|in:2000,2100,2200,2400',
         ]);
 
         try {
@@ -67,17 +63,13 @@ class LogisticsController extends Controller
     public function shipments(Request $request)
     {
         $user = auth()->user();
-        $userCompanyCodes = $user->company_codes ?? [];   // Array
-
-        // Convert to array if it's stored as JSON string
-        if (is_string($userCompanyCodes)) {
-            $userCompanyCodes = json_decode($userCompanyCodes, true) ?? [];
-        }
+       
+        $activeCode = session('active_company');
 
         $shipments = Shipment::with('consignments.vendor')
             ->when($request->status, fn($q, $v) => $q->where('status', $v))
-            ->when(!$user->isAdmin() && !empty($userCompanyCodes), function ($q) use ($userCompanyCodes) {
-                return $q->whereIn('company_code', $userCompanyCodes);
+            ->when(!$user->isAdmin() && !empty($activeCode), function ($q) use ($activeCode) {
+                return $q->where('company_code', $activeCode);
             })
             ->when($request->company_code, fn($q, $v) => $q->where('company_code', $v))
             ->when($request->type, fn($q, $v) => $q->where('shipment_type', $v))
@@ -131,17 +123,12 @@ class LogisticsController extends Controller
     public function grnList(Request $request)
     {
         $user = auth()->user();
-        $userCompanyCodes = $user->company_codes ?? [];   // Array
-
-        // Convert to array if it's stored as JSON string
-        if (is_string($userCompanyCodes)) {
-            $userCompanyCodes = json_decode($userCompanyCodes, true) ?? [];
-        }
+        $activeCode = session('active_company');
 
         $grns = Grn::with('shipment', 'warehouse')
             ->when($request->status, fn($q, $v) => $q->where('status', $v))
-            ->when(!$user->isAdmin() && !empty($userCompanyCodes), function ($q) use ($userCompanyCodes) {
-                return $q->whereIn('company_code', $userCompanyCodes);
+            ->when(!$user->isAdmin() && !empty($activeCode), function ($q) use ($activeCode) {
+                return $q->where('company_code', $activeCode);
             })
             ->when($request->company_code, fn($q, $v) => $q->where('company_code', $v))
             ->when($request->warehouse_id, fn($q, $v) => $q->where('warehouse_id', $v))
@@ -150,11 +137,14 @@ class LogisticsController extends Controller
         $pendingShipments = Shipment::whereIn('status', ['arrived', 'grn_pending', 'locked', 'asn_generated', 'in_transit', 'consolidated'])
             ->whereDoesntHave('grn')
             ->with('consignments.vendor', 'warehouse')
+            ->when(!$user->isAdmin() && !empty($activeCode), function ($q) use ($activeCode) {
+                return $q->where('company_code', $activeCode);
+            })
             ->latest()->get();
 
         $warehouses = Warehouse::active()
-            ->when(!$user->isAdmin() && !empty($userCompanyCodes), function ($q) use ($userCompanyCodes) {
-                return $q->whereIn('company_code', $userCompanyCodes);
+            ->when(!$user->isAdmin() && !empty($activeCode), function ($q) use ($activeCode) {
+                return $q->where('company_code', $activeCode);
             })
             ->when($request->company_code, fn($q, $v) => $q->where('company_code', $v))
             ->get();
@@ -286,17 +276,19 @@ class LogisticsController extends Controller
     public function inventory(Request $request)
     {
         $user = auth()->user();
-        $userCompanyCodes = $user->company_codes ?? [];   // Array
-
-        // Convert to array if it's stored as JSON string
-        if (is_string($userCompanyCodes)) {
-            $userCompanyCodes = json_decode($userCompanyCodes, true) ?? [];
-        }
+        $activeCode = session('active_company');
 
         $query = Inventory::with('product.vendor', 'product.category', 'warehouse')
-            ->when(!$user->isAdmin() && !empty($userCompanyCodes), function ($q) use ($userCompanyCodes) {
-                return $q->whereIn('company_code', $userCompanyCodes);
+            ->when(!$user->isAdmin() && !empty($activeCode), function ($q) use ($activeCode) {
+                return $q->where('company_code', $activeCode);
             })
+            ->whereHas('product', function ($pq) use ($activeCode) {
+                $pq->where('company_code', $activeCode);
+            })
+            ->whereHas('warehouse', function ($wq) use ($activeCode) {
+                $wq->where('company_code', $activeCode);
+            })
+            ->where('grn_id', '!=', null)
             ->when($request->company_code, fn($q, $v) => $q->where('company_code', $v))
             ->when($request->warehouse_id, fn($q, $v) => $q->where('warehouse_id', $v))
             ->when($request->vendor_id, fn($q, $v) => $q->whereHas('product', fn($pq) => $pq->where('vendor_id', $v)))
@@ -315,27 +307,38 @@ class LogisticsController extends Controller
         });
         $warehouses = Warehouse::active()->get();
         $vendors = \App\Models\Vendor::active()
-            ->when(!$user->isAdmin() && !empty($userCompanyCodes), function ($q) use ($userCompanyCodes) {
-                return $q->whereIn('company_code', $userCompanyCodes);
+            ->when(!$user->isAdmin() && !empty($activeCode), function ($q) use ($activeCode) {
+                return $q->where('company_code', $activeCode);
             })->orderBy('company_name')->get();
 
         $stats = [
             'total_skus'  => Inventory::when($request->company_code, fn($q, $v) => $q->where('company_code', $v))
-                ->when(!$user->isAdmin() && !empty($userCompanyCodes), function ($q) use ($userCompanyCodes) {
-                    return $q->whereIn('company_code', $userCompanyCodes);
-                })->where('quantity', '>', 0)->count(),
+                ->when(!$user->isAdmin() && !empty($activeCode), function ($q) use ($activeCode) {
+                    return $q->where('company_code', $activeCode);
+                })
+                ->whereHas('product', fn($pq) => $pq->where('company_code', $activeCode))
+                ->where('grn_id', '!=', null)->count(),
             'total_units' => Inventory::when($request->company_code, fn($q, $v) => $q->where('company_code', $v))
-                ->when(!$user->isAdmin() && !empty($userCompanyCodes), function ($q) use ($userCompanyCodes) {
-                    return $q->whereIn('company_code', $userCompanyCodes);
-                })->sum('quantity'),
+                ->when(!$user->isAdmin() && !empty($activeCode), function ($q) use ($activeCode) {
+                    return $q->where('company_code', $activeCode);
+                })
+                ->where('grn_id', '!=', null)
+                ->whereHas('product', fn($pq) => $pq->where('company_code', $activeCode))
+                ->sum('quantity'),
             'available'   => Inventory::when($request->company_code, fn($q, $v) => $q->where('company_code', $v))
-                ->when(!$user->isAdmin() && !empty($userCompanyCodes), function ($q) use ($userCompanyCodes) {
-                    return $q->whereIn('company_code', $userCompanyCodes);
-                })->sum('available_quantity'),
+                ->when(!$user->isAdmin() && !empty($activeCode), function ($q) use ($activeCode) {
+                    return $q->where('company_code', $activeCode);
+                })
+                ->where('grn_id', '!=', null)
+                ->whereHas('product', fn($pq) => $pq->where('company_code', $activeCode))
+                ->sum('available_quantity'),
             'reserved'    => Inventory::when($request->company_code, fn($q, $v) => $q->where('company_code', $v))
-                ->when(!$user->isAdmin() && !empty($userCompanyCodes), function ($q) use ($userCompanyCodes) {
-                    return $q->whereIn('company_code', $userCompanyCodes);
-                })->sum('reserved_quantity'),
+                ->when(!$user->isAdmin() && !empty($activeCode), function ($q) use ($activeCode) {
+                    return $q->where('company_code', $activeCode);
+                })
+                ->where('grn_id', '!=', null)
+                ->whereHas('product', fn($pq) => $pq->where('company_code', $activeCode))
+                ->sum('reserved_quantity'),
         ];
 
         return view('logistics.inventory.index', compact('inventory', 'warehouses', 'vendors', 'stats'));
@@ -343,7 +346,11 @@ class LogisticsController extends Controller
 
     public function downloadInventory(Request $request)
     {
+        $activeCode = session('active_company');
         $items = Inventory::with('product.vendor', 'product.category', 'warehouse')
+            ->when(!$request->user()->isAdmin() && !empty($activeCode), function ($q) use ($activeCode) {
+                return $q->where('company_code', $activeCode);
+            })
             ->when($request->company_code, fn($q, $v) => $q->where('company_code', $v))
             ->when($request->warehouse_id, fn($q, $v) => $q->where('warehouse_id', $v))
             ->where('quantity', '>', 0)->get();
@@ -370,10 +377,12 @@ class LogisticsController extends Controller
 
     public function inventoryAgeing(Request $request)
     {
-        $companyCode = $request->get('company_code');
+       // $companyCode = $request->get('company_code');
+
+        $activeCode = session('active_company');
 
         // Build flat ageing summary for KPI cards
-        $allInventory = Inventory::when($companyCode, fn($q, $v) => $q->where('company_code', $v))
+        $allInventory = Inventory::when($activeCode, fn($q, $v) => $q->where('company_code', $v))
             ->where('quantity', '>', 0)
             ->whereNotNull('received_date')
             ->get()
@@ -392,7 +401,7 @@ class LogisticsController extends Controller
 
         // Ageing by warehouse
         $byWarehouse = Inventory::with('warehouse')
-            ->when($companyCode, fn($q, $v) => $q->where('company_code', $v))
+            ->when($activeCode, fn($q, $v) => $q->where('company_code', $v))
             ->where('quantity', '>', 0)
             ->whereNotNull('received_date')
             ->get()
@@ -413,7 +422,7 @@ class LogisticsController extends Controller
 
         // GRN ageing
         $grnAgeing = Grn::with('shipment', 'warehouse')
-            ->when($companyCode, fn($q, $v) => $q->where('company_code', $v))
+            ->when($activeCode, fn($q, $v) => $q->where('company_code', $v))
             ->latest()->get()->map(function ($grn) {
                 $grn->ageing_days = $grn->receipt_date ? now()->diffInDays($grn->receipt_date) : 0;
                 return $grn;
@@ -424,8 +433,10 @@ class LogisticsController extends Controller
 
     public function warehouseAllocation(Request $request)
     {
+        $activeCode = session('active_company');
+
         $inventoryByWarehouse = Warehouse::active()
-            ->when($request->company_code, fn($q, $v) => $q->where('company_code', $v))
+            ->when($activeCode, fn($q, $v) => $q->where('company_code', $v))
             ->withCount(['inventory' => fn($q) => $q->where('quantity', '>', 0)])
             ->withSum(['inventory' => fn($q) => $q->where('quantity', '>', 0)], 'quantity')
             ->withSum(['inventory' => fn($q) => $q->where('quantity', '>', 0)], 'available_quantity')
@@ -468,12 +479,7 @@ class LogisticsController extends Controller
     {
 
         $user = auth()->user();
-        $userCompanyCodes = $user->company_codes ?? [];   // Array
-
-        // Convert to array if it's stored as JSON string
-        if (is_string($userCompanyCodes)) {
-            $userCompanyCodes = json_decode($userCompanyCodes, true) ?? [];
-        }
+        $activeCode = session('active_company');
 
         $month = $request->get('month', now()->month);
         $year = $request->get('year', now()->year);
@@ -481,8 +487,8 @@ class LogisticsController extends Controller
 
         $charges = WarehouseCharge::with('warehouse', 'vendor', 'items')
             ->byMonth($month, $year)
-            ->when(!$user->isAdmin() && !empty($userCompanyCodes), function ($q) use ($userCompanyCodes) {
-                return $q->whereIn('company_code', $userCompanyCodes);
+            ->when(!$user->isAdmin() && !empty($activeCode), function ($q) use ($activeCode) {
+                return $q->where('company_code', $activeCode);
             })
             ->when($category, fn($q, $v) => $q->where('charge_category', $v))
             ->when($request->warehouse_id, fn($q, $v) => $q->where('warehouse_id', $v))
@@ -702,18 +708,12 @@ class LogisticsController extends Controller
     {
 
         $user = auth()->user();
-        $userCompanyCodes = $user->company_codes ?? [];   // Array
-
-        // Convert to array if it's stored as JSON string
-        if (is_string($userCompanyCodes)) {
-            $userCompanyCodes = json_decode($userCompanyCodes, true) ?? [];
-        }
-
+        $activeCode = session('active_company');
         // Show warehouse rate cards as the base template
         $warehouseRateCards = \App\Models\WarehouseRateCard::with('warehouse')
             ->approved()
-            ->when(!$user->isAdmin() && !empty($userCompanyCodes), function ($q) use ($userCompanyCodes) {
-                return $q->whereIn('company_code', $userCompanyCodes);
+            ->when(!$user->isAdmin() && !empty($activeCode), function ($q) use ($activeCode) {
+                return $q->where('company_code', $activeCode);
             })
             ->when($request->company_code, fn($q, $v) => $q->where('company_code', $v))
             ->orderBy('warehouse_id')
@@ -721,8 +721,8 @@ class LogisticsController extends Controller
 
         // Existing vendor rate cards
         $vendorRateCards = \App\Models\VendorRateCard::with('vendor', 'creator')
-            ->when(!$user->isAdmin() && !empty($userCompanyCodes), function ($q) use ($userCompanyCodes) {
-                return $q->whereIn('company_code', $userCompanyCodes);
+            ->when(!$user->isAdmin() && !empty($activeCode), function ($q) use ($activeCode) {
+                return $q->where('company_code', $activeCode);
             })
             ->when($request->company_code, fn($q, $v) => $q->where('company_code', $v))
             ->when($request->vendor_id, fn($q, $v) => $q->where('vendor_id', $v))
@@ -730,8 +730,8 @@ class LogisticsController extends Controller
             ->paginate(30)->withQueryString();
 
         $vendors = \App\Models\Vendor::orderBy('company_name')
-            ->when(!$user->isAdmin() && !empty($userCompanyCodes), function ($q) use ($userCompanyCodes) {
-                return $q->whereIn('company_code', $userCompanyCodes);
+            ->when(!$user->isAdmin() && !empty($activeCode), function ($q) use ($activeCode) {
+                return $q->where('company_code', $activeCode);
             })
             ->when($request->company_code, fn($q, $v) => $q->where('company_code', $v))
             ->get();
@@ -754,21 +754,22 @@ class LogisticsController extends Controller
         ]);
 
         $vendor = \App\Models\Vendor::findOrFail($request->vendor_id);
-        //  $currency = $vendor->company_code === '2200' ? 'EUR' : 'USD';
 
-        $currency = match ($vendor->company_code) {
+        $activeCode = session('active_company');
+
+        $currency = match ($activeCode ?? $vendor->company_code) {
             '2000' => 'INR',
             '2100' => 'EUR',
             '2200' => 'USD',
+            '2400' => 'GBP',
             default => 'USD'   // fallback
         };
 
-        $maxV = \App\Models\VendorRateCard::where('vendor_id', $vendor->id)->max('version') ?? 0;
-
+        $maxV = \App\Models\VendorRateCard::where(['vendor_id' => $vendor->id, 'company_code' => $activeCode])->max('version') ?? 0;
 
         $newEffectiveFrom = $request->effective_from ?? now()->toDateString();
 
-        \App\Models\VendorRateCard::where('vendor_id', $vendor->id)
+        \App\Models\VendorRateCard::where(['vendor_id' => $vendor->id, 'company_code' => $activeCode])
             ->where('status', 'approved')
             ->whereNull('effective_to')
             ->update([
@@ -777,7 +778,7 @@ class LogisticsController extends Controller
 
         $rc = \App\Models\VendorRateCard::create([
             'vendor_id'                 => $vendor->id,
-            'company_code'              => $vendor->company_code ?? '2100',
+            'company_code'              => $activeCode ?? $vendor->company_code ?? '2100',
             'currency'                  => $currency,
             'inward_rate_per_carton'    => $request->inward_rate_per_carton,
             'storage_rate_per_cft'      => $request->storage_rate_per_cft,
@@ -909,17 +910,12 @@ class LogisticsController extends Controller
     {
 
         $user = auth()->user();
-        $userCompanyCodes = $user->company_codes ?? [];   // Array
-
-        // Convert to array if it's stored as JSON string
-        if (is_string($userCompanyCodes)) {
-            $userCompanyCodes = json_decode($userCompanyCodes, true) ?? [];
-        }
+       $activeCode = session('active_company');
 
         $rateCards = \App\Models\WarehouseRateCard::with('warehouse', 'creator', 'approver')
             ->when($request->warehouse_id, fn($q, $v) => $q->where('warehouse_id', $v))
-            ->when(!$user->isAdmin() && !empty($userCompanyCodes), function ($q) use ($userCompanyCodes) {
-                return $q->whereIn('company_code', $userCompanyCodes);
+            ->when(!$user->isAdmin() && !empty($activeCode), function ($q) use ($activeCode) {
+                return $q->where('company_code', $activeCode);
             })
             ->when($request->company_code, fn($q, $v) => $q->where('company_code', $v))
             ->orderByDesc('created_at')->paginate(30)->withQueryString();
@@ -940,11 +936,11 @@ class LogisticsController extends Controller
             'effective_from' => 'required|date',
         ]);
         $wh = Warehouse::findOrFail($request->warehouse_id);
-        // $currency = $wh->company_code === '2200' ? 'EUR' : 'USD';
         $currency = match ($wh->company_code) {
             '2000' => 'INR',
             '2100' => 'EUR',
             '2200' => 'USD',
+            '2400' => 'GBP',
             default => 'USD'   // fallback
         };
 
@@ -988,18 +984,13 @@ class LogisticsController extends Controller
     {
 
         $user = auth()->user();
-        $userCompanyCodes = $user->company_codes ?? [];   // Array
-
-        // Convert to array if it's stored as JSON string
-        if (is_string($userCompanyCodes)) {
-            $userCompanyCodes = json_decode($userCompanyCodes, true) ?? [];
-        }
+        $activeCode =  session('active_company'); 
 
         $month = $request->get('month', now()->month);
         $year = $request->get('year', now()->year);
         $charges = \App\Models\WarehouseMonthlyCharge::with('warehouse', 'grnDetails.grn', 'rateCard')
-            ->when(!$user->isAdmin() && !empty($userCompanyCodes), function ($q) use ($userCompanyCodes) {
-                return $q->whereIn('company_code', $userCompanyCodes);
+            ->when(!$user->isAdmin() && !empty($activeCode), function ($q) use ($activeCode) {
+                return $q->where('company_code', $activeCode);
             })
             ->when($request->company_code, fn($q, $v) => $q->where('company_code', $v))
             ->byMonth($month, $year)->orderBy('warehouse_id')->get();
@@ -1074,7 +1065,10 @@ class LogisticsController extends Controller
     // ─── RATE CARDS ──────────────────────────────────────────────
     public function rateCards(Request $request)
     {
-        $companyCode = $request->get('company_code');
+       // $companyCode = $request->get('company_code');
+        
+$companyCode =  session('active_company');
+
         $warehouses = Warehouse::when($companyCode, fn($q, $v) => $q->where('company_code', $v))
             ->where('is_active', true)
             ->get();

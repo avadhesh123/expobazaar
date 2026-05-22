@@ -8,16 +8,16 @@
     <div class="kpi-card" style="border-left:3px solid #dc2626;">
         <div class="kpi-label">Unpaid Orders</div>
         <div class="kpi-value" style="color:#dc2626;">{{ $summary['unpaid_count'] }}</div>
-        <div style="font-size:.78rem;color:#dc2626;font-weight:600;">${{ number_format($summary['unpaid_total'], 0) }}</div>
+        <div style="font-size:.78rem;color:#dc2626;font-weight:600;">{{ $activeCurrencySymbol }}{{ number_format($summary['unpaid_total'], 0) }}</div>
     </div>
     <div class="kpi-card" style="border-left:3px solid #e8a838;">
         <div class="kpi-label">Partial Payments</div>
         <div class="kpi-value" style="color:#e8a838;">{{ $summary['partial_count'] }}</div>
-        <div style="font-size:.78rem;color:#e8a838;font-weight:600;">${{ number_format($summary['partial_total'], 0) }}</div>
+        <div style="font-size:.78rem;color:#e8a838;font-weight:600;">{{ $activeCurrencySymbol }}{{ number_format($summary['partial_total'], 0) }}</div>
     </div>
     <div class="kpi-card" style="border-left:3px solid #7c3aed;">
         <div class="kpi-label">Total Deductions</div>
-        <div class="kpi-value" style="font-size:1.3rem;color:#7c3aed;">${{ number_format($summary['total_deductions'], 0) }}</div>
+        <div class="kpi-value" style="font-size:1.3rem;color:#7c3aed;">{{ $activeCurrencySymbol }}{{ number_format($summary['total_deductions'], 0) }}</div>
     </div>
 </div>
 
@@ -76,14 +76,14 @@
                     </td>
                     <td><span class="badge badge-info">{{ $r->order->salesChannel->name ?? '—' }}</span></td>
                     <td>{{ $r->company_code }}</td>
-                    <td style="font-family:monospace;font-weight:600;">${{ number_format($r->order_amount, 2) }}</td>
-                    <td style="font-family:monospace;font-size:.78rem;color:#dc2626;">${{ number_format($r->platform_commission, 2) }}</td>
-                    <td style="font-family:monospace;font-size:.78rem;color:#dc2626;">${{ number_format($r->platform_fee, 2) }}</td>
-                    <td style="font-family:monospace;font-size:.78rem;">${{ number_format($r->insurance_charge, 2) }}</td>
-                    <td style="font-family:monospace;font-size:.78rem;color:#991b1b;">${{ number_format($r->chargeback_amount, 2) }}</td>
-                    <td style="font-family:monospace;font-size:.78rem;">${{ number_format($r->other_deductions, 2) }}</td>
-                    <td style="font-family:monospace;font-weight:700;color:#166534;">${{ number_format($r->net_receivable, 2) }}</td>
-                    <td style="font-family:monospace;font-weight:600;">${{ number_format($r->amount_received, 2) }}</td>
+                    <td style="font-family:monospace;font-weight:600;">{{$activeCurrencySymbol}}{{ number_format($r->order_amount, 2) }}</td>
+                    <td style="font-family:monospace;font-size:.78rem;color:#dc2626;">{{$activeCurrencySymbol}}{{ number_format($r->platform_commission, 2) }}</td>
+                    <td style="font-family:monospace;font-size:.78rem;color:#dc2626;">{{$activeCurrencySymbol}}{{ number_format($r->platform_fee, 2) }}</td>
+                    <td style="font-family:monospace;font-size:.78rem;">{{$activeCurrencySymbol}}{{ number_format($r->insurance_charge, 2) }}</td>
+                    <td style="font-family:monospace;font-size:.78rem;color:#991b1b;">{{$activeCurrencySymbol}}{{ number_format($r->chargeback_amount, 2) }}</td>
+                    <td style="font-family:monospace;font-size:.78rem;">{{$activeCurrencySymbol}}{{ number_format($r->other_deductions, 2) }}</td>
+                    <td style="font-family:monospace;font-weight:700;color:#166534;">{{$activeCurrencySymbol}}{{ number_format($r->net_receivable, 2) }}</td>
+                    <td style="font-family:monospace;font-weight:600;">{{$activeCurrencySymbol}}{{ number_format($r->amount_received, 2) }}</td>
                     <td><span class="badge {{ ['unpaid'=>'badge-danger','partial'=>'badge-warning','paid'=>'badge-success'][$r->payment_status] ?? 'badge-gray' }}">{{ ucfirst($r->payment_status) }}</span></td>
                     <td>
                         <div style="display:flex;gap:.25rem;">

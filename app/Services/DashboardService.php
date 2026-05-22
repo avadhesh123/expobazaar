@@ -67,26 +67,29 @@ class DashboardService
     public function getVendorDashboard(int $vendorId): array
     {
         $vendor = Vendor::findOrFail($vendorId);
+        $activeCode = session('active_company');
 
         return [
             'kpis' => [
-                'products_approved' => Product::where('vendor_id', $vendorId)->whereIn('status', ['approved', 'listed'])->count(),
-                'inventory_available' => Inventory::whereHas('product', fn($q) => $q->where('vendor_id', $vendorId))->sum('available_quantity'),
+                'products_approved' => Product::where('vendor_id', $vendorId)->where('company_code', $activeCode)->whereIn('status', ['approved', 'listed'])->count(),
+                'inventory_available' => Inventory::whereHas('product', fn($q) => $q->where('vendor_id', $vendorId))->where('company_code', $activeCode)->sum('available_quantity'),
                 'units_sold' => Order::whereHas('items', fn($q) => $q->where('vendor_id', $vendorId))
+                ->where('company_code', $activeCode)
                     ->whereMonth('order_date', now()->month)->withSum('items', 'quantity')->get()->sum('items_sum_quantity'),
                 'monthly_sales' => Order::whereHas('items', fn($q) => $q->where('vendor_id', $vendorId))
+                    ->where('company_code', $activeCode)
                     ->whereMonth('order_date', now()->month)->sum('total_amount'),
                 'pending_payout' => VendorPayout::where('vendor_id', $vendorId)->pending()->sum('net_payout'),
                 'chargebacks' => \App\Models\Chargeback::where('vendor_id', $vendorId)
                     ->whereIn('status', ['raised', 'pending_confirmation', 'confirmed'])->sum('amount'),
             ],
             'product_status' => [
-                'submitted' => Product::where('vendor_id', $vendorId)->where('status', 'submitted')->count(),
-                'approved' => Product::where('vendor_id', $vendorId)->where('status', 'approved')->count(),
-                'rejected' => Product::where('vendor_id', $vendorId)->where('status', 'rejected')->count(),
-                'listed' => Product::where('vendor_id', $vendorId)->where('status', 'listed')->count(),
+                'submitted' => Product::where('vendor_id', $vendorId)->where('company_code', $activeCode)->where('status', 'submitted')->count(),
+                'approved' => Product::where('vendor_id', $vendorId)->where('company_code', $activeCode)->where('status', 'approved')->count(),
+                'rejected' => Product::where('vendor_id', $vendorId)->where('company_code', $activeCode)->where('status', 'rejected')->count(),
+                'listed' => Product::where('vendor_id', $vendorId)->where('company_code', $activeCode)->where('status', 'listed')->count(),
             ],
-            'consignments' => Consignment::where('vendor_id', $vendorId)->orderBy('created_at', 'desc')->take(10)->get(),
+            'consignments' => Consignment::where('vendor_id', $vendorId)->where('company_code', $activeCode)->orderBy('created_at', 'desc')->take(10)->get(),
             'inventory_ageing' => $this->getVendorInventoryAgeing($vendorId),
             'charges' => [
                 'storage' => WarehouseCharge::where('vendor_id', $vendorId)->where('charge_type', 'storage')
@@ -121,21 +124,23 @@ class DashboardService
     }
 
     // ─── LOGISTICS DASHBOARD ──────────────────────────────────────
-    public function getLogisticsDashboard(?string $companyCode = null): array
+    public function getLogisticsDashboard(): array
     {
+        $activeCode = session('active_company');
+        
         return [
             'kpis' => [
-                'containers_planned' => Shipment::where('status', 'planning')->when($companyCode, fn($q) => $q->byCompanyCode($companyCode))->count(),
-                'in_transit' => Shipment::inTransit()->when($companyCode, fn($q) => $q->byCompanyCode($companyCode))->count(),
-                'grn_pending' => Shipment::where('status', 'grn_pending')->when($companyCode, fn($q) => $q->byCompanyCode($companyCode))->count(),
-                'received_this_month' => Grn::whereMonth('receipt_date', now()->month)->count(),
+                'containers_planned' => Shipment::where('status', 'planning')->when($activeCode, fn($q) => $q->byCompanyCode($activeCode))->count(),
+                'in_transit' => Shipment::inTransit()->when($activeCode, fn($q) => $q->byCompanyCode($activeCode))->count(),
+                'grn_pending' => Shipment::where('status', 'grn_pending')->when($activeCode, fn($q) => $q->byCompanyCode($activeCode))->count(),
+                'received_this_month' => Grn::where('company_code', $activeCode)->whereMonth('receipt_date', now()->month)->count(),
             ],
             'container_planning' => [
-                'live_sheets_ready' => LiveSheet::locked()->with('consignment')->get(),
-                'fcl_count' => Shipment::where('shipment_type', 'FCL')->when($companyCode, fn($q) => $q->byCompanyCode($companyCode))->count(),
-                'lcl_count' => Shipment::where('shipment_type', 'LCL')->when($companyCode, fn($q) => $q->byCompanyCode($companyCode))->count(),
+                'live_sheets_ready' => LiveSheet::locked()->with('consignment')->where('company_code', $activeCode)->get(),
+                'fcl_count' => Shipment::where('shipment_type', 'FCL')->when($activeCode, fn($q) => $q->byCompanyCode($activeCode))->count(),
+                'lcl_count' => Shipment::where('shipment_type', 'LCL')->when($activeCode, fn($q) => $q->byCompanyCode($activeCode))->count(),
             ],
-            'shipments' => Shipment::with('consignments.vendor')->when($companyCode, fn($q) => $q->byCompanyCode($companyCode))->latest()->take(20)->get(),
+            'shipments' => Shipment::with('consignments.vendor')->where('company_code', $activeCode)->latest()->take(20)->get(),
             'warehouse_charges' => [
                 'storage' => WarehouseCharge::where('charge_type', 'storage')->whereMonth('created_at', now()->month)->sum('calculated_amount'),
                 'variance' => WarehouseCharge::whereMonth('created_at', now()->month)->sum('variance'),

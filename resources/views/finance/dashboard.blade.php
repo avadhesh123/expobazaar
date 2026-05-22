@@ -7,25 +7,25 @@
 <div class="grid-kpi">
     <div class="kpi-card">
         <div style="display:flex;justify-content:space-between;align-items:start;">
-            <div><div class="kpi-label">Marketplace Receivables</div><div class="kpi-value" style="color:#dc2626;">${{ number_format($data['kpis']['receivables'] ?? 0, 0) }}</div></div>
+            <div><div class="kpi-label">Marketplace Receivables</div><div class="kpi-value" style="color:#dc2626;">{{$activeCurrencySymbol}}{{ number_format($data['kpis']['receivables'] ?? 0, 0) }}</div></div>
             <div class="kpi-icon" style="background:#fee2e2;color:#dc2626;"><i class="fas fa-hand-holding-usd"></i></div>
         </div>
     </div>
     <div class="kpi-card">
         <div style="display:flex;justify-content:space-between;align-items:start;">
-            <div><div class="kpi-label">Vendor Payouts Pending</div><div class="kpi-value" style="color:#e8a838;">${{ number_format($data['kpis']['payouts_pending'] ?? 0, 0) }}</div></div>
+            <div><div class="kpi-label">Vendor Payouts Pending</div><div class="kpi-value" style="color:#e8a838;">{{$activeCurrencySymbol}}{{ number_format($data['kpis']['payouts_pending'] ?? 0, 0) }}</div></div>
             <div class="kpi-icon" style="background:#fef3c7;color:#e8a838;"><i class="fas fa-money-check-alt"></i></div>
         </div>
     </div>
     <div class="kpi-card">
         <div style="display:flex;justify-content:space-between;align-items:start;">
-            <div><div class="kpi-label">Platform Deductions (Month)</div><div class="kpi-value" style="color:#1e40af;">${{ number_format($data['kpis']['platform_deductions'] ?? 0, 0) }}</div></div>
+            <div><div class="kpi-label">Platform Deductions (Month)</div><div class="kpi-value" style="color:#1e40af;">{{$activeCurrencySymbol}}{{ number_format($data['kpis']['platform_deductions'] ?? 0, 0) }}</div></div>
             <div class="kpi-icon" style="background:#dbeafe;color:#1e40af;"><i class="fas fa-percentage"></i></div>
         </div>
     </div>
     <div class="kpi-card">
         <div style="display:flex;justify-content:space-between;align-items:start;">
-            <div><div class="kpi-label">Chargebacks (Month)</div><div class="kpi-value" style="color:#991b1b;">${{ number_format($data['kpis']['chargebacks'] ?? 0, 0) }}</div></div>
+            <div><div class="kpi-label">Chargebacks (Month)</div><div class="kpi-value" style="color:#991b1b;">{{$activeCurrencySymbol}}{{ number_format($data['kpis']['chargebacks'] ?? 0, 0) }}</div></div>
             <div class="kpi-icon" style="background:#fee2e2;color:#991b1b;"><i class="fas fa-exclamation-triangle"></i></div>
         </div>
     </div>
@@ -43,7 +43,7 @@
                     <tr>
                         <td style="font-weight:600;">{{ $item->salesChannel->name ?? 'Unknown' }}</td>
                         <td>{{ number_format($item->count) }}</td>
-                        <td style="font-weight:700;color:#dc2626;">${{ number_format($item->total, 2) }}</td>
+                        <td style="font-weight:700;color:#dc2626;">{{$activeCurrencySymbol}}{{ number_format($item->total, 2) }}</td>
                     </tr>
                     @empty
                     <tr><td colspan="3" style="text-align:center;color:#94a3b8;padding:1.5rem;">No outstanding receivables.</td></tr>
@@ -66,7 +66,7 @@
                             <div style="font-weight:600;">{{ $payout->vendor->company_name ?? '—' }}</div>
                             <div style="font-size:.68rem;color:#94a3b8;">{{ $payout->vendor->vendor_code ?? '' }}</div>
                         </td>
-                        <td style="font-weight:700;">${{ number_format($payout->net_payout, 2) }}</td>
+                        <td style="font-weight:700;">{{$activeCurrencySymbol}}{{ number_format($payout->net_payout, 2) }}</td>
                         <td>
                             @php $sc = ['draft'=>'badge-gray','calculated'=>'badge-info','approved'=>'badge-info','payment_pending'=>'badge-warning','paid'=>'badge-success','invoice_received'=>'badge-success']; @endphp
                             <span class="badge {{ $sc[$payout->status] ?? 'badge-gray' }}">{{ str_replace('_',' ',ucfirst($payout->status)) }}</span>

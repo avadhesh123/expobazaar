@@ -10,9 +10,13 @@ class Chargeback extends Model
         'order_id', 'vendor_id', 'company_code', 'amount', 'reason',
         'description', 'status', 'raised_by', 'confirmed_by',
         'confirmed_at', 'confirmation_remarks',
+        'evidence_file', 'chargeback_items',
     ];
 
-    protected $casts = ['confirmed_at' => 'datetime'];
+    protected $casts = [
+        'confirmed_at' => 'datetime',
+        'chargeback_items' => 'array',
+    ];
 
     public function order() { return $this->belongsTo(Order::class); }
     public function vendor() { return $this->belongsTo(Vendor::class); }

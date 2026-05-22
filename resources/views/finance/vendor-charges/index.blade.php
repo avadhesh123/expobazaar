@@ -4,9 +4,9 @@
 
 @section('content')
 <div class="grid-kpi" style="grid-template-columns:repeat(4,1fr);">
-    <div class="kpi-card" style="border-left:3px solid #dc2626;"><div class="kpi-label">Total Charges</div><div class="kpi-value" style="color:#dc2626;">${{ number_format($stats['total_charges'], 2) }}</div><div style="font-size:.62rem;color:#94a3b8;">{{ $stats['vendor_count'] }} vendors</div></div>
-    <div class="kpi-card" style="border-left:3px solid #1e40af;"><div class="kpi-label">Storage</div><div class="kpi-value" style="color:#1e40af;">${{ number_format($stats['total_storage'], 2) }}</div></div>
-    <div class="kpi-card" style="border-left:3px solid #e8a838;"><div class="kpi-label">Fulfillment + P&P</div><div class="kpi-value" style="color:#e8a838;">${{ number_format($stats['total_fulfill'] + $stats['total_pickpack'], 2) }}</div></div>
+    <div class="kpi-card" style="border-left:3px solid #dc2626;"><div class="kpi-label">Total Charges</div><div class="kpi-value" style="color:#dc2626;">{{$activeCurrencySymbol}}{{ number_format($stats['total_charges'], 2) }}</div><div style="font-size:.62rem;color:#94a3b8;">{{ $stats['vendor_count'] }} vendors</div></div>
+    <div class="kpi-card" style="border-left:3px solid #1e40af;"><div class="kpi-label">Storage</div><div class="kpi-value" style="color:#1e40af;">{{$activeCurrencySymbol}}{{ number_format($stats['total_storage'], 2) }}</div></div>
+    <div class="kpi-card" style="border-left:3px solid #e8a838;"><div class="kpi-label">Fulfillment + P&P</div><div class="kpi-value" style="color:#e8a838;">{{$activeCurrencySymbol}}{{ number_format($stats['total_fulfill'] + $stats['total_pickpack'], 2) }}</div></div>
     <div class="kpi-card" style="border-left:3px solid #16a34a;"><div class="kpi-label">Pending Approval</div><div class="kpi-value" style="color:#16a34a;">{{ $stats['pending_count'] }}</div></div>
 </div>
 
@@ -52,12 +52,12 @@
                 <tr>
                     <td><div style="font-weight:600;font-size:.82rem;">{{ $c->vendor->company_name ?? '—' }}</div><div style="font-size:.6rem;color:#94a3b8;">{{ $c->vendor->vendor_code ?? '' }}</div></td>
                     <td style="font-family:monospace;font-size:.78rem;">{{ $c->grn->grn_number ?? '—' }}</td>
-                    <td style="font-family:monospace;">{{ $sym }}{{ number_format(floatval($c->inward_charge), 2) }}<div style="font-size:.58rem;color:#94a3b8;">{{ $c->inward_cartons }} cartons</div></td>
-                    <td style="font-family:monospace;">{{ $sym }}{{ number_format(floatval($c->storage_charge), 2) }}<div style="font-size:.58rem;color:#94a3b8;">{{ number_format(floatval($c->storage_cft), 1) }} CFT</div></td>
-                    <td style="font-family:monospace;">{{ $sym }}{{ number_format(floatval($c->fulfillment_charge), 2) }}<div style="font-size:.58rem;color:#94a3b8;">{{ $c->fulfillment_orders_small }}s + {{ $c->fulfillment_orders_large }}l</div></td>
-                    <td style="font-family:monospace;">{{ $sym }}{{ number_format(floatval($c->pick_pack_charge), 2) }}<div style="font-size:.58rem;color:#94a3b8;">{{ $c->pick_pack_units }} units</div></td>
-                    <td style="font-family:monospace;">{{ $sym }}{{ number_format(floatval($c->material_cost), 2) }}</td>
-                    <td style="font-family:monospace;font-weight:800;color:#dc2626;">{{ $sym }}{{ number_format(floatval($c->total_charges), 2) }}</td>
+                    <td style="font-family:monospace;">{{ $activeCurrencySymbol }}{{ number_format(floatval($c->inward_charge), 2) }}<div style="font-size:.58rem;color:#94a3b8;">{{ $c->inward_cartons }} cartons</div></td>
+                    <td style="font-family:monospace;">{{ $activeCurrencySymbol }}{{ number_format(floatval($c->storage_charge), 2) }}<div style="font-size:.58rem;color:#94a3b8;">{{ number_format(floatval($c->storage_cft), 1) }} CFT</div></td>
+                    <td style="font-family:monospace;">{{ $activeCurrencySymbol }}{{ number_format(floatval($c->fulfillment_charge), 2) }}<div style="font-size:.58rem;color:#94a3b8;">{{ $c->fulfillment_orders_small }}s + {{ $c->fulfillment_orders_large }}l</div></td>
+                    <td style="font-family:monospace;">{{ $activeCurrencySymbol }}{{ number_format(floatval($c->pick_pack_charge), 2) }}<div style="font-size:.58rem;color:#94a3b8;">{{ $c->pick_pack_units }} units</div></td>
+                    <td style="font-family:monospace;">{{ $activeCurrencySymbol }}{{ number_format(floatval($c->material_cost), 2) }}</td>
+                    <td style="font-family:monospace;font-weight:800;color:#dc2626;">{{ $activeCurrencySymbol }}{{ number_format(floatval($c->total_charges), 2) }}</td>
                     <td>
                         @php $sc = ['calculated'=>'badge-warning','approved'=>'badge-success','deducted'=>'badge-info','disputed'=>'badge-danger']; @endphp
                         <span class="badge {{ $sc[$c->status] ?? 'badge-gray' }}">{{ ucfirst($c->status) }}</span>

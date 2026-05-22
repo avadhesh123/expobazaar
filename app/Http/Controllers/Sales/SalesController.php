@@ -52,6 +52,7 @@ class SalesController extends Controller
         $currencySymbol = match ($request->company_code) {
             '2000' => '₹',
             '2200' => '€',
+            '2400' => '£',
             default => '$',
         };
 
@@ -177,7 +178,7 @@ class SalesController extends Controller
     public function storeSales(Request $request)
     {
         $request->validate([
-            'company_code' => 'required|in:2000,2100,2200',
+            'company_code' => 'required|in:2000,2100,2200,2400',
             'sales_file'   => 'required|file|max:10240',
         ]);
 
@@ -233,7 +234,7 @@ class SalesController extends Controller
     public function storeManualOrders(Request $request)
     {
         $request->validate([
-            'company_code'                      => 'required|in:2000,2100,2200',
+            'company_code'                      => 'required|in:2000,2100,2200,2400',
             'orders'                            => 'required|array|min:1',
             'orders.*.platform_order_id'        => 'required|string',
             'orders.*.order_date'               => 'required|date',
@@ -275,7 +276,7 @@ class SalesController extends Controller
     public function storeManualOrders1(Request $request)
     {
         $request->validate([
-            'company_code'                      => 'required|in:2000,2100,2200',
+            'company_code'                      => 'required|in:2000,2100,,2400',
             'orders'                            => 'required|array|min:1',
             'orders.*.platform_order_id'        => 'required|string',
             'orders.*.order_date'               => 'required|date',

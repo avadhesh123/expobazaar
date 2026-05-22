@@ -71,7 +71,6 @@ class HodController extends Controller
                     if (!$lsItem->product) continue;
                     $d = $lsItem->product_details ?? [];
 
-
                     $finalFob = (float)($d['final_fob'] ?? $lsItem->unit_price);
                     $dutyPercent = (float)($d['duty_percent'] ?? 0);
                     $freightFactor = (float)($d['freight_factor'] ?? 0);
@@ -86,7 +85,7 @@ class HodController extends Controller
                         'product_id'   => $lsItem->product_id,
                         'sku'          => $lsItem->product->sku ?? '',
                         'sap_code'     => $lsItem->product->sap_code ?? '',
-					    'vendor_wsp'     => $lsItem->product->vendor_wsp ?? '',
+                        'vendor_wsp'     => $lsItem->product->vendor_wsp ?? '',
                         'vendor_name'  => $consignment->vendor->company_name ?? '',
                         'quantity'     => $lsItem->quantity ?? 0,
                         'fob'          => $finalFob,
@@ -104,10 +103,11 @@ class HodController extends Controller
         // print_r($channels->toArray());exit;
         foreach ($channels as $ch) {
             //   print_r($ch->toArray()); 
-
             $channelFactors[$ch->id] = [
                 'name'   => $ch->name,
                 'factor' => $ch->pricing_factors ?? 1.0,
+                'type'   => $ch->type, // Store channel type for use in JS
+                'commission' => $ch->channel_commission ?? 0,
             ];
         }
         return view('hod.pricing.prepare', compact('asn', 'channels', 'items', 'channelFactors', 'existingPricing'));
@@ -126,7 +126,21 @@ class HodController extends Controller
         return redirect()->route('hod.asn-list')->with('success', 'Pricing submitted to Finance for review.');
     }
 
-    public function pricingStatus(Asn $asn)
+   public function pricingStatus(Asn $asn)
+{
+    $channels = SalesChannel::active()->orderBy('name')->get();
+
+    $existingPricing = PlatformPricing::where('asn_id', $asn->id)
+        ->with(['product', 'salesChannel'])   // Important
+        ->orderBy('product_id')
+        ->orderBy('sales_channel_id')
+        ->get()
+        ->keyBy(fn($p) => $p->product_id . '-' . $p->sales_channel_id); // Better key
+
+    return view('hod.pricing.status', compact('asn', 'existingPricing', 'channels'));
+}
+
+    public function pricingStatus2(Asn $asn)
     {
         $asn->load('shipment');
         $pricings = PlatformPricing::where('asn_id', $asn->id)
@@ -164,7 +178,7 @@ class HodController extends Controller
         );
 
         $channels = SalesChannel::active()
-            ->when(!$user->isAdmin() && !empty($userCompanyCodes), fn($q) => $q->whereIn('company_code', $userCompanyCodes))
+            ->when(!$user->isAdmin() && !empty($userCompanyCodes), fn($q) => $q->whereIn('company_codes', $userCompanyCodes))
             ->orderBy('name')->get();
 
         $existingPricing = PlatformPricing::where('asn_id', $asn->id)
@@ -208,11 +222,11 @@ class HodController extends Controller
 
                     $csv .= '"' . ($lsItem->product->sku ?? '') . '"';
                     $csv .= ',"' . ($lsItem->product->sap_code ?? '') . '"';
-					$csv .= ',"' . ($lsItem->product->vendor_wsp ?? '') . '"';					
+                    $csv .= ',"' . ($lsItem->product->vendor_wsp ?? '') . '"';
                     $csv .= ',"' . ($consignment->vendor->company_name ?? '') . '"';
                     $csv .= ',' . ($lsItem->quantity ?? 0);
                     $csv .= ',' . number_format($fob, 2);
-                    $csv .= ',' . number_format($wsp, 2);
+                    $csv .= ',' . $ex->wsp_price;
                     $csv .= ',' . number_format($lastMile, 2);
                     $csv .= ',' . number_format($retailPrice, 2);
 
@@ -233,14 +247,14 @@ class HodController extends Controller
         ]);
     }
     /**
-     * Download Last Mile template CSV (SKU + Last Mile columns only)
+     * Download Pricing Input template CSV (SKU + all pricing columns)
      */
-    public function downloadLastMileTemplate(Asn $asn)
+    public function downloadPricingInputTemplate(Asn $asn)
     {
         $asn->load('shipment.consignments.vendor', 'shipment.consignments.liveSheet.items.product');
         $existingPricing = PlatformPricing::where('asn_id', $asn->id)->get()->keyBy('product_id');
 
-        $csv = "SKU,Vendor Name,WSP,Inner Length,Inner Width,Inner Height,Weight (kg),Last Mile\n";
+        $csv = "SKU,SAP Code,Vendor Name,FOB,WSP,Inward,Fulfillment,Storage,Ad Budget,Last Mile\n";
 
         if ($asn->shipment && $asn->shipment->consignments) {
             foreach ($asn->shipment->consignments as $consignment) {
@@ -248,17 +262,32 @@ class HodController extends Controller
                 foreach ($consignment->liveSheet->items as $lsItem) {
                     if (!$lsItem->product) continue;
                     $d = $lsItem->product_details ?? [];
-                    $wsp = floatval($d['wsp'] ?? 0);
+
+                    $finalFob = (float)($d['final_fob'] ?? $lsItem->unit_price);
+                    $dutyPercent = (float)($d['duty_percent'] ?? 0);
+                    $freightFactor = (float)($d['freight_factor'] ?? 0);
+                    $wspFactor = (float)($d['wsp_factor'] ?? 0);
+
+                    $dutyAmt = $finalFob * ($dutyPercent / 100);
+                    $freightAmt = $freightFactor * $finalFob;
+                    $landedCost = $finalFob + $dutyAmt + $freightAmt;
+                    $wsp = $landedCost * $wspFactor;
+
+                    $fob = floatval($d['final_fob'] ?? $lsItem->unit_price ?? 0);
+                    //echo number_format($fob, 2);
+                    //exit;
                     $ex = $existingPricing->get($lsItem->product_id);
 
                     $csv .= '"' . ($lsItem->product->sku ?? '') . '"';
+                    $csv .= ',"' . ($lsItem->product->sap_code ?? '') . '"';
                     $csv .= ',"' . ($consignment->vendor->company_name ?? '') . '"';
-                    $csv .= ',' . number_format($wsp, 2);
-                    $csv .= ',' . ($d['inner_length'] ?? $d['product_length'] ?? '');
-                    $csv .= ',' . ($d['inner_width'] ?? $d['product_width'] ?? '');
-                    $csv .= ',' . ($d['inner_height'] ?? $d['product_height'] ?? '');
-                    $csv .= ',' . ($d['weight_per_unit'] ?? $d['product_weight'] ?? '');
-                    $csv .= ',' . ($ex ? number_format(floatval($ex->last_mile ?? 0), 2) : '');
+                    $csv .= ',"' . number_format($fob, 2) . '"';
+                    $csv .= ',"' . ($wsp) . '"';
+                    $csv .= ',"' . ($ex ? number_format($ex->inward ?? 0, 2) : '') . '"';
+                    $csv .= ',"' . ($ex ? number_format(floatval($ex->fulfillment ?? 0), 2) : '') . '"';
+                    $csv .= ',"' . ($ex ? number_format(floatval($ex->storage ?? 0), 2) : '') . '"';
+                    $csv .= ',"' . ($ex ? number_format(floatval($ex->ad_budget ?? 0), 2) : '') . '"';
+                    $csv .= ',"' . ($ex ? number_format(floatval($ex->last_mile ?? 0), 2) : '') . '"';
                     $csv .= "\n";
                 }
             }
@@ -266,25 +295,25 @@ class HodController extends Controller
 
         return response($csv, 200, [
             'Content-Type' => 'text/csv',
-            'Content-Disposition' => "attachment; filename=\"LastMile-Template-{$asn->asn_number}.csv\"",
+            'Content-Disposition' => "attachment; filename=\"Pricing-Input-Template-{$asn->asn_number}.csv\"",
         ]);
     }
 
     /**
-     * Upload CSV to bulk update Last Mile values
-     * CSV format: SKU, SAP Code, Product Name, Last Mile
+     * Upload CSV to bulk update Pricing values
+     * CSV format: SKU, SAP Code, Product Name, Inward, Fulfillment, Storage, Ad Budget, Last Mile
      */
-    public function uploadLastMile(Request $request, Asn $asn)
+    public function uploadPricingInput(Request $request, Asn $asn)
     {
         $request->validate([
-            'last_mile_file' => 'required|file|max:5120',
+            'pricing_input_file' => 'required|file|max:5120',
         ], [
-            'last_mile_file.required' => 'Please select a CSV file to upload.',
+            'pricing_input_file.required' => 'Please select a CSV file to upload.',
         ]);
 
-        $file = $request->file('last_mile_file');
+        $file = $request->file('pricing_input_file');
         $ext = strtolower($file->getClientOriginalExtension());
-        if (!in_array($ext, ['csv', 'txt', 'xlsx'])) {
+        if (!in_array($ext, ['csv', 'xlsx'])) {
             return back()->with('error', 'File must be CSV or XLSX format.');
         }
 
@@ -308,9 +337,12 @@ class HodController extends Controller
                 }
             }
 
-            // Parse CSV
-            $filePath = $file->store('temp', 'local');
-            $fullPath = storage_path('app/' . $filePath);
+            // Parse CSV       
+
+            //   $filePath = $file->store('temp', 'local');
+            //   $fullPath = storage_path('app/' . $filePath);
+
+            $fullPath = $file->getRealPath();
 
             if ($ext === 'xlsx') {
                 $reader = new \PhpOffice\PhpSpreadsheet\Reader\Xlsx();
@@ -327,7 +359,7 @@ class HodController extends Controller
                 }
             }
 
-            @unlink($fullPath);
+            //  @unlink($fullPath);
 
             if (count($rows) < 2) {
                 return back()->with('error', 'CSV file is empty or has no data rows.');
@@ -336,14 +368,38 @@ class HodController extends Controller
             // Find SKU and Last Mile column indexes from header
             $header = array_map(fn($h) => strtolower(trim($h ?? '')), $rows[0]);
             $skuCol = null;
+            $inwardCol = null;
+            $fulfillmentCol = null;
+            $storageCol = null;
+            $adBudgetCol = null;
             $lmCol = null;
             foreach ($header as $i => $h) {
                 if (in_array($h, ['sku', 'vendor sku', 'product sku'])) $skuCol = $i;
+                if (in_array($h, ['inward', 'cost price'])) $inwardCol = $i;
+                if (in_array($h, ['fulfillment'])) $fulfillmentCol = $i;
+                if (in_array($h, ['storage'])) $storageCol = $i;
+                if (in_array($h, ['ad budget', 'advertising'])) $adBudgetCol = $i;
                 if (in_array($h, ['last mile', 'last_mile', 'lastmile'])) $lmCol = $i;
             }
 
-            if ($skuCol === null) return back()->with('error', 'CSV must have a "SKU" column.');
-            if ($lmCol === null) return back()->with('error', 'CSV must have a "Last Mile" column.');
+            if ($skuCol === null) {
+                return back()->with('error', 'CSV must have a "SKU" column.');
+            }
+            if ($inwardCol === null) {
+                return back()->with('error', 'CSV must have an "Inward" column.');
+            }
+            if ($fulfillmentCol === null) {
+                return back()->with('error', 'CSV must have a "Fulfillment" column.');
+            }
+            if ($storageCol === null) {
+                return back()->with('error', 'CSV must have a "Storage" column.');
+            }
+            if ($adBudgetCol === null) {
+                return back()->with('error', 'CSV must have an "Ad Budget" column.');
+            }
+            if ($lmCol === null) {
+                return back()->with('error', 'CSV must have a "Last Mile" column.');
+            }
 
             $updated = 0;
             $skipped = 0;
@@ -352,13 +408,32 @@ class HodController extends Controller
             for ($i = 1; $i < count($rows); $i++) {
                 $row = $rows[$i];
                 $sku = strtolower(trim($row[$skuCol] ?? ''));
+                $inward = trim($row[$inwardCol] ?? '');
+                $fulfillment = trim($row[$fulfillmentCol] ?? '');
+                $storage = trim($row[$storageCol] ?? '');
+                $adBudget = trim($row[$adBudgetCol] ?? '');
                 $lastMile = trim($row[$lmCol] ?? '');
 
-                if (!$sku || $lastMile === '') {
+                if (!$sku) {
                     $skipped++;
                     continue;
                 }
-
+                if (!is_numeric($inward)) {
+                    $errors[] = "Row " . ($i + 1) . ": Inward '{$inward}' is not a number for SKU '{$row[$skuCol]}'.";
+                    continue;
+                }
+                if (!is_numeric($fulfillment)) {
+                    $errors[] = "Row " . ($i + 1) . ": Fulfillment '{$fulfillment}' is not a number for SKU '{$row[$skuCol]}'.";
+                    continue;
+                }
+                if (!is_numeric($storage)) {
+                    $errors[] = "Row " . ($i + 1) . ": Storage '{$storage}' is not a number for SKU '{$row[$skuCol]}'.";
+                    continue;
+                }
+                if (!is_numeric($adBudget)) {
+                    $errors[] = "Row " . ($i + 1) . ": Ad Budget '{$adBudget}' is not a number for SKU '{$row[$skuCol]}'.";
+                    continue;
+                }
                 if (!is_numeric($lastMile)) {
                     $errors[] = "Row " . ($i + 1) . ": Last Mile '{$lastMile}' is not a number for SKU '{$row[$skuCol]}'.";
                     continue;
@@ -374,7 +449,7 @@ class HodController extends Controller
 
                 $wsp = $productData['wsp'];
                 $fob = $productData['fob'];
-                $retailPrice = $wsp + $lastMile;
+
 
                 // Update all PlatformPricing records for this product in this ASN
                 $existingRecords = PlatformPricing::where('asn_id', $asn->id)
@@ -386,6 +461,17 @@ class HodController extends Controller
                     foreach ($channels as $ch) {
                         $factor = floatval(($ch->pricing_factors ?? [])['pricing_factor'] ?? 1.0);
                         $channelPrice = round($wsp * $factor, 2);
+                        $divisor = 1 - ($adBudget / 100);
+                        $finalWsp = ($wsp + $inward + $fulfillment + $storage) / ($divisor > 0 ? $divisor : 1);
+                        $retailPrice = $finalWsp + $lastMile;
+
+                        if (strtolower($ch->type) === 'b2b') {
+                            $price = $finalWsp * (1 - ($ch->channel_commission ?? 0) / 100);
+                        } else {
+                            $price = $retailPrice * (1 - ($ch->channel_commission ?? 0) / 100);
+                        }
+                        $chPrice = round(($price * $factor), 2);
+
                         PlatformPricing::create([
                             'asn_id'          => $asn->id,
                             'product_id'      => $productData['product_id'],
@@ -394,13 +480,14 @@ class HodController extends Controller
                             'cost_price'      => $fob,
                             'fob_price'       => $fob,
                             'wsp_price'       => $wsp,
+                            'inward'         => $inward,
+                            'fulfillment'     => $fulfillment,
+                            'storage'         => $storage,
+                            'ad_budget'       => $adBudget,
+                            'final_wsp'       => $finalWsp,
                             'last_mile'       => $lastMile,
                             'retail_price'    => $retailPrice,
-                            'pricing_factor'  => $factor,
-                            'channel_price'   => $channelPrice,
-                            'platform_price'  => $channelPrice,
-                            'selling_price'   => $channelPrice,
-                            'margin_percent'  => $channelPrice > 0 ? round((($channelPrice - $fob) / $channelPrice) * 100, 2) : 0,
+                            'platform_price'  => $chPrice,
                             'status'          => 'submitted',
                             'prepared_by'     => auth()->id(),
                         ]);
@@ -411,11 +498,15 @@ class HodController extends Controller
                         $factor = floatval($rec->pricing_factor ?: 1.0);
                         $channelPrice = round($wsp * $factor, 2);
                         $rec->update([
+                            'inward'         => $inward,
+                            'fulfillment'     => $fulfillment,
+                            'storage'         => $storage,
+                            'ad_budget'       => $adBudget,
                             'last_mile'     => $lastMile,
-                            'retail_price'  => $retailPrice,
-                            'channel_price' => $channelPrice,
-                            'selling_price' => $channelPrice,
-                            'margin_percent' => $channelPrice > 0 ? round((($channelPrice - $fob) / $channelPrice) * 100, 2) : 0,
+                            // 'retail_price'  => $retailPrice,
+                            // 'channel_price' => $channelPrice,
+                            // 'selling_price' => $channelPrice,
+                            // 'margin_percent' => $channelPrice > 0 ? round((($channelPrice - $fob) / $channelPrice) * 100, 2) : 0,
                         ]);
                     }
                 }

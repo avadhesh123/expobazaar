@@ -5,7 +5,7 @@
 @section('content')
 <div class="kpi-card" style="margin-bottom:1.25rem;display:inline-block;">
     <div class="kpi-label">Total Sales</div>
-    <div class="kpi-value" style="color:#166534;">${{ number_format($totalSales, 2) }}</div>
+    <div class="kpi-value" style="color:#166534;">{{$activeCurrencySymbol}}{{ number_format($totalSales, 2) }}</div>
 </div>
 
 <div class="card" style="margin-bottom:1rem;">
@@ -40,24 +40,15 @@
                 </tr>
             </thead>
             <tbody>
-                  @php 
-                  echo "<pre>";
-                print_r($lineItems);
-                
-echo "</pre>";
-
-                @endphp
+                  
                 @forelse($orders as $o)
-                @php 
-                print_r($lineItems);
-                print_r($o->toArray());
-                @endphp
+                
                 <tr>
                     <td style="font-weight:600;font-family:monospace;font-size:.82rem;">{{ $o->order_number }}</td>
                     <td><span class="badge badge-info">{{ $o->salesChannel->name ?? '—' }}</span></td>
                     <td style="font-size:.82rem;">{{ $o->order_date->format('d M Y') }}</td>
                     <td style="text-align:center;">{{ $o->items->count() }}</td>
-                    <td style="font-family:monospace;font-weight:700;color:#166534;">${{ number_format($o->total_amount, 2) }}</td>
+                    <td style="font-family:monospace;font-weight:700;color:#166534;">{{$activeCurrencySymbol}}{{ number_format($o->total_amount, 2) }}</td>
                     <td>@php $ssc=['pending'=>'badge-warning','shipped'=>'badge-info','delivered'=>'badge-success']; @endphp <span class="badge {{ $ssc[$o->shipment_status??'pending']??'badge-gray' }}">{{ ucfirst($o->shipment_status??'pending') }}</span></td>
                 </tr>
                 @empty

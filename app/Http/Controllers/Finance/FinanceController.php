@@ -19,7 +19,8 @@ class FinanceController extends Controller
 
     public function dashboard(Request $request)
     {
-        $companyCode = $request->get('company_code');
+        // $companyCode = $request->get('company_code');
+        $companyCode = session('active_company');
         $data = $this->dashboardService->getFinanceDashboard($companyCode);
         return view('finance.dashboard', compact('data', 'companyCode'));
     }
@@ -67,22 +68,18 @@ class FinanceController extends Controller
     {
         $user = auth()->user();
         // Get user's allowed company codes
-        $userCompanyCodes = $user->company_codes ?? [];
-        if (is_string($userCompanyCodes)) {
-            $userCompanyCodes = json_decode($userCompanyCodes, true) ?? [];
-        }
-        $userCompanyCodes = array_filter(array_map('strval', $userCompanyCodes));
+        $activeCode = session('active_company');
 
         $receivables = FinanceReceivable::with('order.salesChannel', 'order.chargebacks')
             // Restrict to user's companies (non-admins)
             ->when(
-                !$user->isAdmin() && !empty($userCompanyCodes),
-                fn($q) => $q->whereIn('company_code', $userCompanyCodes)
+                !$user->isAdmin() && !empty($activeCode),
+                fn($q) => $q->whereIn('company_code', [$activeCode])
             )
-            ->when($request->company_code, fn($q, $v) => $q->where('company_code', $v))
-            ->when(!empty($request->status), fn($q, $v) => $q->where('payment_status', $v))
-            ->when($request->channel_id, fn($q, $v) => $q->where('channel_id', $v))
-            //  ->when($request->payment === 'unpaid', fn($q) => $q->where('payment_status', 'unpaid'))
+            ->when($request->status, fn($q, $v) => $q->where('payment_status', $v))
+            ->when($request->channel, fn($q, $v) => $q->where('sales_channel_id', $v))
+            ->when($request->payment_status, fn($q, $v) => $q->where('payment_status', $v))
+            ->when($request->search, fn($q, $v) => $q->whereHas('order', fn($q) => $q->where('order_number', 'like', "%{$v}%")))
             ->orderByRaw("FIELD(payment_status, 'unpaid', 'partial', 'paid') ASC")
             ->latest()
             ->paginate(30);
@@ -102,10 +99,8 @@ class FinanceController extends Controller
         //        $channels = SalesChannel::where('is_active', true)->get();
 
         $channels = SalesChannel::where('is_active', true)
-            ->when(!$user->isAdmin() && !empty($userCompanyCodes), function ($q) use ($userCompanyCodes) {
-                foreach ($userCompanyCodes as $code) {
-                    $q->whereJsonContains('company_codes', $code);
-                }
+            ->when(!$user->isAdmin() && !empty($activeCode), function ($q) use ($activeCode) {
+                $q->whereJsonContains('company_codes', $activeCode);
                 return $q;
             })
             ->orderBy('name')
@@ -114,17 +109,17 @@ class FinanceController extends Controller
         // Fix: $summary was never built — blade was crashing with "Undefined variable: summary"
         $summary = [
             'unpaid_count'     => FinanceReceivable::where('payment_status', 'unpaid')
-                ->when($request->company_code, fn($q, $v) => $q->where('company_code', $v))->count(),
+                ->when($activeCode, fn($q, $v) => $q->where('company_code', $v))->count(),
             'unpaid_total'     => FinanceReceivable::where('payment_status', 'unpaid')
-                ->when($request->company_code, fn($q, $v) => $q->where('company_code', $v))->sum('net_receivable'),
+                ->when($activeCode, fn($q, $v) => $q->where('company_code', $v))->sum('net_receivable'),
             'partial_count'    => FinanceReceivable::where('payment_status', 'partial')
-                ->when($request->company_code, fn($q, $v) => $q->where('company_code', $v))->count(),
+                ->when($activeCode, fn($q, $v) => $q->where('company_code', $v))->count(),
             'partial_total'    => FinanceReceivable::where('payment_status', 'partial')
-                ->when($request->company_code, fn($q, $v) => $q->where('company_code', $v))->sum('net_receivable'),
-            'total_deductions' => FinanceReceivable::when($request->company_code, fn($q, $v) => $q->where('company_code', $v))->sum('platform_commission')
-                + FinanceReceivable::when($request->company_code, fn($q, $v) => $q->where('company_code', $v))->sum('platform_fee')
-                + FinanceReceivable::when($request->company_code, fn($q, $v) => $q->where('company_code', $v))->sum('insurance_charge')
-                + FinanceReceivable::when($request->company_code, fn($q, $v) => $q->where('company_code', $v))->sum('other_deductions'),
+                ->when($activeCode, fn($q, $v) => $q->where('company_code', $v))->sum('net_receivable'),
+            'total_deductions' => FinanceReceivable::when($activeCode, fn($q, $v) => $q->where('company_code', $v))->sum('platform_commission')
+                + FinanceReceivable::when($activeCode, fn($q, $v) => $q->where('company_code', $v))->sum('platform_fee')
+                + FinanceReceivable::when($activeCode, fn($q, $v) => $q->where('company_code', $v))->sum('insurance_charge')
+                + FinanceReceivable::when($activeCode, fn($q, $v) => $q->where('company_code', $v))->sum('other_deductions'),
         ];
 
         return view('finance.receivables.index', compact('receivables', 'channels', 'summary'));
@@ -165,18 +160,60 @@ class FinanceController extends Controller
     // ─── CHARGEBACKS ─────────────────────────────────────────────
     public function chargebacks(Request $request)
     {
+
+        $activeCode = session('active_company');
+
+        // AJAX: Lookup order by number
+        if ($request->has('lookup_order')) {
+            $orderNumber = trim($request->lookup_order);
+            $order = Order::where('order_number', $orderNumber)
+                ->orWhere('platform_order_id', $orderNumber)
+                ->with(['items.product', 'salesChannel'])
+                ->first();
+
+            if (!$order) {
+                return response()->json(['found' => false]);
+            }
+
+            $items = $order->items->map(fn($item) => [
+                'id'         => $item->id,
+                'sku'        => $item->sku ?? $item->product->sku ?? '—',
+                'name'       => $item->product->name ?? '—',
+                'quantity'   => $item->quantity,
+                'unit_price' => floatval($item->unit_price),
+                'total'      => floatval($item->total_price),
+            ]);
+
+            $existingCb = Chargeback::where('order_id', $order->id)
+                ->whereIn('status', ['pending', 'pending_confirmation', 'confirmed'])
+                ->first();
+
+            return response()->json([
+                'found'     => true,
+                'order_id'  => $order->id,
+                'order_number' => $order->order_number,
+                'channel'   => $order->salesChannel->name ?? '—',
+                'date'      => $order->order_date?->format('d M Y'),
+                'total'     => floatval($order->total_amount),
+                'status'    => $order->status,
+                'customer'  => $order->customer_name ?? '—',
+                'items'     => $items,
+                'has_active_chargeback' => $existingCb ? true : false,
+                'existing_cb_status'    => $existingCb?->status,
+                'existing_cb_amount'    => $existingCb ? floatval($existingCb->amount) : null,
+            ]);
+        }
+
         $chargebacks = Chargeback::with('order.salesChannel', 'vendor')
             ->when($request->status, fn($q, $v) => $q->where('status', $v))
-            ->when($request->company_code, fn($q, $v) => $q->whereHas('order', fn($oq) => $oq->where('company_code', $v)))
+            ->when($activeCode, fn($q, $v) => $q->whereHas('order', fn($oq) => $oq->where('company_code', $v)))
             ->latest()->paginate(20);
 
-
-
         $stats = [
-            'total'        => Chargeback::when($request->company_code, fn($q, $v) => $q->where('company_code', $v))->count(),
-            'pending'      => Chargeback::when($request->company_code, fn($q, $v) => $q->where('company_code', $v))->where('status', 'pending_confirmation')->count(),
-            'confirmed'    => Chargeback::when($request->company_code, fn($q, $v) => $q->where('company_code', $v))->where('status', 'confirmed')->count(),
-            'total_amount' => Chargeback::when($request->company_code, fn($q, $v) => $q->where('company_code', $v))->where('status', 'confirmed')->sum('amount'),
+            'total'        => Chargeback::when($activeCode, fn($q, $v) => $q->where('company_code', $v))->count(),
+            'pending'      => Chargeback::when($activeCode, fn($q, $v) => $q->where('company_code', $v))->where('status', 'pending_confirmation')->count(),
+            'confirmed'    => Chargeback::when($activeCode, fn($q, $v) => $q->where('company_code', $v))->where('status', 'confirmed')->count(),
+            'total_amount' => Chargeback::when($activeCode, fn($q, $v) => $q->where('company_code', $v))->where('status', 'confirmed')->sum('amount'),
         ];
 
         // Fix #2: $vendors was never passed — blade vendor filter crashed with Undefined variable
@@ -185,65 +222,74 @@ class FinanceController extends Controller
         return view('finance.chargebacks.index', compact('chargebacks', 'stats', 'vendors'));
     }
 
-    public function raiseChargeback(Request $request)
+    public function raiseChargeback(Request $request, $orderNumber)
     {
         $request->validate([
-            'order_number'    => 'required|exists:orders,order_number',
-            'amount'      => 'required|numeric|min:0.01',
-            'reason'      => 'required|string|max:500',
-            'description' => 'nullable|string|max:1000',
+            'amount'                       => 'required|numeric|min:0.01',
+            'reason'                       => 'required|string|max:500',
+            'description'                  => 'nullable|string|max:1000',
+            'chargeback_items'             => 'nullable|array',
+            'chargeback_items.*.item_id'   => 'nullable|integer',
+            'chargeback_items.*.evidence'  => 'nullable|file|max:10240|mimes:pdf,jpg,jpeg,png',
         ]);
-   
+
+        $order = Order::where('order_number', $orderNumber)
+            ->orWhere('platform_order_id', $orderNumber)
+            ->first();
+
+        if (!$order) {
+            return back()->with('error', 'Order not found.')->withInput();
+        }
+
         try {
-            // ── Order validation guards ────────────────────────────────────
-
-            // 1. Order must exist (Route Model Binding handles this, but double-check)
-            $order = Order::findByOrderNumber($request->order_number);
-            print_r($order->toArray());
-            if (!$order || !$order->exists) {
-                return back()->with('error', 'Order not found or invalid.');
-            }
-
-            // 2. Order must not be cancelled
             if (in_array($order->status ?? '', ['cancelled', 'refunded', 'voided'])) {
                 return back()->with('error', "Cannot raise chargeback on a {$order->status} order.");
             }
 
-            // 3. Order must have a vendor associated
-            if (!$order->vendor_id && !$order->items()->whereNotNull('vendor_id')->exists()) {
-                return back()->with('error', 'Order has no vendor associated. Cannot raise chargeback.');
+            if (!$order->items()->whereNotNull('vendor_id')->exists()) {
+                return back()->with('error', 'Order has no vendor associated.');
             }
 
-            // 4. Chargeback amount cannot exceed order total
-            $orderTotal = (float) ($order->total_amount ?? $order->grand_total ?? 0);
+            $orderTotal = floatval($order->total_amount ?? 0);
             if ($orderTotal > 0 && $request->amount > $orderTotal) {
-                return back()->with('error', "Chargeback amount (\${$request->amount}) exceeds order total (\${$orderTotal}).");
+                return back()->with('error', "Chargeback amount exceeds order total (\${$orderTotal}).");
             }
 
-            // 5. Check for existing pending/confirmed chargeback on same order
-            $existing = \App\Models\Chargeback::where('order_id', $order->id)
-                ->whereIn('status', ['pending', 'confirmed'])
+            $existing = Chargeback::where('order_id', $order->id)
+                ->whereIn('status', ['pending', 'pending_confirmation', 'confirmed'])
                 ->first();
-
             if ($existing) {
-                return back()->with('error', "An active chargeback already exists for this order (Status: {$existing->status}, Amount: \${$existing->amount}).");
+                return back()->with('error', "Active chargeback already exists (Status: {$existing->status}).");
             }
 
-            // 6. Order must be at least 1 day old (prevent accidental immediate chargebacks)
-            if ($order->created_at && $order->created_at->isToday()) {
-                return back()->with('error', 'Chargebacks can only be raised on orders at least 1 day old. Please verify the issue first.');
+            // Handle per-item evidence uploads
+            $itemsData = [];
+            if ($request->chargeback_items) {
+                foreach ($request->chargeback_items as $idx => $itemData) {
+                    if (empty($itemData['item_id'])) continue;
+
+                    $evidencePath = null;
+                    if ($request->hasFile("chargeback_items.{$idx}.evidence")) {
+                        $evidencePath = $request->file("chargeback_items.{$idx}.evidence")
+                            ->store("chargebacks/{$order->id}/items", 'public');
+                    }
+
+                    $itemsData[] = [
+                        'item_id'  => intval($itemData['item_id']),
+                        'evidence' => $evidencePath,
+                    ];
+                }
             }
 
-            // ── All checks passed — proceed ────────────────────────────────
-            $this->financeService->raiseChargeback($order, $request->only(['amount', 'reason', 'description']));
+            $cbData = $request->only(['amount', 'reason', 'description']);
+            $cbData['chargeback_items'] = !empty($itemsData) ? json_encode($itemsData) : null;
 
-            return back()->with('success', "Chargeback of \${$request->amount} raised on order #{$order->id}. Sourcing team notified for confirmation.");
+            $this->financeService->raiseChargeback($order, $cbData);
+
+            return back()->with('success', "Chargeback of \${$request->amount} raised on order #{$order->order_number}. Sourcing team notified.");
         } catch (\Exception $e) {
-            \Log::error('Chargeback creation failed: ' . $e->getMessage(), [
-                'order_id' => $order->id ?? null,
-                'user_id'  => auth()->id(),
-            ]);
-            return back()->with('error', 'Failed to raise chargeback: ' . $e->getMessage())->withInput();
+            \Log::error('Chargeback failed: ' . $e->getMessage(), ['order_id' => $order->id ?? null]);
+            return back()->with('error', 'Failed: ' . $e->getMessage())->withInput();
         }
     }
 
@@ -253,19 +299,15 @@ class FinanceController extends Controller
         $user = auth()->user();
 
         // Handle company_codes (could be array or JSON string)
-        $userCompanyCodes = $user->company_codes ?? [];
-        if (is_string($userCompanyCodes)) {
-            $userCompanyCodes = json_decode($userCompanyCodes, true) ?? [];
-        }
-        $userCompanyCodes = array_filter(array_map('strval', $userCompanyCodes));
+        $activeCode = session('active_company');
 
         $payouts = VendorPayout::with('vendor')
             // Restrict to user's allowed companies (non-admins)
             ->when(
-                !$user->isAdmin() && !empty($userCompanyCodes),
-                fn($q) => $q->whereIn('company_code', $userCompanyCodes)
+                !$user->isAdmin() && !empty($activeCode),
+                fn($q) => $q->where('company_code', $activeCode)
             )
-            ->when($request->company_code, fn($q, $v) => $q->where('company_code', $v))
+            //  ->when($request->company_code, fn($q, $v) => $q->where('company_code', $v))
             ->when($request->vendor_id, fn($q, $v) => $q->where('vendor_id', $v))
             ->when($request->status, fn($q, $v) => $q->where('status', $v))
             ->when($request->month, fn($q, $v) => $q->where('payout_month', $v))
@@ -276,8 +318,8 @@ class FinanceController extends Controller
         // Vendors list - also filtered by user company
         $vendors = Vendor::active()->orderBy('company_name')
             ->when(
-                !$user->isAdmin() && !empty($userCompanyCodes),
-                fn($q) => $q->whereIn('company_code', $userCompanyCodes)
+                !$user->isAdmin() && !empty($activeCode),
+                fn($q) => $q->where('company_code', [$activeCode])
             )
             ->get();
 
@@ -285,8 +327,8 @@ class FinanceController extends Controller
         try {
             $summaryQuery = VendorPayout::query()
                 ->when(
-                    !$user->isAdmin() && !empty($userCompanyCodes),
-                    fn($q) => $q->whereIn('company_code', $userCompanyCodes)
+                    !$user->isAdmin() && !empty($activeCode),
+                    fn($q) => $q->where('company_code', [$activeCode])
                 );
 
             $summary = [
@@ -319,6 +361,12 @@ class FinanceController extends Controller
 
     public function showPayout(VendorPayout $payout)
     {
+        if ($payout->company_code !== session('active_company')) {
+            return redirect()->route('finance.payouts')
+                ->with('error', 'This payout does not belong to your active company.');
+            exist;
+        }
+
         $payout->load('vendor');
 
         // Get orders for this vendor in this payout period
@@ -478,7 +526,7 @@ class FinanceController extends Controller
             'total_qty'        => $lineItems->sum('qty'),
             'total_sales'      => $lineItems->sum('sale_amount'),
             'total_commission' => $lineItems->sum('commission'),
-            'total_payout'     => $lineItems->sum('net_payout'), 
+            'total_payout'     => $lineItems->sum('net_payout'),
         ];
 
         // Get warehouse charges
@@ -487,16 +535,16 @@ class FinanceController extends Controller
         //     ->where('charge_year', $payout->payout_year)
         //     ->with('warehouse')
         //     ->get();
-            
-$warehouseCharges = \App\Models\VendorMonthlyCharge::where('vendor_id', $payout->vendor_id)
-        ->where('charge_month', $payout->payout_month)
-        ->where('charge_year', $payout->payout_year)
-        ->with('warehouse','grn')
-        ->get();
-// echo '<pre>';
-// print_r($warehouseCharges->toArray());
-// echo '</pre>';
-// exit;
+
+        $warehouseCharges = \App\Models\VendorMonthlyCharge::where('vendor_id', $payout->vendor_id)
+            ->where('charge_month', $payout->payout_month)
+            ->where('charge_year', $payout->payout_year)
+            ->with('warehouse', 'grn')
+            ->get();
+        // echo '<pre>';
+        // print_r($warehouseCharges->toArray());
+        // echo '</pre>';
+        // exit;
         // Get chargebacks
         $chargebacks = Chargeback::where('vendor_id', $payout->vendor_id)
             ->where('status', 'confirmed')
@@ -610,23 +658,13 @@ $warehouseCharges = \App\Models\VendorMonthlyCharge::where('vendor_id', $payout-
     {
         $user = auth()->user();
 
-        // Handle company_codes (could be array or JSON string)
-        $userCompanyCodes = $user->company_codes ?? [];
-        if (is_string($userCompanyCodes)) {
-            $userCompanyCodes = json_decode($userCompanyCodes, true) ?? [];
-        }
-        $userCompanyCodes = array_filter(array_map('strval', $userCompanyCodes));
+        $activeCode = session('active_company');
 
         $liveSheets = \App\Models\LiveSheet::with('vendor', 'offerSheet', 'items.product')
             // Non-admin users: restrict to their assigned companies
             ->when(
-                !$user->isAdmin() && !empty($userCompanyCodes),
-                fn($q) => $q->whereIn('company_code', $userCompanyCodes)
-            )
-            // Admin users: allow manual filter
-            ->when(
-                $user->isAdmin() && $request->company_code,
-                fn($q, $v) => $q->where('company_code', $v)
+                !$user->isAdmin() && !empty($activeCode),
+                fn($q) => $q->where('company_code', $activeCode)
             )
             ->when($request->status, fn($q, $v) => $q->where('status', $v))
             ->latest()->paginate(20);
@@ -635,6 +673,10 @@ $warehouseCharges = \App\Models\VendorMonthlyCharge::where('vendor_id', $payout-
 
     public function showLiveSheet(\App\Models\LiveSheet $liveSheet)
     {
+        if ($liveSheet->company_code !== session('active_company')) {
+            return redirect()->route('finance.live-sheets')
+                ->with('error', 'This live sheet does not belong to your active company.');
+        }
         $liveSheet->load('vendor', 'offerSheet', 'items.product');
         return view('finance.live-sheets.show', compact('liveSheet'));
     }
@@ -691,9 +733,9 @@ $warehouseCharges = \App\Models\VendorMonthlyCharge::where('vendor_id', $payout-
                     $sku = $dup->product->sku ?? 'unknown';
                     $errors[] = "SAP code '{$code}' is already used on live sheet item ID {$dup->id} with SKU '{$sku}'.";
                 }
-            }            
+            }
         }
-       
+
 
         if (!empty($errors)) {
             return back()
@@ -936,141 +978,19 @@ $warehouseCharges = \App\Models\VendorMonthlyCharge::where('vendor_id', $payout-
             return back()->with('error', 'Upload failed: ' . $e->getMessage());
         }
     }
-    /**
-     * Upload filled SAP CSV and apply codes to products
-     */
-    public function uploadSapCodes1(Request $request, \App\Models\LiveSheet $liveSheet)
-    {
-        $request->validate([
-            'sap_file' => 'required|file|max:5120',
-        ]);
-
-        $file = $request->file('sap_file');
-        $ext = strtolower($file->getClientOriginalExtension());
-        if (!in_array($ext, ['csv', 'txt', 'xlsx'])) {
-            return back()->with('error', 'File must be CSV or XLSX format.');
-        }
-
-        try {
-            $filePath = $file->store('temp', 'local');
-            $fullPath = storage_path('app/' . $filePath);
-
-            if ($ext === 'xlsx') {
-                $reader = new \PhpOffice\PhpSpreadsheet\Reader\Xlsx();
-                $reader->setReadDataOnly(true);
-                $spreadsheet = $reader->load($fullPath);
-                $rows = $spreadsheet->getActiveSheet()->toArray();
-            } else {
-                $rows = [];
-                if (($handle = fopen($fullPath, 'r')) !== false) {
-                    while (($row = fgetcsv($handle)) !== false) {
-                        $rows[] = $row;
-                    }
-                    fclose($handle);
-                }
-            }
-
-            @unlink($fullPath);
-
-            if (count($rows) < 2) {
-                return back()->with('error', 'File is empty or has no data rows.');
-            }
-
-            // Find column indexes
-            $header = array_map(fn($h) => strtolower(trim($h ?? '')), $rows[0]);
-            $itemIdCol = null;
-            $sapCol = null;
-
-            foreach ($header as $i => $h) {
-                if (in_array($h, ['item id', 'item_id', 'id'])) $itemIdCol = $i;
-                if (in_array($h, ['new sap code', 'new_sap_code', 'sap code', 'sap_code'])) $sapCol = $i;
-            }
-
-            if ($sapCol === null) {
-                return back()->with('error', 'CSV must have a "New SAP Code" column.');
-            }
-
-            $updated = 0;
-            $errors = [];
-            $sapCodes = [];
-
-            for ($i = 1; $i < count($rows); $i++) {
-                $row = $rows[$i];
-                $sapCode = trim($row[$sapCol] ?? '');
-                if ($sapCode === '') continue;
-
-                // Get item ID from column or match by row order
-                $itemId = $itemIdCol !== null ? intval($row[$itemIdCol] ?? 0) : null;
-
-                if (!$itemId) continue;
-
-                // Check uniqueness
-                if (in_array($sapCode, $sapCodes)) {
-                    $errors[] = "Row " . ($i + 1) . ": Duplicate SAP code '{$sapCode}'.";
-                    continue;
-                }
-                $sapCodes[] = $sapCode;
-
-                $item = \App\Models\LiveSheetItem::where('id', $itemId)
-                    ->where('live_sheet_id', $liveSheet->id)
-                    ->first();
-
-                if (!$item) continue;
-
-                // Check against existing products
-                $dup = \App\Models\Product::where('sap_code', $sapCode)
-                    ->when($item->product_id, fn($q) => $q->where('id', '!=', $item->product_id))
-                    ->first();
-
-                if ($dup) {
-                    $errors[] = "Row " . ($i + 1) . ": SAP '{$sapCode}' already used by {$dup->sku}.";
-                    continue;
-                }
-
-                // Update product and live sheet item
-                if ($item->product_id) {
-                    \App\Models\Product::where('id', $item->product_id)->update(['sap_code' => $sapCode]);
-                }
-                $d = $item->product_details ?? [];
-                $d['sap_code'] = $sapCode;
-                $item->update(['product_details' => $d]);
-                $updated++;
-            }
-
-            \App\Models\ActivityLog::log('uploaded', 'sap_codes', $liveSheet, null, [
-                'updated' => $updated,
-                'errors' => count($errors),
-            ], "SAP codes uploaded via CSV: {$updated} updated");
-
-            $msg = "{$updated} SAP code(s) updated.";
-            if (!empty($errors)) {
-                $msg .= " Errors: " . implode('; ', array_slice($errors, 0, 5));
-            }
-
-            return back()->with($updated > 0 ? 'success' : 'error', $msg);
-        } catch (\Exception $e) {
-            \Log::error('SAP upload failed: ' . $e->getMessage());
-            return back()->with('error', 'Upload failed: ' . $e->getMessage());
-        }
-    }
-
     // ═══ VENDOR RATE CARDS ═══
 
     public function vendorRateCards(Request $request)
     {
         $user = auth()->user();
-        $userCompanyCodes = $user->company_codes ?? [];   // Array
 
-        // Convert to array if it's stored as JSON string
-        if (is_string($userCompanyCodes)) {
-            $userCompanyCodes = json_decode($userCompanyCodes, true) ?? [];
-        }
+        $activeCode = session('active_company');
+
         $rateCards = \App\Models\VendorRateCard::with('vendor', 'creator', 'approver')
             // Restrict to user's allowed companies (unless admin)
-            ->when(!$user->isAdmin() && !empty($userCompanyCodes), function ($q) use ($userCompanyCodes) {
-                return $q->whereIn('company_code', $userCompanyCodes);
+            ->when(!$user->isAdmin() && !empty($activeCode), function ($q) use ($activeCode) {
+                return $q->where('company_code', $activeCode);
             })
-            ->when($request->company_code, fn($q, $v) => $q->where('company_code', $v))
             ->when($request->vendor_id, fn($q, $v) => $q->where('vendor_id', $v))
             ->orderByDesc('created_at')
             ->paginate(30)
@@ -1078,7 +998,7 @@ $warehouseCharges = \App\Models\VendorMonthlyCharge::where('vendor_id', $payout-
 
         // Filter vendors based on user's allowed companies
         $vendors = \App\Models\Vendor::orderBy('company_name')
-            ->when(!$user->isAdmin() && !empty($userCompanyCodes), fn($q) => $q->whereIn('company_code', $userCompanyCodes))
+            ->when(!$user->isAdmin() && !empty($activeCode), fn($q) => $q->where('company_code', $activeCode))
             ->get();
 
 
@@ -1087,6 +1007,9 @@ $warehouseCharges = \App\Models\VendorMonthlyCharge::where('vendor_id', $payout-
 
     public function storeVendorRateCard(Request $request)
     {
+
+        $activeCode = session('active_company');
+
         $request->validate([
             'vendor_id' => 'required|exists:vendors,id',
             'inward_rate_per_carton' => 'required|numeric|min:0|max:500',
@@ -1098,12 +1021,12 @@ $warehouseCharges = \App\Models\VendorMonthlyCharge::where('vendor_id', $payout-
             'effective_from' => 'required|date',
         ]);
         $vendor = \App\Models\Vendor::findOrFail($request->vendor_id);
-        $currency = match ($vendor->company_code) {
+        $currency = match ($activeCode ?? $vendor->company_code) {
             '2000' => 'INR',
             '2200' => 'EUR',
             default => 'USD',
         };
-        $maxV = \App\Models\VendorRateCard::where('vendor_id', $vendor->id)->max('version') ?? 0;
+        $maxV = \App\Models\VendorRateCard::where(['vendor_id' => $vendor->id, 'company_code' => $activeCode])->max('version') ?? 0;
 
         $newEffectiveFrom = $request->effective_from;
 
@@ -1123,7 +1046,7 @@ $warehouseCharges = \App\Models\VendorMonthlyCharge::where('vendor_id', $payout-
             'fulfillment_qty_threshold',
             'pick_pack_rate_per_unit',
             'effective_from',
-        ]), ['company_code' => $vendor->company_code, 'currency' => $currency, 'version' => $maxV + 1, 'status' => 'draft', 'created_by' => auth()->id()]));
+        ]), ['company_code' => $activeCode ?: $vendor->company_code, 'currency' => $currency, 'version' => $maxV + 1, 'status' => 'draft', 'created_by' => auth()->id()]));
 
         \App\Models\ActivityLog::log('created', 'vendor_rate_card', $rc, null, $rc->toArray(), "Rate card v{$rc->version} for {$vendor->company_name}");
         return back()->with('success', "Rate card v{$rc->version} created for {$vendor->company_name}.");
@@ -1149,22 +1072,19 @@ $warehouseCharges = \App\Models\VendorMonthlyCharge::where('vendor_id', $payout-
     {
         $user = auth()->user();
         // User's allowed company codes
-        $userCompanyCodes = $user->company_codes ?? [];
-        if (is_string($userCompanyCodes)) {
-            $userCompanyCodes = json_decode($userCompanyCodes, true) ?? [];
-        }
-        $userCompanyCodes = array_filter(array_map('strval', $userCompanyCodes));
+        $activeCode = session('active_company');
 
         $month = $request->get('month', now()->month);
         $year = $request->get('year', now()->year);
         $charges = \App\Models\VendorMonthlyCharge::with('vendor', 'grn', 'warehouse')
-            ->when(!$user->isAdmin() && !empty($userCompanyCodes), fn($q) => $q->whereIn('company_code', $userCompanyCodes))
+            ->when(!$user->isAdmin() && !empty($activeCode), fn($q) => $q->where('company_code', $activeCode))
             ->byMonth($month, $year)->when($request->vendor_id, fn($q, $v) => $q->where('vendor_id', $v))
             ->orderBy('vendor_id')->paginate(50)->withQueryString();
+
         $vendors = \App\Models\Vendor::orderBy('company_name')
-            ->when(!$user->isAdmin() && !empty($userCompanyCodes), fn($q) => $q->whereIn('company_code', $userCompanyCodes))
+            ->when(!$user->isAdmin() && !empty($activeCode), fn($q) => $q->where('company_code', $activeCode))
             ->get();
-        $baseQ = \App\Models\VendorMonthlyCharge::byMonth($month, $year);
+        $baseQ = \App\Models\VendorMonthlyCharge::where('company_code', $activeCode)->byMonth($month, $year);
         $stats = [
             'total_charges' => (float)(clone $baseQ)->sum('total_charges'),
             'total_inward' => (float)(clone $baseQ)->sum('inward_charge'),
@@ -1202,10 +1122,37 @@ $warehouseCharges = \App\Models\VendorMonthlyCharge::where('vendor_id', $payout-
 
     public function vendorStatement(Request $request, \App\Models\Vendor $vendor)
     {
+        $activeCompany = session('active_company');
+        if ($activeCompany) {
+            $vendorUser = $vendor->user;
+            $vendorCompanyCodes = $vendorUser ? ($vendorUser->company_codes ?? []) : [];
+            if (is_string($vendorCompanyCodes)) {
+                $vendorCompanyCodes = json_decode($vendorCompanyCodes, true) ?? [];
+            }
+
+            // Also check vendor's own company_code
+            $vendorCompanyCodes[] = $vendor->company_code;
+            $vendorCompanyCodes = array_unique(array_filter($vendorCompanyCodes));
+
+            if (!empty($vendorCompanyCodes) && !in_array($activeCompany, $vendorCompanyCodes)) {
+
+                $companyNames = ['2100' => '🇺🇸 ExpoBazaar USA', '2200' => '🇪🇺 ExpoBazaar EU', '2400' => '🇬🇧 ExpoBazaar UK'];
+                $vendorCompanyLabels = array_map(fn($c) => ($companyNames[$c] ?? $c) . " ($c)", $vendorCompanyCodes);
+
+                // return redirect()->route('finance.vendor-charges')
+                //                  ->with('error', 'This vendor does not belong to your active company.Please switch company from the profile dropdown.');
+
+                return redirect()->route('finance.vendor-charges')->with(
+                    'error',
+                    "This vendor operates under: " . implode(', ', $vendorCompanyLabels) . ". " .
+                        "Please switch company from the profile dropdown."
+                );
+            }
+        }
         $month = $request->get('month', now()->month);
         $year = $request->get('year', now()->year);
         $service = new \App\Services\WarehouseChargesService();
-        $statement = $service->getVendorStatement($vendor->id, $month, $year);
+        $statement = $service->getVendorStatement($vendor->id, $month, $year, $activeCompany);
         return view('finance.vendor-charges.statement', compact('statement', 'month', 'year'));
     }
 

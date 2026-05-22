@@ -89,6 +89,15 @@ class AuthController extends Controller
 
         Auth::login($user, true);
 
+        // Set default active company from user's first assigned company
+        $companyCodes = $user->company_codes ?? [];
+        if (is_string($companyCodes)) {
+            $companyCodes = json_decode($companyCodes, true) ?? [];
+        }
+        if (!empty($companyCodes)) {
+            session(['active_company' => $companyCodes[0]]);
+        }
+
         // Redirect based on user type
         return match ($user->user_type) {
             'admin' => redirect()->route('admin.dashboard'),
@@ -103,7 +112,7 @@ class AuthController extends Controller
      */
     public function logout(Request $request)
     {
-      
+
         try {
             Auth::logout();
         } catch (\Exception $e) {
@@ -114,7 +123,6 @@ class AuthController extends Controller
         } catch (\Exception $e) {
         }
         return redirect()->route('auth.login');
-
     }
 
     /**

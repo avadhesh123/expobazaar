@@ -82,7 +82,7 @@ class SalesController extends Controller
     public function storeSales(Request $request)
     {
         $request->validate([
-            'company_code' => 'required|in:2000,2100,2200',
+            'company_code' => 'required|in:2000,2100,2200,2400',
             'orders' => 'required|array|min:1',
         ]);
         $result = $this->salesService->uploadSalesData($request->orders, $request->company_code, auth()->user());

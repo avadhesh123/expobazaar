@@ -73,7 +73,7 @@ return [
             'upload'    => ['label' => 'Upload Sales or Create Orders',  'actions' => ['view'], 'route' => 'sales.upload',     'icon' => 'fas fa-upload'],
             'order'     => ['label' => 'Orders',                        'actions' => ['view'], 'route' => 'sales.orders',     'icon' => 'fas fa-shopping-cart'],
             'to-be-shipped' => ['label' => 'To Be Shipped',             'actions' => ['view'], 'route' => 'sales.to-be-shipped',  'icon' => 'fas fa-shipping-fast'],
-           'order-management' => ['label' => 'Order Management',        'actions' => ['view', 'update', 'cancel'], 'route' => 'sales.order-management',  'icon' => 'fas fa-clipboard-list'],
+            'order-management' => ['label' => 'Order Management',        'actions' => ['view', 'update', 'cancel'], 'route' => 'sales.order-management',  'icon' => 'fas fa-clipboard-list'],
             'tracking'  => ['label' => 'Update Tracking',               'actions' => ['update'], 'route' => null, 'sidebar' => false],
         ],
     ],
@@ -96,12 +96,13 @@ return [
     ],
 
     'hod' => [
-        'label' => 'Management',
+        'label' => 'Hod Management',
         'icon'  => 'fas fa-chart-line',
         'entities' => [
             'access' => ['label' => 'Access Management Module', 'actions' => ['view'], 'route' => 'hod.dashboard',  'icon' => 'fas fa-tachometer-alt', 'sidebar' => false],
             'dashboard' => ['label' => 'Dashboard',             'actions' => ['view'], 'route' => 'hod.dashboard',  'icon' => 'fas fa-tachometer-alt'],
             'asn'    => ['label' => 'ASN & Pricing',            'actions' => ['view', 'create', 'approve'], 'route' => 'hod.asn-list', 'icon' => 'fas fa-file-alt'],
+            'dropship' => ['label' => 'Dropship',                  'actions' => ['view', 'upload'], 'route' => 'hod.dropship', 'icon' => 'fas fa-parachute-box'],
         ],
     ],
 

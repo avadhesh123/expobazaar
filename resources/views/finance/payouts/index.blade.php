@@ -6,15 +6,15 @@
 <div class="grid-kpi" style="grid-template-columns:repeat(3,1fr);">
     <div class="kpi-card" style="border-left:3px solid #dc2626;">
         <div class="kpi-label">Pending Payouts</div>
-        <div class="kpi-value" style="color:#dc2626;font-size:1.3rem;">${{ number_format($summary['total_payouts'], 0) }}</div>
+        <div class="kpi-value" style="color:#dc2626;font-size:1.3rem;">{{ $activeCurrencySymbol }}{{ number_format($summary['total_payouts'], 0) }}</div>
     </div>
     <div class="kpi-card" style="border-left:3px solid #16a34a;">
         <div class="kpi-label">Paid This Month</div>
-        <div class="kpi-value" style="color:#16a34a;font-size:1.3rem;">${{ number_format($summary['paid_this_month'], 0) }}</div>
+        <div class="kpi-value" style="color:#16a34a;font-size:1.3rem;">{{ $activeCurrencySymbol }}{{ number_format($summary['paid_this_month'], 0) }}</div>
     </div>
     <div class="kpi-card" style="border-left:3px solid #e8a838;">
         <div class="kpi-label">Pending Invoices</div>
-        <div class="kpi-value" style="color:#e8a838;">{{ $summary['pending_invoices'] }}</div>
+        <div class="kpi-value" style="color:#e8a838;">{{ $activeCurrencySymbol }}{{ number_format($summary['pending_invoices'], 0) }}</div>
     </div>
 </div>
 
@@ -118,9 +118,9 @@
                         <div style="font-size:.65rem;color:#94a3b8;">{{ $p->vendor->vendor_code ?? '' }} · {{ $p->company_code }}</div>
                     </td>
                     <td style="font-weight:600;">{{ date('M',mktime(0,0,0,$p->payout_month,1)) }} {{ $p->payout_year }}</td>
-                    <td style="font-family:monospace;color:#166534;font-weight:600;">${{ number_format($p->total_sales, 2) }}</td>
-                    <td style="font-family:monospace;color:#dc2626;">-${{ number_format($totalDed, 2) }}</td>
-                    <td style="font-family:monospace;font-weight:800;font-size:.9rem;color:{{ $p->net_payout >= 0 ? '#166534' : '#dc2626' }};">${{ number_format($p->net_payout, 2) }}</td>
+                    <td style="font-family:monospace;color:#166534;font-weight:600;">{{ $activeCurrencySymbol }}{{ number_format($p->total_sales, 2) }}</td>
+                    <td style="font-family:monospace;color:#dc2626;">-{{ $activeCurrencySymbol }}{{ number_format($totalDed, 2) }}</td>
+                    <td style="font-family:monospace;font-weight:800;font-size:.9rem;color:{{ $p->net_payout >= 0 ? '#166534' : '#dc2626' }};">{{ $activeCurrencySymbol }}{{ number_format($p->net_payout, 2) }}</td>
                     <td>
                         @php $sc = ['calculated'=>'badge-warning','approved'=>'badge-info','payment_pending'=>'badge-warning','paid'=>'badge-success','invoice_received'=>'badge-success']; @endphp
                         <span class="badge {{ $sc[$p->status] ?? 'badge-gray' }}">{{ ucfirst(str_replace('_',' ',$p->status)) }}</span>
@@ -154,7 +154,7 @@
                 @if(in_array($p->status, ['calculated','approved','payment_pending']))
                 <tr id="payForm{{ $p->id }}" style="display:none;background:#f0fdf4;">
                     <td colspan="8" style="padding:.75rem;">
-                        <form method="POST" action="{{ route('finance.payouts.process', $p) }}" style="display:flex;flex-wrap:wrap;gap:.5rem;align-items:flex-end;" onsubmit="return confirm('Process payment of ${{ number_format($p->net_payout,2) }}? Payment advice will be emailed to vendor.')">@csrf
+                        <form method="POST" action="{{ route('finance.payouts.process', $p) }}" style="display:flex;flex-wrap:wrap;gap:.5rem;align-items:flex-end;" onsubmit="return confirm('Process payment of {{$activeCurrencySymbol}}{{ number_format($p->net_payout,2) }}? Payment advice will be emailed to vendor.')">@csrf
                             <div><label style="font-size:.65rem;font-weight:600;color:#166534;">Date *</label><input type="date" name="payment_date" required value="{{ date('Y-m-d') }}" style="padding:.3rem .5rem;border:1px solid #bbf7d0;border-radius:6px;font-size:.82rem;"></div>
                             <div><label style="font-size:.65rem;font-weight:600;color:#166534;">Reference</label><input type="text" name="payment_reference" placeholder="Txn ID" style="width:130px;padding:.3rem .5rem;border:1px solid #bbf7d0;border-radius:6px;font-size:.82rem;"></div>
                             <div><label style="font-size:.65rem;font-weight:600;color:#166534;">Method</label><select name="payment_method" style="padding:.3rem .5rem;border:1px solid #bbf7d0;border-radius:6px;font-size:.82rem;font-family:inherit;">

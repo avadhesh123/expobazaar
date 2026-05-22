@@ -85,7 +85,7 @@ class SourcingService
     public function createConsignment(OfferSheet $offerSheet): Consignment
     {
         return DB::transaction(function () use ($offerSheet) {
-            $country = $offerSheet->company_code === '2100' ? 'US' : ($offerSheet->company_code === '2200' ? 'NL' : 'IN');
+            $country = $offerSheet->company_code === '2100' ? 'US' : ($offerSheet->company_code === '2200' ? 'EU' : 'GB');
 
             $consignment = Consignment::create([
                 'consignment_number' => Consignment::generateNumber($offerSheet->company_code, $country),

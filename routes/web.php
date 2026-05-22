@@ -10,6 +10,7 @@ use App\Http\Controllers\Cataloguing\CatalogueController;
 use App\Http\Controllers\Sales\SalesController;
 use App\Http\Controllers\Finance\FinanceController;
 use App\Http\Controllers\Hod\HodController;
+use App\Http\Controllers\Hod\DropshipController;
 use Illuminate\Support\Facades\Auth;
 
 // Authentication (Email OTP)
@@ -68,12 +69,18 @@ Route::middleware(['auth'])->group(function () {
         Route::post('categories', [AdminController::class, 'storeCategory'])->name('categories.store');
         Route::get('sales-channels', [AdminController::class, 'salesChannels'])->name('sales-channels');
         Route::post('sales-channels', [AdminController::class, 'storeSalesChannel'])->name('sales-channels.store');
+        Route::put('sales-channels/{salesChannel}', [AdminController::class, 'updateSalesChannel'])->name('sales-channels.update');
         Route::get('warehouses', [AdminController::class, 'warehouses'])->name('warehouses');
         Route::post('warehouses', [AdminController::class, 'storeWarehouse'])->name('warehouses.store');
 
         // ── System ──
         Route::post('live-sheets/{liveSheet}/unlock', [AdminController::class, 'unlockLiveSheet'])->name('live-sheets.unlock');
         Route::get('activity-log', [AdminController::class, 'activityLog'])->name('activity-log');
+
+        // ── User Profile ──
+        Route::get('profile', [AdminController::class, 'profile'])->name('profile');
+        Route::get('profile/edit', [AdminController::class, 'editProfile'])->name('profile.edit');
+        Route::put('profile', [AdminController::class, 'updateProfile'])->name('profile.update');
     });
 
     // VENDOR (External)
@@ -322,13 +329,22 @@ Route::middleware(['auth'])->group(function () {
         Route::get('pricing/{asn}/prepare', [HodController::class, 'preparePricing'])->name('pricing.prepare');
         Route::get('pricing/{asn}/status', [HodController::class, 'pricingStatus'])->name('pricing.status');
         Route::get('pricing/{asn}/download', [HodController::class, 'downloadPricing'])->name('pricing.download');
-        Route::get('pricing/{asn}/last-mile-template', [HodController::class, 'downloadLastMileTemplate'])->name('pricing.last-mile-template');
+        Route::get('pricing/{asn}/pricing-input-template', [HodController::class, 'downloadPricingInputTemplate'])->name('pricing.pricing-input-template');
 
         Route::post('pricing/{asn}/finalize', [HodController::class, 'finalizePricing'])->name('pricing.finalize');
-        Route::post('pricing/{asn}/last-mile-upload', [HodController::class, 'uploadLastMile'])->name('pricing.last-mile-upload');
+        Route::post('pricing/{asn}/pricing-input-upload', [HodController::class, 'uploadPricingInput'])->name('pricing.pricing-input-upload');
         Route::post('pricing/{asn}/update-channel-factor', [HodController::class, 'updateChannelFactor'])->name('pricing.update-channel-factor');
 
         Route::post('pricing/{asn}', [HodController::class, 'storePricing'])->name('pricing.store');
+
+        // Dropship
+        Route::get('dropship', [DropshipController::class, 'index'])->name('dropship');
+        Route::post('dropship/upload-products', [DropshipController::class, 'uploadProducts'])->name('dropship.upload.products');
+        Route::post('dropship/update-inventory', [DropshipController::class, 'updateInventory'])->name('dropship.update.inventory');
+        Route::get('dropship/template/products', [DropshipController::class, 'downloadProductTemplate'])->name('dropship.template.products');
+        Route::get('dropship/template/inventory', [DropshipController::class, 'downloadInventoryTemplate'])->name('dropship.template.inventory');
+        Route::get('dropship/download/products', [DropshipController::class, 'downloadProducts'])->name('dropship.download.products');
+        Route::get('dropship/download/inventory', [DropshipController::class, 'downloadInventory'])->name('dropship.download.inventory');
     });
 
     // NOTIFICATIONS

@@ -42,7 +42,9 @@ class SalesService
     {
         return match ($companyCode) {
             '2000' => 'INR',
+            '2100' => 'USD',
             '2200' => 'EUR',
+            '2400' => 'GBP',
             default => 'USD'
         };
     }
@@ -506,6 +508,9 @@ class SalesService
     /**
      * Process manually entered orders from the grid form
      */
+     /**
+     * Process manually entered orders from the grid form
+     */
     public function processManualOrders(array $ordersData, string $companyCode): array
     {
         $created = 0;
@@ -516,10 +521,7 @@ class SalesService
             $poNumber = trim($orderData['platform_order_id']);
 
             $existing = Order::where('platform_order_id', $poNumber)->where('company_code', $companyCode)->first();
-            if ($existing) {
-                $errors[] = "Row {$rowNum}: PO '{$poNumber}' already exists.";
-                continue;
-            }
+            if ($existing) { $errors[] = "Row {$rowNum}: PO '{$poNumber}' already exists."; continue; }
 
             $orderItems = [];
             $totalAmount = 0;
@@ -531,34 +533,22 @@ class SalesService
                 $unitPrice = floatval($itemData['unit_price']);
 
                 $product = Product::where('sku', $sku)->first();
-                if (!$product) {
-                    $errors[] = "Row {$rowNum}: SKU '{$sku}' not found.";
-                    $hasError = true;
-                    break;
-                }
-                if (empty($product->sap_code)) {
-                    $errors[] = "Row {$rowNum}: SKU '{$sku}' has no SAP code.";
-                    $hasError = true;
-                    break;
-                }
+                if (!$product) { $errors[] = "Row {$rowNum}: SKU '{$sku}' not found."; $hasError = true; break; }
+                if (empty($product->sap_code)) { $errors[] = "Row {$rowNum}: SKU '{$sku}' has no SAP code."; $hasError = true; break; }
 
                 $availableStock = Inventory::where('product_id', $product->id)
                     ->where('company_code', $companyCode)->sum('available_quantity');
                 if ($availableStock < $qty) {
                     $errors[] = "Row {$rowNum}: SKU '{$sku}' insufficient inventory. Available: {$availableStock}, Ordered: {$qty}.";
-                    $hasError = true;
-                    break;
+                    $hasError = true; break;
                 }
 
                 $lineTotal = round($unitPrice * $qty, 2);
                 $totalAmount += $lineTotal;
 
                 $orderItems[] = [
-                    'product' => $product,
-                    'sku' => $sku,
-                    'qty' => $qty,
-                    'unit_price' => $unitPrice,
-                    'line_total' => $lineTotal,
+                    'product' => $product, 'sku' => $sku, 'qty' => $qty,
+                    'unit_price' => $unitPrice, 'line_total' => $lineTotal,
                 ];
             }
 
@@ -574,6 +564,16 @@ class SalesService
                     'currency'          => $orderData['currency'] ?? null,
                     'customer_name'     => $orderData['customer_name'] ?? null,
                     'customer_email'    => $orderData['customer_email'] ?? null,
+                    'customer_phone'    => $orderData['customer_phone'] ?? null,
+                    'customer_type'     => $orderData['customer_type'] ?? null,
+                    'company_name'      => $orderData['company_name'] ?? null,
+                    'shipping_method'   => $orderData['shipping_method'] ?? null,
+                    'shipping_address'  => $orderData['shipping_address'] ?? null,
+                    'shipping_city'     => $orderData['shipping_city'] ?? null,
+                    'shipping_state'    => $orderData['shipping_state'] ?? null,
+                    'shipping_country'  => $orderData['shipping_country'] ?? null,
+                    'shipping_pincode'  => $orderData['shipping_pincode'] ?? null,
+                    'payment_status'    => $orderData['payment_status'] ?? 'unpaid',
                 ], $orderItems, $companyCode);
 
                 $created++;

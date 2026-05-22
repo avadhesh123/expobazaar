@@ -3,7 +3,7 @@
 namespace App\Http\Controllers\Vendor;
 
 use App\Http\Controllers\Controller;
-use App\Models\{Vendor, Consignment, VendorPayout, Chargeback, VendorMonthlyCharge, VendorDocument, Category, LiveSheet, OfferSheet, OfferSheetItem, Order, WarehouseCharge, Product};
+use App\Models\{Vendor, Consignment, VendorPayout, Chargeback, VendorMonthlyCharge, VendorDocument, Category, LiveSheet, OfferSheet, OfferSheetItem, Order, WarehouseCharge, Product, SalesChannel};
 use App\Services\{DashboardService, VendorService, SourcingService};
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
@@ -24,20 +24,25 @@ class VendorController extends Controller
         if (!$vendor) {
             return redirect()->route('vendor.kyc');
         }
+
+        $activeCode = session('active_company');
+
         $data = $this->dashboardService->getVendorDashboard($vendor->id);
 
         $data['stats'] = [
-            'offer_sheets'  => OfferSheet::where('vendor_id', $vendor->id)->count(),
-            'consignments'  => Consignment::where('vendor_id', $vendor->id)->count(),
-            'total_sales'   => Order::whereHas('items', fn($q) => $q->where('vendor_id', $vendor->id))->sum('total_amount'),
-            'chargebacks'   => Chargeback::where('vendor_id', $vendor->id)->where('status', 'confirmed')->sum('amount'),
-            'pending_payout' => VendorPayout::where('vendor_id', $vendor->id)->whereIn('status', ['calculated', 'approved'])->sum('net_payout'),
+            'offer_sheets'  => OfferSheet::where('vendor_id', $vendor->id)->where('company_code', $activeCode)->count(),
+            'consignments'  => Consignment::where('vendor_id', $vendor->id)->where('company_code', $activeCode)->count(),
+            'total_sales'   => Order::whereHas('items', fn($q) => $q->where('vendor_id', $vendor->id))->where('company_code', $activeCode)->sum('total_amount'),
+            'chargebacks'   => Chargeback::where('vendor_id', $vendor->id)->where('company_code', $activeCode)->where('status', 'confirmed')->sum('amount'),
+            'pending_payout' => VendorPayout::where('vendor_id', $vendor->id)->where('company_code', $activeCode)->whereIn('status', ['calculated', 'approved'])->sum('net_payout'),
         ];
 
         $data['recent_orders'] = Order::whereHas('items', fn($q) => $q->where('vendor_id', $vendor->id))
+            ->where('company_code', $activeCode)
             ->with('salesChannel')->latest('order_date')->take(5)->get();
 
         $data['active_consignments'] = Consignment::where('vendor_id', $vendor->id)
+            ->where('company_code', $activeCode)
             ->whereNotIn('status', ['delivered', 'cancelled'])->with('liveSheet')->latest()->take(5)->get();
 
         return view('vendor.dashboard', compact('data', 'vendor'));
@@ -183,145 +188,7 @@ class VendorController extends Controller
 
         return redirect()->route('vendor.dashboard')->with('success', 'KYC documents submitted for Finance review.');
     }
-    public function submitKycBACKUP(Request $request)
-    {
-        $vendor = auth()->user()->vendor;
 
-        // Block changes after finance approval
-        if ($vendor && $vendor->kyc_status === 'approved') {
-            return back()->with('error', 'KYC has already been approved by Finance. No changes allowed.');
-        }
-
-        $request->validate([
-            'gst_number'              => [
-                'required',
-                'string',
-                'size:15',
-                'regex:/^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/'
-            ],
-            'rex_number'              => [
-                'required',
-                'string',
-                'size:20',
-                'regex:/^[A-Za-z0-9]{20}$/'
-            ],
-            'company_name'            => 'required|string|max:255',
-            'street_address'          => 'required|string|max:500',
-            'city'                    => 'required|string|max:100',
-            'province_state'          => 'required|string|max:100',
-            'pincode'                 => 'required|string|max:10',
-            'country'                 => 'required|string|max:100',
-            'contact_person'          => 'required|string|max:255',
-            'phone'                   => 'required|string|max:20',
-            'email'                   => 'required|email|max:255',
-            'bank_name'               => 'required|string|max:255',
-            'bank_ifsc'               => 'nullable|string|max:20',
-            'bank_swift_code'         => 'required|string|min:8|max:11',
-            'bank_account_number'     => 'required|string|max:50',
-            'msme_number'             => 'string|max:50',
-            'documents.gst_certificate'   => $this->docRequired($vendor, 'gst_certificate'),
-            'documents.cancelled_cheque'  => $this->docRequired($vendor, 'cancelled_cheque'),
-            'documents.signed_contract'   => $this->docRequired($vendor, 'signed_contract'),
-            'documents.iec_certificate'   => 'nullable|file|mimes:pdf,jpg,jpeg,png|max:10240',
-            'documents.msme_certificate'  => $this->docRequired($vendor, 'msme_certificate'),
-            'documents.other.*'           => 'nullable|file|mimes:pdf,jpg,jpeg,png|max:10240',
-        ], [
-            'gst_number.regex'                    => 'Invalid GST Number format.',
-            'rex_number.regex'                    => 'REX must be exactly 20 alphanumeric characters.',
-            'bank_swift_code.required'            => 'SWIFT / BIC code is mandatory.',
-            'bank_swift_code.min'                 => 'SWIFT code must be at least 8 characters.',
-            'documents.cancelled_cheque.required'  => 'Cancelled cheque / bank proof is mandatory.',
-            'documents.signed_contract.required'   => 'Signed consignment contract is mandatory.',
-            'documents.msme_certificate.required'  => 'MSME certificate is mandatory.',
-            'documents.gst_certificate.required'   => 'GST certificate is mandatory.',
-            'street_address.required'              => 'Street address is required.',
-            'province_state.required'              => 'Province / State is required.',
-        ]);
-
-        // Update vendor fields
-        try {
-            $vendor->update($request->only([
-                'gst_number',
-                'company_name',
-                'street_address',
-                'city',
-                'province_state',
-                'pincode',
-                'country',
-                'contact_person',
-                'finance_contact_person',
-                'phone',
-                'email',
-                'iec_code',
-                'msme_number',
-                'landline',
-                'official_website',
-                'bank_name',
-                'bank_ifsc',
-                'bank_swift_code',
-                'bank_account_number',
-            ]));
-        } catch (\Exception $e) {
-            \Log::error('KYC vendor update failed: ' . $e->getMessage());
-            return back()->with('error', 'Failed to update vendor info: ' . $e->getMessage())->withInput();
-        }
-
-        // Process document uploads
-        $docs = [];
-        $docTypes = ['gst_certificate', 'cancelled_cheque', 'iec_certificate', 'msme_certificate', 'signed_contract'];
-        foreach ($docTypes as $type) {
-            if ($request->hasFile("documents.{$type}")) {
-                try {
-                    $file = $request->file("documents.{$type}");
-                    $path = $file->store('vendor-kyc/' . $vendor->id, 'public');
-                    $docs[] = ['name' => ucfirst(str_replace('_', ' ', $type)), 'path' => $path, 'type' => $file->getMimeType(), 'size' => $file->getSize()];
-
-                    \App\Models\VendorDocument::updateOrCreate(
-                        ['vendor_id' => $vendor->id, 'document_type' => $type],
-                        ['document_name' => ucfirst(str_replace('_', ' ', $type)), 'file_path' => $path, 'file_type' => $file->getMimeType(), 'file_size' => $file->getSize(), 'uploaded_by' => auth()->id(), 'status' => 'uploaded']
-                    );
-                } catch (\Exception $e) {
-                    \Log::error("KYC doc upload failed ({$type}): " . $e->getMessage());
-                    return back()->with('error', "Failed to upload {$type}: " . $e->getMessage())->withInput();
-                }
-            }
-        }
-
-        // Handle additional documents
-        if ($request->hasFile('documents.other')) {
-            foreach ($request->file('documents.other') as $file) {
-                try {
-                    $path = $file->store('vendor-kyc/' . $vendor->id, 'public');
-                    $docs[] = ['name' => $file->getClientOriginalName(), 'path' => $path, 'type' => $file->getMimeType(), 'size' => $file->getSize()];
-
-                    \App\Models\VendorDocument::create([
-                        'vendor_id' => $vendor->id,
-                        'document_type' => 'other',
-                        'document_name' => $file->getClientOriginalName(),
-                        'file_path' => $path,
-                        'file_type' => $file->getMimeType(),
-                        'file_size' => $file->getSize(),
-                        'uploaded_by' => auth()->id(),
-                        'status' => 'uploaded',
-                    ]);
-                } catch (\Exception $e) {
-                    \Log::error('KYC other doc upload failed: ' . $e->getMessage());
-                }
-            }
-        }
-
-        // Update KYC status
-        try {
-            if ($vendor->kyc_status !== 'submitted') {
-                $this->vendorService->submitKyc($vendor, $docs);
-            }
-        } catch (\Exception $e) {
-            \Log::error('KYC status update failed: ' . $e->getMessage());
-            return back()->with('error', 'KYC submission failed: ' . $e->getMessage())->withInput();
-        }
-
-        return redirect()->route('vendor.dashboard')->with('success', 'KYC documents submitted for Finance review.');
-    }
 
     /**
      * Check if document upload is required (required if not already uploaded)
@@ -345,19 +212,14 @@ class VendorController extends Controller
     {
         $user = auth()->user();
 
-        // User's allowed company codes
-        $userCompanyCodes = $user->company_codes ?? [];
-        if (is_string($userCompanyCodes)) {
-            $userCompanyCodes = json_decode($userCompanyCodes, true) ?? [];
-        }
-        $userCompanyCodes = array_filter(array_map('strval', $userCompanyCodes));
+        $activeCode = session('active_company');
 
         $vendor = $user->vendor;
         $sheets = $vendor->offerSheets()->with('items')
-            ->when(
-                !$user->isAdmin() && !empty($userCompanyCodes),
-                fn($q) => $q->whereIn('company_code', $userCompanyCodes)
-            )->latest()->paginate(20);
+            ->when($activeCode, function ($q) use ($activeCode) {
+                $q->where('company_code', $activeCode);
+            })
+            ->latest()->paginate(20);
         return view('vendor.offer-sheets.index', compact('sheets', 'vendor'));
     }
 
@@ -959,9 +821,16 @@ class VendorController extends Controller
     public function consignments()
     {
         $vendor = auth()->user()->vendor;
+        
+        $activeCode = session('active_company');
+
         //$consignments = $vendor->consignments()->with('liveSheet', 'grn', 'shipment')->latest()->paginate(20);
 
-        $consignments = $vendor->consignments()->with('liveSheet', 'shipments')->latest()->paginate(20);
+        $consignments = $vendor->consignments()
+        ->when($activeCode, function ($q) use ($activeCode) {
+            $q->where('company_code', $activeCode);
+        })
+        ->with('liveSheet', 'shipments')->latest()->paginate(20);
         return view('vendor.consignments.index', compact('consignments', 'vendor'));
     }
 
@@ -1162,18 +1031,14 @@ class VendorController extends Controller
     public function liveSheets()
     {
         $user = auth()->user();
+        
+        $activeCode = session('active_company');
 
-        // User's allowed company codes
-        $userCompanyCodes = $user->company_codes ?? [];
-        if (is_string($userCompanyCodes)) {
-            $userCompanyCodes = json_decode($userCompanyCodes, true) ?? [];
-        }
-        $userCompanyCodes = array_filter(array_map('strval', $userCompanyCodes));
         $vendor = $user->vendor;
         $liveSheets = LiveSheet::where('vendor_id', $vendor->id)
             ->with('consignment', 'offerSheet', 'items.product')
-            ->when(!$user->isAdmin() && !empty($userCompanyCodes), function ($query) use ($userCompanyCodes) {
-                $query->whereIn('company_code', $userCompanyCodes);
+             ->when($activeCode, function ($query) use ($activeCode) {
+                $query->where('company_code', $activeCode);
             })
             ->latest()->paginate(20);
         return view('vendor.live-sheets.index', compact('liveSheets', 'vendor'));
@@ -1261,7 +1126,8 @@ class VendorController extends Controller
 
             $country = match ($liveSheet->company_code) {
                 '2100' => 'US',
-                '2200' => 'NL',
+                '2200' => 'EU',
+                '2400' => 'GB',
                 default => 'IN',
             };
 
@@ -1962,15 +1828,20 @@ class VendorController extends Controller
     public function salesReport(Request $request)
     {
         $vendor = auth()->user()->vendor;
+        
+        $activeCode = session('active_company');
+
         $orders = Order::where('status', 'shipped')
             ->whereHas('items', fn($q) => $q->where('vendor_id', $vendor->id))
             ->with(['salesChannel', 'receivable', 'items' => fn($q) => $q->where('vendor_id', $vendor->id)->with('product')])
+           ->when($activeCode, fn($q) => $q->whereHas('salesChannel', fn($sq) => $sq->where('company_code', $activeCode)))
             ->get();
 
 
         // Before the loop — build FIFO commission map per product for this vendor
         $vendorLiveSheets = \App\Models\LiveSheet::where('vendor_id', $vendor->id)
             ->where('status', 'locked') // Only consider locked sheets for commission (approved but not yet paid out)
+          //  ->when($activeCode, fn($q) => $q->whereHas('salesChannel', fn($sq) => $sq->where('company_code', $activeCode)))
             ->orderBy('approved_at', 'asc') // FIFO — oldest first
             ->with(['items' => fn($q) => $q->select('id', 'live_sheet_id', 'product_id', 'quantity', 'product_details')])
             ->get();
@@ -2090,32 +1961,39 @@ class VendorController extends Controller
                 ]);
             }
         }
-exit;
-//print_r($lineItems->toArray());exit;
+       // exit;
+        //print_r($lineItems->toArray());exit;
 
         $orders = Order::whereHas('items', fn($q) => $q->where('vendor_id', $vendor->id))
             ->with('salesChannel', 'items')
+            ->when($activeCode, fn($q) => $q->whereHas('salesChannel', fn($sq) => $sq->where('company_code', $activeCode)))
             ->when($request->month, fn($q, $v) => $q->whereMonth('order_date', $v))
             ->when($request->year, fn($q, $v) => $q->whereYear('order_date', $v))
             ->latest('order_date')->paginate(25);
-        $totalSales = Order::whereHas('items', fn($q) => $q->where('vendor_id', $vendor->id))->sum('total_amount');
-        return view('vendor.sales.index', compact('orders', 'vendor', 'totalSales','lineItems'));
+
+        $totalSales = Order::whereHas('items', fn($q) => $q->where('vendor_id', $vendor->id))
+        ->when($activeCode, fn($q) => $q->whereHas('salesChannel', fn($sq) => $sq->where('company_code', $activeCode)))
+        ->when($request->month, fn($q, $v) => $q->whereMonth('order_date', $v))
+        ->when($request->year, fn($q, $v) => $q->   whereYear('order_date', $v))
+        ->sum('total_amount');
+
+        return view('vendor.sales.index', compact('orders', 'vendor', 'totalSales', 'lineItems'));
     }
     public function grn(Request $request)
     {
         $user = auth()->user();
-        // User's allowed company codes
-        $userCompanyCodes = $user->company_codes ?? [];
-        if (is_string($userCompanyCodes)) {
-            $userCompanyCodes = json_decode($userCompanyCodes, true) ?? [];
-        }
-        $userCompanyCodes = array_filter(array_map('strval', $userCompanyCodes));
+        // User's allowed company codes        
+        $activeCode = session('active_company');
 
         $vendor = $user->vendor;
-        $vendorProductIds = $vendor->products()->pluck('id')->toArray();
+        $vendorProductIds = $vendor->products()
+        ->when(!$user->isAdmin() && !empty($activeCode), fn($q) => $q->where('company_code', $activeCode))
+        ->pluck('id')->toArray();
 
         // Get consignment IDs for this vendor
-        $consignmentIds = Consignment::where('vendor_id', $vendor->id)->pluck('id');
+        $consignmentIds = Consignment::where('vendor_id', $vendor->id)
+            ->when(!$user->isAdmin() && !empty($activeCode), fn($q) => $q->where('company_code', $activeCode))
+            ->pluck('id');
 
         // Get shipment IDs linked to those consignments
         $shipmentIds = \DB::table('shipment_consignments')
@@ -2124,8 +2002,8 @@ exit;
 
         $grns = \App\Models\Grn::with('shipment', 'warehouse', 'items.product')
             ->whereIn('shipment_id', $shipmentIds)
-            ->when(!$user->isAdmin() && !empty($userCompanyCodes), function ($query) use ($userCompanyCodes) {
-                $query->whereIn('company_code', $userCompanyCodes);
+            ->when(!$user->isAdmin() && !empty($activeCode), function ($query) use ($activeCode) {
+                $query->where('company_code', $activeCode);
             })
             ->latest('receipt_date')
             ->paginate(20);
@@ -2167,9 +2045,12 @@ exit;
     public function showGrn(\App\Models\Grn $grn)
     {
         $vendor = auth()->user()->vendor;
+        $activeCode = session('active_company');
 
         // Verify this GRN belongs to this vendor's consignments
-        $consignmentIds = Consignment::where('vendor_id', $vendor->id)->pluck('id');
+        $consignmentIds = Consignment::where('vendor_id', $vendor->id)
+            ->when(!$user->isAdmin() && !empty($activeCode), fn($q) => $q->where('company_code', $activeCode))
+            ->pluck('id');
         $shipmentIds = \DB::table('shipment_consignments')
             ->whereIn('consignment_id', $consignmentIds)
             ->pluck('shipment_id');
@@ -2181,7 +2062,9 @@ exit;
         $grn->load('shipment', 'warehouse', 'uploader', 'items.product', 'items.consignment');
 
         // Filter items to show only this vendor's products
-        $vendorProductIds = $vendor->products()->pluck('id')->toArray();
+        $vendorProductIds = $vendor->products()
+            ->when(!$user->isAdmin() && !empty($activeCode), fn($q) => $q->where('company_code', $activeCode))
+            ->pluck('id')->toArray();
         $vendorItems = $grn->items->filter(fn($item) => in_array($item->product_id, $vendorProductIds));
 
         $itemStats = [
@@ -2198,18 +2081,14 @@ exit;
     public function rateCard()
     {
         $user = auth()->user();
-        // User's allowed company codes
-        $userCompanyCodes = $user->company_codes ?? [];
-        if (is_string($userCompanyCodes)) {
-            $userCompanyCodes = json_decode($userCompanyCodes, true) ?? [];
-        }
-        $userCompanyCodes = array_filter(array_map('strval', $userCompanyCodes));
+   
+        $activeCode = session('active_company');
         $vendor = $user->vendor;
 
         $rateCard = \App\Models\VendorRateCard::where('vendor_id', $vendor->id)
             ->where('status', 'approved')
-            ->when(!$user->isAdmin() && !empty($userCompanyCodes), function ($query) use ($userCompanyCodes) {
-                $query->whereIn('company_code', $userCompanyCodes);
+            ->when(!$user->isAdmin() && !empty($activeCode), function ($query) use ($activeCode) {
+                $query->where('company_code', $activeCode);
             })
             ->orderByDesc('version')
             ->first();
@@ -2217,8 +2096,8 @@ exit;
         // Get all versions for history
         $history = \App\Models\VendorRateCard::where('vendor_id', $vendor->id)
             ->with('warehouse')
-            ->when(!$user->isAdmin() && !empty($userCompanyCodes), function ($query) use ($userCompanyCodes) {
-                $query->whereIn('company_code', $userCompanyCodes);
+            ->when(!$user->isAdmin() && !empty($activeCode), function ($query) use ($activeCode) {
+                $query->where('company_code', $activeCode);
             })
             ->orderByDesc('version')
             ->get();
@@ -2226,11 +2105,13 @@ exit;
         $currency = match ($vendor->company_code ?? '2100') {
             '2000' => 'INR',
             '2200' => 'EUR',
+            '2400' => 'GBP',
             default => 'USD',
         };
         $sym = match ($currency) {
             'INR' => '₹',
             'EUR' => '€',
+            'GBP' => '£',
             default => '$',
         };
         $warehouses = \App\Models\Warehouse::active()->get();
@@ -2239,20 +2120,15 @@ exit;
     public function inventory(Request $request)
     {
         $user = auth()->user();
-        // User's allowed company codes
-        $userCompanyCodes = $user->company_codes ?? [];
-        if (is_string($userCompanyCodes)) {
-            $userCompanyCodes = json_decode($userCompanyCodes, true) ?? [];
-        }
-        $userCompanyCodes = array_filter(array_map('strval', $userCompanyCodes));
+        $activeCode = session('active_company');
 
         $vendor = $user->vendor;
 
         $inventory = \App\Models\Inventory::with('product', 'warehouse', 'grn')
             ->whereHas('product', fn($q) => $q->where('vendor_id', $vendor->id))
             ->when($request->warehouse_id, fn($q, $v) => $q->where('warehouse_id', $v))
-            ->when(!$user->isAdmin() && !empty($userCompanyCodes), function ($query) use ($userCompanyCodes) {
-                $query->whereIn('company_code', $userCompanyCodes);
+            ->when(!$user->isAdmin() && !empty($activeCode), function ($query) use ($activeCode) {
+                $query->where('company_code', $activeCode);
             })
             ->latest('received_date')
             ->paginate(30);
@@ -2273,17 +2149,39 @@ exit;
     public function chargebacks()
     {
         $vendor = auth()->user()->vendor;
-        $chargebacks = Chargeback::where('vendor_id', $vendor->id)->with('order.salesChannel')->latest()->paginate(20);
+        $activeCode = session('active_company');
+
+        $chargebacks = Chargeback::where('vendor_id', $vendor->id)->with('order.salesChannel')
+        ->when(!$vendor->user->isAdmin() && !empty($activeCode), function ($query) use ($activeCode) {
+            $query->whereHas('order.salesChannel', fn($q) => $q->where('company_code', $activeCode));
+        })
+        ->latest()->paginate(20);
         return view('vendor.chargebacks.index', compact('chargebacks', 'vendor'));
     }
 
     public function payouts()
     {
         $vendor = auth()->user()->vendor;
-        $payouts = VendorPayout::where('vendor_id', $vendor->id)->orderByDesc('payout_year')->orderByDesc('payout_month')->paginate(12);
-        $warehouseCharges = WarehouseCharge::where('vendor_id', $vendor->id)->latest()->take(10)->get();
-        $vendorMonthlyCharges = VendorMonthlyCharge::where('vendor_id', $vendor->id)->latest()->take(10)->get();
+        $activeCode = session('active_company');
 
+        $payouts = VendorPayout::where('vendor_id', $vendor->id)
+        ->when(!$vendor->user->isAdmin() && !empty($activeCode), function ($query) use ($activeCode) {
+            $query->where('company_code', $activeCode);
+        })
+        ->orderByDesc('payout_year')->orderByDesc('payout_month')->paginate(12);
+
+        $warehouseCharges = WarehouseCharge::where('vendor_id', $vendor->id)
+        ->when(!$vendor->user->isAdmin() && !empty($activeCode), function ($query) use ($activeCode) {
+            $query->where('company_code', $activeCode);
+        })
+        ->latest()->take(10)->get();
+
+        $vendorMonthlyCharges = VendorMonthlyCharge::where('vendor_id', $vendor->id)
+        ->when(!$vendor->user->isAdmin() && !empty($activeCode), function ($query) use ($activeCode) {
+            $query->where('company_code', $activeCode);
+        })
+        ->latest()->take(10)->get();
+ 
         return view('vendor.payouts.index', compact('payouts', 'vendor', 'warehouseCharges', 'vendorMonthlyCharges'));
     }
 
@@ -2376,21 +2274,38 @@ exit;
     public function inspectionReports(Request $request)
     {
         $vendor = auth()->user()->vendor;
+        
+        $activeCode = session('active_company');
 
         $reports = \App\Models\InspectionReport::whereHas('consignment', fn($q) => $q->where('vendor_id', $vendor->id))
             ->with('consignment', 'uploader')
+            ->when($activeCode, fn($q) => $q->whereHas('consignment', fn($cq) => $cq->where('company_code', $activeCode)))
             ->when($request->type, fn($q, $v) => $q->where('inspection_type', $v))
             ->when($request->result, fn($q, $v) => $q->where('result', $v))
             ->when($request->consignment_id, fn($q, $v) => $q->where('consignment_id', $v))
             ->latest()->paginate(20);
 
-        $consignments = $vendor->consignments()->latest()->get();
+        $consignments = $vendor->consignments()
+            ->when($activeCode, function ($q) use ($activeCode) {
+                $q->where('company_code', $activeCode);
+            })
+            ->latest()->get();
 
         $stats = [
-            'total'    => \App\Models\InspectionReport::whereHas('consignment', fn($q) => $q->where('vendor_id', $vendor->id))->count(),
-            'passed'   => \App\Models\InspectionReport::whereHas('consignment', fn($q) => $q->where('vendor_id', $vendor->id))->where('result', 'passed')->count(),
-            'failed'   => \App\Models\InspectionReport::whereHas('consignment', fn($q) => $q->where('vendor_id', $vendor->id))->where('result', 'failed')->count(),
-            'conditional' => \App\Models\InspectionReport::whereHas('consignment', fn($q) => $q->where('vendor_id', $vendor->id))->where('result', 'conditional')->count(),
+            'total'    => \App\Models\InspectionReport::whereHas('consignment', fn($q) => $q->where('vendor_id', $vendor->id))
+            ->when($activeCode, fn($q) => $q->whereHas('consignment', fn($cq) => $cq->where('company_code', $activeCode)))
+            ->count(),
+            'passed'   => \App\Models\InspectionReport::whereHas('consignment', fn($q) => $q->where('vendor_id', $vendor->id))->where('result', 'passed')
+            ->when($activeCode, fn($q) => $q->whereHas('consignment', fn($cq) => $cq->where('company_code', $activeCode)))
+            ->count(),
+           
+            'failed'   => \App\Models\InspectionReport::whereHas('consignment', fn($q) => $q->where('vendor_id', $vendor->id))->where('result', 'failed')
+            ->when($activeCode, fn($q) => $q->whereHas('consignment', fn($cq) => $cq->where('company_code', $activeCode)))
+            ->count(),
+          
+            'conditional' => \App\Models\InspectionReport::whereHas('consignment', fn($q) => $q->where('vendor_id', $vendor->id))->where('result', 'conditional')
+            ->when($activeCode, fn($q) => $q->whereHas('consignment', fn($cq) => $cq->where('company_code', $activeCode)))
+            ->count(),
         ];
 
         return view('vendor.inspections.index', compact('reports', 'consignments', 'stats', 'vendor'));

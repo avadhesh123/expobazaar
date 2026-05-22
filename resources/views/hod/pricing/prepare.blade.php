@@ -5,9 +5,9 @@
 @section('content')
 <div style="display:flex;gap:.5rem;margin-bottom:1.25rem;flex-wrap:wrap;">
     <a href="{{ route('hod.asn-list') }}" class="btn btn-outline btn-sm"><i class="fas fa-arrow-left"></i> ASN List</a>
-    <a href="{{ route('hod.pricing.download', $asn) }}" class="btn btn-secondary btn-sm"><i class="fas fa-download"></i> Download Pricing CSV</a>
-    <a href="{{ route('hod.pricing.last-mile-template', $asn) }}" class="btn btn-outline btn-sm"><i class="fas fa-file-csv"></i> Last Mile Template</a>
-    <button type="button" class="btn btn-secondary btn-sm" onclick="document.getElementById('lmUploadPanel').style.display=document.getElementById('lmUploadPanel').style.display==='none'?'block':'none'"><i class="fas fa-upload"></i> Upload Last Mile CSV</button>
+    <!-- <a href="{{ route('hod.pricing.download', $asn) }}" class="btn btn-secondary btn-sm"><i class="fas fa-download"></i> Download Pricing CSV</a> -->
+    <a href="{{ route('hod.pricing.pricing-input-template', $asn) }}" class="btn btn-outline btn-sm"><i class="fas fa-file-csv"></i> Pricing Input Template</a>
+    <button type="button" class="btn btn-secondary btn-sm" onclick="document.getElementById('lmUploadPanel').style.display=document.getElementById('lmUploadPanel').style.display==='none'?'block':'none'"><i class="fas fa-upload"></i> Upload Pricing Input CSV</button>
     <a href="{{ route('hod.pricing.status', $asn) }}" class="btn btn-outline btn-sm" style="margin-left:auto;"><i class="fas fa-chart-bar"></i> Pricing Status</a>
 </div>
 
@@ -15,16 +15,16 @@
 <div id="lmUploadPanel" style="display:none;margin-bottom:1.25rem;">
     <div class="card" style="border-color:#e8a838;">
         <div class="card-body" style="padding:.85rem 1.4rem;">
-            <div style="font-size:.88rem;font-weight:700;color:#854d0e;margin-bottom:.5rem;"><i class="fas fa-upload"></i> Bulk Update Last Mile from CSV</div>
+            <div style="font-size:.88rem;font-weight:700;color:#854d0e;margin-bottom:.5rem;"><i class="fas fa-upload"></i> Bulk Update Pricing from CSV</div>
             <div style="font-size:.72rem;color:#64748b;margin-bottom:.5rem;">
-                <strong>Steps:</strong> 1) Download the <a href="{{ route('hod.pricing.last-mile-template', $asn) }}" style="color:#1e40af;">Last Mile Template</a> →
-                2) Fill the "Last Mile" column for each SKU → 3) Upload the file below.
-                <br>CSV must have columns: <strong>SKU</strong> and <strong>Last Mile</strong>. SKUs are matched case-insensitively.
+                <strong>Steps:</strong> 1) Download the <a href="{{ route('hod.pricing.pricing-input-template', $asn) }}" style="color:#1e40af;">Pricing Input Template</a> →
+                2) Fill the relevant columns for each SKU → 3) Upload the file below.
+                <br>CSV must have columns: >SKU,Inward,Fulfillment and Storage. SKUs are matched case-insensitively.
             </div>
-            <form method="POST" action="{{ route('hod.pricing.last-mile-upload', $asn) }}" enctype="multipart/form-data" style="display:flex;gap:.6rem;align-items:flex-end;">
+            <form method="POST" action="{{ route('hod.pricing.pricing-input-upload', $asn) }}" enctype="multipart/form-data" style="display:flex;gap:.6rem;align-items:flex-end;">
                 @csrf
-                <div><label style="font-size:.68rem;font-weight:600;color:#854d0e;">CSV / XLSX File *</label><input type="file" name="last_mile_file" required accept=".csv,.xlsx,.txt" style="font-size:.78rem;"></div>
-                <button type="submit" class="btn btn-secondary btn-sm" onclick="return confirm('Upload and update Last Mile values for all matching SKUs?')"><i class="fas fa-upload"></i> Upload & Update</button>
+                <div><label style="font-size:.68rem;font-weight:600;color:#854d0e;">CSV / XLSX File *</label><input type="file" name="pricing_input_file" required accept=".csv,.xlsx,.txt" style="font-size:.78rem;"></div>
+                <button type="submit" class="btn btn-secondary btn-sm" onclick="return confirm('Upload and update Pricing values for all matching SKUs?')"><i class="fas fa-upload"></i> Upload & Update</button>
                 <button type="button" class="btn btn-outline btn-sm" onclick="document.getElementById('lmUploadPanel').style.display='none'">Cancel</button>
             </form>
         </div>
@@ -38,7 +38,7 @@
             <h3><i class="fas fa-dollar-sign" style="margin-right:.5rem;color:#e8a838;"></i> {{ $asn->asn_number }} — Pricing Sheet</h3>
             <div style="display:flex;gap:.4rem;">
                 <span style="font-size:.78rem;color:#64748b;">{{ $items->count() }} items · {{ $channels->count() }} channels</span>
-                <button type="submit" class="btn btn-primary btn-sm" onclick="return confirm('Submit pricing for Finance review?')"><i class="fas fa-save"></i> Save Pricing</button>
+                <button type="submit" class="btn btn-primary btn-sm" onclick="return confirm('Submit pricing for Cataloging ?')"><i class="fas fa-save"></i> Save Pricing</button>
             </div>
         </div>
         <div class="card-body" style="padding:0;overflow-x:auto;">
@@ -49,9 +49,14 @@
                         <th style="min-width:80px;">SAP</th>
                         <th style="min-width:130px;">Vendor Name</th>
                         <th style="min-width:50px;text-align:center;">Qty</th>
-                        <th style="min-width:70px;text-align:center;">FOB</th>
-                        <th style="min-width:70px;text-align:center;">WSP</th>
-                        <th style="min-width:80px;text-align:center;background:#fff7ed;">Last Mile</th>
+                        <th style="min-width:60px;text-align:center;">FOB</th>
+                        <th style="min-width:60px;text-align:center;">WSP</th>
+                        <th style="min-width:60px;text-align:center;">Inward</th>
+                        <th style="min-width:60px;text-align:center;">Fulfillment</th>
+                        <th style="min-width:60px;text-align:center;">Storage</th>
+                        <th style="min-width:60px;text-align:center;">Ad Budget(%)</th>
+                         <th style="min-width:50px;text-align:center;">Final WSP</th>
+                         <th style="min-width:70px;text-align:center;background:#fff7ed;">Last Mile</th>
                         <th style="min-width:90px;text-align:center;background:#f0fdf4;border-right:2px solid #bbf7d0;">Retail Price</th>
                         @foreach($channels as $ch)
                         @php $factor = floatval($channelFactors[$ch->id]['factor'] ?? 1.0); @endphp
@@ -68,13 +73,18 @@
                         @endforeach
                     </tr>
                 </thead>
-                <tbody>
+                <tbody>                    
                     @foreach($items as $idx => $item)
                     @php
                     $ex = $item['existing'];
                     $wsp = floatval($item['wsp']);
                     $lastMile = $ex ? floatval($ex->last_mile ?? 0) : 0;
                     $retailPrice = $wsp + $lastMile;
+                    $inward = $ex ? floatval($ex->inward ?? 0) : 0;
+                    $fulfillment =  $ex ? floatval($ex->fulfillment ?? 0) : 0;
+                    $storage = $ex ? floatval($ex->storage ?? 0) : 0;
+                    $adBudget = $ex ? floatval($ex->ad_budget ?? 0) : 0;
+                    $finalWsp = $wsp + $inward + $fulfillment + $storage + $adBudget;
                     @endphp
                     <tr>
                         <td style="font-family:monospace;font-weight:600;font-size:.78rem;">
@@ -82,7 +92,7 @@
                             <input type="hidden" name="pricing[{{ $idx }}][product_id]" value="{{ $item['product_id'] }}">
                             <input type="hidden" name="pricing[{{ $idx }}][fob]" value="{{ $item['fob'] }}">
                             <input type="hidden" name="pricing[{{ $idx }}][wsp]" value="{{ $wsp }}">
-                        </td>
+                         </td>
                         <td style="font-family:monospace;font-size:.72rem;color:#64748b;">{{ $item['sap_code'] ?: '—' }}</td>
                         <td style="font-size:.75rem;">{{ $item['vendor_name'] }}</td>
                         <td style="text-align:center;font-weight:600;">{{ $item['quantity'] }}</td>
@@ -90,25 +100,73 @@
                         <td style="text-align:right;font-family:monospace;font-weight:600;">${{ number_format($wsp, 2) }}</td>
                         <td style="text-align:right;background:#fff7ed;">
                             <input type="number" step="0.01" min="0"
+                                name="pricing[{{ $idx }}][inward]"
+                                value="{{ $inward ?: '' }}"
+                                placeholder="0.00"
+                                data-idx="{{ $idx }}"
+                                data-wsp="{{ $wsp }}"
+                                onchange="updateRow({{ $idx }})"
+                                oninput="updateRow({{ $idx }})"
+                                style="width:70px;padding:.2rem .3rem;border:1px solid #fed7aa;border-radius:4px;font-size:.78rem;font-family:monospace;text-align:right;background:#fff;">
+                        </td>
+                         <td style="text-align:right;background:#fff7ed;">
+                            <input type="number" step="0.01" min="0"
+                                name="pricing[{{ $idx }}][fulfillment]"
+                                value="{{ $fulfillment ?: '' }}"
+                                placeholder="0.00"
+                                data-idx="{{ $idx }}"
+                                data-wsp="{{ $wsp }}"
+                                onchange="updateRow({{ $idx }})"
+                                oninput="updateRow({{ $idx }})"
+                                style="width:70px;padding:.2rem .3rem;border:1px solid #fed7aa;border-radius:4px;font-size:.78rem;font-family:monospace;text-align:right;background:#fff;">
+                        </td>
+                         <td style="text-align:right;background:#fff7ed;">
+                            <input type="number" step="0.01" min="0"
+                                name="pricing[{{ $idx }}][storage]"
+                                value="{{ $storage ?: '' }}"
+                                placeholder="0.00"
+                                data-idx="{{ $idx }}"
+                                data-wsp="{{ $wsp }}"
+                                onchange="updateRow({{ $idx }})"
+                                oninput="updateRow({{ $idx }})"
+                                style="width:70px;padding:.2rem .3rem;border:1px solid #fed7aa;border-radius:4px;font-size:.78rem;font-family:monospace;text-align:right;background:#fff;">
+                        </td>
+                         <td style="text-align:right;background:#fff7ed;">
+                            <input type="number" step="0.01" min="0"
+                                name="pricing[{{ $idx }}][ad_budget]"
+                                value="{{ $adBudget ?: '' }}"
+                                placeholder="0.00"
+                                data-idx="{{ $idx }}"
+                                data-wsp="{{ $wsp }}"
+                                onchange="updateRow({{ $idx }})"
+                                oninput="updateRow({{ $idx }})"
+                                style="width:70px;padding:.2rem .3rem;border:1px solid #fed7aa;border-radius:4px;font-size:.78rem;font-family:monospace;text-align:right;background:#fff;">
+                        </td> 
+                        <td><span style="font-weight:700;" id="final-wsp-label-{{ $idx }}">0.00</span></td>
+                        <td style="text-align:right;background:#fff7ed;">
+                            <input type="number" step="0.01" min="0"
                                 name="pricing[{{ $idx }}][last_mile]"
                                 value="{{ $lastMile ?: '' }}"
                                 placeholder="0.00"
                                 data-idx="{{ $idx }}"
                                 data-wsp="{{ $wsp }}"
-                                onchange="updateRow({{ $idx }}, {{ $wsp }})"
-                                oninput="updateRow({{ $idx }}, {{ $wsp }})"
+                                onchange="updateRow({{ $idx }})"
+                                oninput="updateRow({{ $idx }})"
                                 style="width:70px;padding:.2rem .3rem;border:1px solid #fed7aa;border-radius:4px;font-size:.78rem;font-family:monospace;text-align:right;background:#fff;">
                         </td>
+                        
                         <td style="text-align:right;font-family:monospace;font-weight:700;color:#166534;background:#f0fdf4;border-right:2px solid #bbf7d0;" id="retail-{{ $idx }}">
                             ${{ number_format($retailPrice, 2) }}
+                            <input type="hidden" name="pricing[{{ $idx }}][final_wsp]" id="final_wsp-val-{{ $idx }}" value="{{ $finalWsp }}">
                             <input type="hidden" name="pricing[{{ $idx }}][retail_price]" id="retail-val-{{ $idx }}" value="{{ $retailPrice }}">
                         </td>
                         @foreach($channels as $ch)
                         @php
                         $factor = floatval($channelFactors[$ch->id]['factor'] ?? 1.0);
+                        $channelType[$ch->id] = $ch->type; // Store channel type for later use in JS
                         $channelPrice = round($wsp * $factor, 2);
                         @endphp
-                        <td style="text-align:right;font-family:monospace;font-size:.78rem;" id="ch-{{ $idx }}-{{ $ch->id }}">
+                        <td style="text-align:right;font-family:monospace;font-size:.78rem;" id="ch-{{ $idx }}-{{ $ch->id }}">AAAA
                             ${{ number_format($channelPrice, 2) }}
                             <input type="hidden" name="pricing[{{ $idx }}][channels][{{ $ch->id }}][sales_channel_id]" value="{{ $ch->id }}">
                             <input type="hidden" name="pricing[{{ $idx }}][channels][{{ $ch->id }}][pricing_factor]" id="factor-hidden-{{ $idx }}-{{ $ch->id }}" value="{{ $factor }}">
@@ -132,122 +190,119 @@
     <span style="padding:.2rem .5rem;background:#f0fdf4;border-radius:4px;">🟢 Retail Price = WSP + Last Mile</span>
     <span style="padding:.2rem .5rem;background:#fefce8;border-radius:4px;">🟡 Channel Price = WSP × Factor (editable in header, auto-saved)</span>
 </div>
-
 <script>
-   
-const channelFactors = @json(
-    collect($channelFactors ?? [])
-            ->mapWithKeys(function ($item, $key) {
-                return [$key => $item['factor'] ?? $item['pricing_factor'] ?? 1.0];
-            })
-);
+    // Global Data
+    const channelFactors = @json(
+        collect($channelFactors ?? [])
+            ->mapWithKeys(fn($item, $key) => [$key => ($item['factor'] ?? $item['pricing_factor'] ?? 1.0)])
+    );
 
-//console.log('Raw $channelFactors from PHP:', @json($channelFactors));
+    const channelTypes = @json(
+        collect($channelFactors ?? [])
+            ->mapWithKeys(fn($item, $key) => [$key => $item['type'] ?? 'default'])
+    );
 
-//console.log('Channel Factors (Fixed):', channelFactors);
+    const channelCommissions = @json(
+        collect($channelFactors ?? [])
+            ->mapWithKeys(fn($item, $key) => [$key => ($item['commission'] ?? 0)])
+    );
 
-    // Total Rows Count
-    var totalRows = {{ $items->count() }};
-    var csrfToken = '{{ csrf_token() }}';
-    var factorSaveUrl = "{{ route('hod.pricing.update-channel-factor', $asn) }}";
+    const totalRows = {{ $items->count() }};
+    const csrfToken = '{{ csrf_token() }}';
+    const factorSaveUrl = "{{ route('hod.pricing.update-channel-factor', $asn) }}";
 
-    function updateRow(idx, wsp) {
-        var lastMile = parseFloat(document.querySelector('[name="pricing[' + idx + '][last_mile]"]').value) || 0;
-        var retail = (parseFloat(wsp) + parseFloat(lastMile)).toFixed(2);
-        document.getElementById('retail-' + idx).innerHTML =
-            '$' + retail + '<input type="hidden" name="pricing[' + idx + '][retail_price]" id="retail-val-' + idx + '" value="' + retail + '">';
-        Object.keys(channelFactors).forEach(function(chId) {
-            rebuildChannelCell(idx, chId, wsp);
+    function updateRow(idx) {
+        const wsp = parseFloat(document.querySelector(`[name="pricing[${idx}][wsp]"]`)?.value) || 0;
+        const lastMile = parseFloat(document.querySelector(`[name="pricing[${idx}][last_mile]"]`)?.value) || 0;
+        const inward = parseFloat(document.querySelector(`[name="pricing[${idx}][inward]"]`)?.value) || 0;
+        const fulfillment = parseFloat(document.querySelector(`[name="pricing[${idx}][fulfillment]"]`)?.value) || 0;
+        const storage = parseFloat(document.querySelector(`[name="pricing[${idx}][storage]"]`)?.value) || 0;
+        const adBudget = parseFloat(document.querySelector(`[name="pricing[${idx}][ad_budget]"]`)?.value) || 0;
+
+        // Final WSP Calculation
+        const divisor = 1 - (adBudget / 100);
+        let finalWsp = (wsp + inward + fulfillment + storage) / (divisor > 0 ? divisor : 1);
+        finalWsp = parseFloat(finalWsp.toFixed(2));
+
+        // Update Final WSP
+        const finalWspEl = document.getElementById(`final-wsp-label-${idx}`);
+        if (finalWspEl) finalWspEl.textContent = finalWsp.toFixed(2);
+
+        // Retail Price
+        const retail = (finalWsp + lastMile).toFixed(2);
+        const retailEl = document.getElementById(`retail-${idx}`);
+        if (retailEl) {
+            retailEl.innerHTML = `${retail}<input type="hidden" name="pricing[${idx}][retail_price]" value="${retail}"><input type="hidden" name="pricing[${idx}][final_wsp]" value="${finalWsp}">`;
+        }
+            console.log(`Row ${idx} updated: Final WSP = ${finalWsp}, Retail = ${retail}`);
+        // Update Channel Prices
+        Object.keys(channelFactors).forEach(chId => {
+            rebuildChannelCell(idx, parseInt(chId), finalWsp, retail);
         });
     }
 
-    function rebuildChannelCell(idx, chId, wsp) {
-        var lastMile = parseFloat(document.querySelector('[name="pricing[' + idx + '][last_mile]"]').value) || 0;
-        var factor = channelFactors[chId];
-        var chPrice = ((wsp * factor)+lastMile).toFixed(2);
-        var el = document.getElementById('ch-' + idx + '-' + chId);
-        if (el) {
+    function rebuildChannelCell(idx, chId, finalWsp, retail) {
+        const commission = channelCommissions[chId] || 0;
+        
+        const factor = document.querySelector(`[data-channel-id="${chId}"]`)?.value;
 
-            console.log('Updating row', idx, 'WSP:', wsp, 'factor:', factor, 'Channel Price:', parseFloat(chPrice).toFixed(2));
+        const wsp = parseFloat(document.querySelector(`[name="pricing[${idx}][wsp]"]`)?.value) || 0;
 
-            el.innerHTML = '$' + chPrice +
-                '<input type="hidden" name="pricing[' + idx + '][channels][' + chId + '][sales_channel_id]" value="' + chId + '">' +
-                '<input type="hidden" name="pricing[' + idx + '][channels][' + chId + '][pricing_factor]" id="factor-hidden-' + idx + '-' + chId + '" value="' + factor + '">' +
-                '<input type="hidden" name="pricing[' + idx + '][channels][' + chId + '][channel_price]" id="ch-val-' + idx + '-' + chId + '" value="' + chPrice + '">';
+        let price = (channelTypes[chId] === 'b2b') 
+            ? finalWsp / (1 - (commission / 100)) 
+            : retail / (1 - (commission / 100));
+
+       // chPrice = parseFloat(chPrice.toFixed(2));
+        
+        let chPrice = (price * factor).toFixed(2);
+        const cell = document.getElementById(`ch-${idx}-${chId}`);
+        if (cell) {
+            console.log(`rebuildChannelCell ${idx}, Channel ${chId}: Price = ${chPrice} factor = ${factor} commission = ${commission} type = ${channelTypes[chId]}`);
+            cell.innerHTML = `$${chPrice}` +
+                `<input type="hidden" name="pricing[${idx}][channels][${chId}][sales_channel_id]" value="${chId}">` +
+                `<input type="hidden" name="pricing[${idx}][channels][${chId}][pricing_factor]" value="${channelFactors[chId]}">` +
+                `<input type="hidden" name="pricing[${idx}][channels][${chId}][channel_price]" value="${chPrice}">`;
         }
     }
 
     function recalcChannel(chId, newFactor) {
-        channelFactors[chId] = newFactor;
-        for (var idx = 0; idx < totalRows; idx++) {
-            var wspInput = document.querySelector('[name="pricing[' + idx + '][wsp]"]');
-            if (!wspInput) continue;
-            rebuildChannelCell(idx, chId, parseFloat(wspInput.value) || 0);
+        channelFactors[chId] = parseFloat(newFactor);
+
+        for (let idx = 0; idx < totalRows; idx++) {
+            updateRow(idx);
         }
     }
 
-    // ── Debounced AJAX auto-save for factor inputs ──
-    var factorTimers = {};
+    // Factor Input Handler
+    let factorTimers = {};
 
-    document.querySelectorAll('.factor-input').forEach(function(input) {
+    document.querySelectorAll('.factor-input').forEach(input => {
         input.addEventListener('input', function() {
-            var chId = this.getAttribute('data-channel-id');
-            var newFactor = parseFloat(this.value);
+            const chId = this.getAttribute('data-channel-id');
+            const newFactor = parseFloat(this.value);
+
             if (!newFactor || newFactor <= 0) return;
 
-            // Instantly recalculate all rows
             recalcChannel(chId, newFactor);
 
-            var statusEl = document.querySelector('.factor-status-' + chId);
-            if (statusEl) {
-                statusEl.textContent = 'saving...';
-                statusEl.style.color = '#e8a838';
-            }
-
-            // Debounce AJAX save (500ms after last keystroke)
+            // Debounced Save
             clearTimeout(factorTimers[chId]);
-            factorTimers[chId] = setTimeout(function() {
+            factorTimers[chId] = setTimeout(() => {
                 fetch(factorSaveUrl, {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                            'X-CSRF-TOKEN': csrfToken,
-                            'Accept': 'application/json'
-                        },
-                        body: JSON.stringify({
-                            channel_id: chId,
-                            factor: newFactor
-                        })
-                    })
-                    .then(function(r) {
-                        return r.json();
-                    })
-                    .then(function(data) {
-                        if (statusEl) {
-                            if (data.success) {
-                                statusEl.textContent = '✓ saved';
-                                statusEl.style.color = '#16a34a';
-                                input.style.borderColor = '#86efac';
-                                input.style.background = '#f0fdf4';
-                                setTimeout(function() {
-                                    statusEl.textContent = '';
-                                    input.style.borderColor = '#d1d5db';
-                                    input.style.background = '#fefce8';
-                                }, 2000);
-                            } else {
-                                statusEl.textContent = '✗ failed';
-                                statusEl.style.color = '#dc2626';
-                            }
-                        }
-                    })
-                    .catch(function() {
-                        if (statusEl) {
-                            statusEl.textContent = '✗ error';
-                            statusEl.style.color = '#dc2626';
-                        }
-                    });
-            }, 500);
+                    method: 'POST',
+                    headers: { 
+                        'Content-Type': 'application/json',
+                        'X-CSRF-TOKEN': csrfToken 
+                    },
+                    body: JSON.stringify({ channel_id: chId, factor: newFactor })
+                });
+            }, 600);
         });
     });
+
+    // Initialize on load
+    for (let i = 0; i < totalRows; i++) {
+        updateRow(i);
+    }
 </script>
 @endsection

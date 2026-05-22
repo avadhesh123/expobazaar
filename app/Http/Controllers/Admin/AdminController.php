@@ -92,7 +92,7 @@ class AdminController extends Controller
             'user_type'       => 'required|in:internal,admin,external',
             'department'      => 'nullable|required_if:user_type,internal|in:sourcing,logistics,cataloguing,sales,finance,hod',
             'company_codes'   => 'required|array|min:1',
-            'company_codes.*' => 'in:2000,2100,2200',
+            'company_codes.*' => 'in:2100,2200,2400',
             'roles'           => 'nullable|array',
             'roles.*'         => 'exists:roles,id',
             'status'          => 'nullable|in:active,inactive',
@@ -516,24 +516,58 @@ class AdminController extends Controller
         return back()->with('success', 'Category created.');
     }
 
-    public function salesChannels()
+    public function salesChannels(Request $request)
     {
-        $channels = SalesChannel::all();
-        return view('admin.masters.sales-channels', compact('channels'));
+        $channels = SalesChannel::query()
+            ->when($request->company_code, function ($q, $code) {
+                $q->whereJsonContains('company_codes', $code);
+            })
+            ->when($request->status, function ($q, $status) {
+                $q->where('is_active', $status === 'active');
+            })
+            ->orderBy('name')
+            ->paginate(20);
+
+        // For dropdown in filter
+        $companies = ['2000', '2100', '2200']; // or fetch dynamically if needed
+
+        return view('admin.masters.sales-channels', compact('channels', 'companies'));
     }
 
     public function storeSalesChannel(Request $request)
     {
-        $request->validate(['name' => 'required|string', 'type' => 'required|in:marketplace,offline,direct']);
+        $request->validate(['name' => 'required|string', 'type' => 'required|in:b2b,b2c', 'division' => 'required|in:marketplace,offline,direct']);
         SalesChannel::create([
             'name'          => $request->name,
             'slug'          => Str::slug($request->name),
             'type'          => $request->type,
+            'division'      => $request->division,
+            'channel_commission' => $request->channel_commission,
             'platform_url'  => $request->platform_url,
             'company_codes' => $request->company_codes,
-            'is_active'     => true,
+            'is_active'     => true
         ]);
         return back()->with('success', 'Sales channel created.');
+    }
+    public function updateSalesChannel(Request $request, SalesChannel $salesChannel)
+    {
+        $request->validate([
+            'name'               => 'required|string',
+            'type'               => 'required|in:b2b,b2c',
+            'division'           => 'required|in:marketplace,offline,direct',
+            'channel_commission' => 'nullable|numeric|min:0',
+        ]);
+        $salesChannel->update([
+            'name'               => $request->name,
+            'slug'               => Str::slug($request->name),
+            'type'               => $request->type,
+            'division'           => $request->division,
+            'platform_url'       => $request->platform_url,
+            'channel_commission' => $request->channel_commission,
+            'company_codes'      => $request->company_codes,
+            'is_active'          => $request->has('is_active'),
+        ]);
+        return back()->with('success', "Sales channel '{$salesChannel->name}' updated.");
     }
 
     public function warehouses()
@@ -601,5 +635,59 @@ class AdminController extends Controller
         ];
 
         return view('admin.activity-log', compact('logs', 'modules', 'actions', 'users', 'stats'));
+    }
+        // =====================================================================
+    //  USER PROFILE (Self Management)
+    // =====================================================================
+
+    /**
+     * Show Logged-in User Profile
+     */
+    public function profile()
+    {
+        $user = auth()->user()->load('roles.permissions');
+        return view('admin.profile.show', compact('user'));
+    }
+
+    /**
+     * Show Edit Profile Form
+     */
+    public function editProfile()
+    {
+        $user = auth()->user();
+        return view('admin.profile.edit', compact('user'));
+    }
+
+    /**
+     * Update User Profile
+     */
+    public function updateProfile(Request $request)
+    {
+        $user = auth()->user();
+
+        $validated = $request->validate([
+            'name'                  => 'required|string|max:255',
+            'email'                 => 'required|email|max:255|unique:users,email,' . $user->id,
+            'phone'                 => 'nullable|string|max:20',
+            'current_password'      => 'nullable|required_with:password|current_password',
+            'password'              => 'nullable|string|min:8|confirmed',
+        ]);
+
+        $user->update([
+            'name'  => $validated['name'],
+            'email' => $validated['email'],
+            'phone' => $validated['phone'] ?? $user->phone,
+        ]);
+
+        if (!empty($validated['password'])) {
+            $user->update([
+                'password' => Hash::make($validated['password'])
+            ]);
+        }
+
+        \App\Models\ActivityLog::log('profile_updated', 'users', $user, null, $user->fresh()->toArray(), "Profile updated by user");
+
+        return redirect()->route('admin.profile')
+            ->with('success', 'Profile updated successfully!');
     }
 }
