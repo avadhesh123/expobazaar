@@ -35,15 +35,14 @@
             <thead><tr><th>Warehouse</th><th>Inward</th><th>Storage</th><th>Fulfill ≤</th><th>Fulfill ></th><th>Threshold</th><th>P&P</th><th>Effective</th><th>Version</th><th>Status</th><th>Actions</th></tr></thead>
             <tbody>
                 @forelse($rateCards as $rc)
-                @php $s = $rc->getCurrencySymbol(); @endphp
-                <tr>
+                 <tr>
                     <td style="font-weight:600;">{{ $rc->warehouse->name ?? '—' }}</td>
-                    <td style="font-family:monospace;">{{ $s }}{{ number_format(floatval($rc->wh_inward_rate_per_carton),2) }}</td>
-                    <td style="font-family:monospace;">{{ $s }}{{ number_format(floatval($rc->wh_storage_rate_per_cft),4) }}</td>
-                    <td style="font-family:monospace;">{{ $s }}{{ number_format(floatval($rc->wh_fulfillment_rate_small),2) }}</td>
-                    <td style="font-family:monospace;">{{ $s }}{{ number_format(floatval($rc->wh_fulfillment_rate_large),2) }}</td>
+                    <td style="font-family:monospace;">{{ $activeCurrencySymbol }}{{ number_format(floatval($rc->wh_inward_rate_per_carton),2) }}</td>
+                    <td style="font-family:monospace;">{{ $activeCurrencySymbol }}{{ number_format(floatval($rc->wh_storage_rate_per_cft),4) }}</td>
+                    <td style="font-family:monospace;">{{ $activeCurrencySymbol }}{{ number_format(floatval($rc->wh_fulfillment_rate_small),2) }}</td>
+                    <td style="font-family:monospace;">{{ $activeCurrencySymbol }}{{ number_format(floatval($rc->wh_fulfillment_rate_large),2) }}</td>
                     <td style="text-align:center;">{{ $rc->wh_fulfillment_qty_threshold }}</td>
-                    <td style="font-family:monospace;">{{ $s }}{{ number_format(floatval($rc->wh_pick_pack_rate_per_unit),2) }}</td>
+                    <td style="font-family:monospace;">{{ $activeCurrencySymbol }}{{ number_format(floatval($rc->wh_pick_pack_rate_per_unit),2) }}</td>
                     <td style="font-size:.72rem;">{{ $rc->effective_from->format('d M Y') }}</td>
                     <td style="text-align:center;">v{{ $rc->version }}</td>
                     <td>@php $sc = ['draft'=>'badge-gray','pending_approval'=>'badge-warning','approved'=>'badge-success','expired'=>'badge-gray']; @endphp<span class="badge {{ $sc[$rc->status] ?? 'badge-gray' }}">{{ ucfirst(str_replace('_',' ',$rc->status)) }}</span></td>

@@ -5,10 +5,10 @@
 @section('content')
 {{-- KPI Stats --}}
 <div class="grid-kpi" style="grid-template-columns:repeat(4,1fr);">
-    <div class="kpi-card"><div class="kpi-label">Total Orders</div><div class="kpi-value">{{$currencySymbol}} {{ number_format($stats['total_orders'] ?? 0) }}</div></div>
-    <div class="kpi-card" style="border-left:3px solid #16a34a;"><div class="kpi-label">Total Revenue</div><div class="kpi-value" style="color:#16a34a;font-size:1.2rem;">{{$currencySymbol}} {{ number_format($stats['total_revenue'] ?? 0, 2) }}</div></div>
+    <div class="kpi-card"><div class="kpi-label">Total Orders</div><div class="kpi-value">{{$activeCurrencySymbol}} {{ number_format($stats['total_orders'] ?? 0) }}</div></div>
+    <div class="kpi-card" style="border-left:3px solid #16a34a;"><div class="kpi-label">Total Revenue</div><div class="kpi-value" style="color:#16a34a;font-size:1.2rem;">{{$activeCurrencySymbol}} {{ number_format($stats['total_revenue'] ?? 0, 2) }}</div></div>
     <div class="kpi-card" style="border-left:3px solid #e8a838;"><div class="kpi-label">Pending</div><div class="kpi-value" style="color:#e8a838;">{{ number_format($stats['pending_orders'] ?? 0) }}</div></div>
-    <div class="kpi-card" style="border-left:3px solid #1e40af;"><div class="kpi-label">Today</div><div class="kpi-value" style="color:#1e40af;">{{ number_format($stats['today_orders'] ?? 0) }}</div><div style="font-size:.65rem;color:#94a3b8;">{{$currencySymbol}} {{ number_format($stats['today_revenue'] ?? 0, 0) }}</div></div>
+    <div class="kpi-card" style="border-left:3px solid #1e40af;"><div class="kpi-label">Today</div><div class="kpi-value" style="color:#1e40af;">{{ number_format($stats['today_orders'] ?? 0) }}</div><div style="font-size:.65rem;color:#94a3b8;">{{$activeCurrencySymbol}} {{ number_format($stats['today_revenue'] ?? 0, 0) }}</div></div>
 </div>
 
 {{-- Filters --}}
@@ -27,7 +27,7 @@
                            style="width:100%;padding:.45rem .55rem;border:1px solid #d1d5db;border-radius:8px;font-size:.82rem;">
                 </div>
 
-                <div style="min-width:110px;">
+                <!-- <div style="min-width:110px;">
                     <label style="font-size:.7rem;font-weight:600;color:#64748b;display:block;margin-bottom:.25rem;">Company</label>
                     <select name="company_code" style="width:100%;padding:.45rem .5rem;border:1px solid #d1d5db;border-radius:8px;font-size:.82rem;">
                         <option value="">All</option>
@@ -35,7 +35,7 @@
                         <option value="2100" {{ request('company_code')==='2100'?'selected':'' }}>2100</option>
                         <option value="2200" {{ request('company_code')==='2200'?'selected':'' }}>2200</option>
                     </select>
-                </div>
+                </div> -->
 
                 <div style="min-width:140px;">
                     <label style="font-size:.7rem;font-weight:600;color:#64748b;display:block;margin-bottom:.25rem;">Channel</label>
@@ -99,7 +99,7 @@
                     <td style="font-size:.78rem;">{{ $o->customer_name ?? '—' }}<div style="font-size:.62rem;color:#94a3b8;">{{ $o->customer_email ?? '' }}</div></td>
                     <td><span class="badge badge-info">{{ $o->salesChannel->name ?? '—' }}</span></td>
                     <td style="text-align:center;font-weight:600;">{{ $o->items->count() }}</td>
-                    <td style="font-family:monospace;font-weight:700;color:#166534;">{{ $o->currency ?? '$' }}{{ number_format($o->total_amount, 2) }}</td>
+                    <td style="font-family:monospace;font-weight:700;color:#166534;">{{ $o->currency ?? $activeCurrencySymbol }}{{ number_format($o->total_amount, 2) }}</td>
                     <td>
                         @php $sc = ['pending'=>'badge-warning','processing'=>'badge-info','confirmed'=>'badge-info','shipped'=>'badge-success','delivered'=>'badge-success','cancelled'=>'badge-danger','refunded'=>'badge-gray']; @endphp
                         <span class="badge {{ $sc[$o->status] ?? 'badge-gray' }}">{{ ucfirst($o->status ?? 'unknown') }}</span>

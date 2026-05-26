@@ -63,17 +63,30 @@
                         <select name="company_code" required>
                             <option value="">Select company...</option>
 
-                            @if($user->isAdmin())
+                             @if($user->isAdmin())
                             <!-- Admin sees all companies -->
-                            <option value="2000" {{ old('company_code')==='2000'?'selected':'' }}>2000 India</option>
-                            <option value="2100" {{ old('company_code')==='2100'?'selected':'' }}>2100 USA</option>
-                            <option value="2200" {{ old('company_code')==='2200'?'selected':'' }}>2200 Netherlands</option>
-                            @else
+                                <option value="2100" {{ (old('company_code', request('company_code'))) === '2100' ? 'selected' : '' }}>2100 ExpoBazaar US</option>
+                                <option value="2200" {{ (old('company_code', request('company_code'))) === '2200' ? 'selected' : '' }}>2200 ExpoBazaar EU</option>
+                                <option value="2400" {{ (old('company_code', request('company_code'))) === '2400' ? 'selected' : '' }}>2400 ExpoBazaar UK</option>
+                            @else               
                             <!-- Normal user sees only assigned companies -->
-                            @foreach($allowedCompanies as $code)
-                            <option value="{{ $code }}" {{ old('company_code') === $code ? 'selected' : '' }}>
-                                {{ $code === '2000' ? '2000 India' : ($code === '2100' ? '2100 USA' : '2200 Netherlands') }}
-                            </option>
+                           @foreach($allowedCompanies as $code)
+                                <option value="{{ $code }}" 
+                                        {{ (old('company_code') === $code || $activeCompany === $code) ? 'selected' : '' }}>
+                                    @switch($code)
+                                        @case('2100')
+                                            2100 ExpoBazaar US
+                                            @break
+                                        @case('2200')
+                                            2200 ExpoBazaar EU
+                                            @break
+                                        @case('2400')
+                                            2400 ExpoBazaar UK
+                                            @break
+                                        @default
+                                            {{ $code }}
+                                    @endswitch
+                                </option>
                             @endforeach
                             @endif
                         </select>

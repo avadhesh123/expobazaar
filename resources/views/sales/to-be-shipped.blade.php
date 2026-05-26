@@ -7,14 +7,13 @@
 <div style="display:flex;gap:1rem;margin-bottom:1.25rem;">
     <div class="kpi-card" style="flex:1;border-left:3px solid #e8a838;"><div class="kpi-label">Pending Shipment</div><div class="kpi-value" style="color:#e8a838;">{{ $stats['total_pending'] }}</div></div>
     <div class="kpi-card" style="flex:1;border-left:3px solid #dc2626;"><div class="kpi-label">Overdue (> 2 days)</div><div class="kpi-value" style="color:#dc2626;">{{ $stats['overdue'] }}</div></div>
-    <div class="kpi-card" style="flex:1;border-left:3px solid #1e40af;"><div class="kpi-label">Total Value</div><div class="kpi-value" style="color:#1e40af;">${{ number_format($stats['total_value'], 2) }}</div></div>
+    <div class="kpi-card" style="flex:1;border-left:3px solid #1e40af;"><div class="kpi-label">Total Value</div><div class="kpi-value" style="color:#1e40af;">{{$activeCurrencySymbol}}{{ number_format($stats['total_value'], 2) }}</div></div>
 </div>
 
 {{-- Filters --}}
 <div class="card" style="margin-bottom:1.25rem;">
     <div class="card-body" style="padding:.85rem 1.4rem;">
         <form method="GET" action="{{ route('sales.to-be-shipped') }}" style="display:flex;flex-wrap:wrap;gap:.75rem;align-items:flex-end;">
-            <div style="min-width:110px;"><label style="font-size:.7rem;font-weight:600;color:#64748b;display:block;margin-bottom:.25rem;">Company</label><select name="company_code" style="width:100%;padding:.4rem .5rem;border:1px solid #d1d5db;border-radius:8px;font-size:.82rem;"><option value="">All</option><option value="2100" {{ request('company_code')==='2100'?'selected':'' }}>🇺🇸 2100</option><option value="2200" {{ request('company_code')==='2200'?'selected':'' }}>🇳🇱 2200</option></select></div>
             <div style="min-width:140px;"><label style="font-size:.7rem;font-weight:600;color:#64748b;display:block;margin-bottom:.25rem;">Channel</label><select name="channel_id" style="width:100%;padding:.4rem .5rem;border:1px solid #d1d5db;border-radius:8px;font-size:.82rem;"><option value="">All</option>@foreach($channels as $ch)<option value="{{ $ch->id }}" {{ request('channel_id')==(string)$ch->id?'selected':'' }}>{{ $ch->name }}</option>@endforeach</select></div>
             <button type="submit" class="btn btn-primary btn-sm"><i class="fas fa-filter"></i></button>
             <a href="{{ route('sales.to-be-shipped') }}" class="btn btn-outline btn-sm"><i class="fas fa-times"></i></a>
@@ -63,9 +62,9 @@
             <td rowspan="{{ $o->items->count() }}" style="font-size:.72rem;">{{ $o->salesChannel->name ?? '—' }}</td>
             @endif
             <td style="font-family:monospace;font-size:.78rem;">{{ $item->sku ?? $item->product->sku ?? '—' }}</td>
-            <td style="text-align:right;font-family:monospace;">${{ number_format(floatval($item->unit_price), 2) }}</td>
+            <td style="text-align:right;font-family:monospace;">{{$activeCurrencySymbol}}{{ number_format(floatval($item->unit_price), 2) }}</td>
             <td style="text-align:center;font-weight:600;">{{ $item->quantity }}</td>
-            <td style="text-align:right;font-family:monospace;">${{ number_format(floatval($item->total_price), 2) }}</td>
+            <td style="text-align:right;font-family:monospace;">{{$activeCurrencySymbol}}{{ number_format(floatval($item->total_price), 2) }}</td>
             @if($loop->first)
             <td rowspan="{{ $o->items->count() }}" style="font-size:.72rem;">{{ $o->warehouse->name ?? '—' }}</td>
             <td rowspan="{{ $o->items->count() }}" style="font-size:.72rem;"> {{ strtoupper($o->shipping_method)}}</td>
@@ -77,7 +76,7 @@
                     style="width:55px;padding:.2rem .3rem;border:1px solid #fed7aa;border-radius:4px;font-size:.78rem;text-align:center;">
             </td>
             <td style="text-align:right;font-family:monospace;background:#fff7ed;" class="shipped-amt">
-                ${{ number_format(floatval($item->unit_price) * intval($item->quantity), 2) }}
+                {{$activeCurrencySymbol}}{{ number_format(floatval($item->unit_price) * intval($item->quantity), 2) }}
             </td>
             @if($loop->first)
             <td rowspan="{{ $o->items->count() }}" style="background:#fff7ed;">

@@ -65,17 +65,11 @@ class FinanceController extends Controller
 
     // ─── RECEIVABLES ─────────────────────────────────────────────
     public function receivables(Request $request)
-    {
-        $user = auth()->user();
-        // Get user's allowed company codes
+    {        
         $activeCode = session('active_company');
 
         $receivables = FinanceReceivable::with('order.salesChannel', 'order.chargebacks')
-            // Restrict to user's companies (non-admins)
-            ->when(
-                !$user->isAdmin() && !empty($activeCode),
-                fn($q) => $q->whereIn('company_code', [$activeCode])
-            )
+            ->where('company_code', $activeCode)             
             ->when($request->status, fn($q, $v) => $q->where('payment_status', $v))
             ->when($request->channel, fn($q, $v) => $q->where('sales_channel_id', $v))
             ->when($request->payment_status, fn($q, $v) => $q->where('payment_status', $v))
@@ -99,10 +93,7 @@ class FinanceController extends Controller
         //        $channels = SalesChannel::where('is_active', true)->get();
 
         $channels = SalesChannel::where('is_active', true)
-            ->when(!$user->isAdmin() && !empty($activeCode), function ($q) use ($activeCode) {
-                $q->whereJsonContains('company_codes', $activeCode);
-                return $q;
-            })
+            ->whereJsonContains('company_codes', $activeCode) 
             ->orderBy('name')
             ->get();
 
@@ -295,18 +286,11 @@ class FinanceController extends Controller
 
     // ─── VENDOR PAYOUTS ──────────────────────────────────────────
     public function payouts(Request $request)
-    {
-        $user = auth()->user();
-
-        // Handle company_codes (could be array or JSON string)
+    { 
         $activeCode = session('active_company');
 
         $payouts = VendorPayout::with('vendor')
-            // Restrict to user's allowed companies (non-admins)
-            ->when(
-                !$user->isAdmin() && !empty($activeCode),
-                fn($q) => $q->where('company_code', $activeCode)
-            )
+            ->where('company_code', $activeCode) 
             //  ->when($request->company_code, fn($q, $v) => $q->where('company_code', $v))
             ->when($request->vendor_id, fn($q, $v) => $q->where('vendor_id', $v))
             ->when($request->status, fn($q, $v) => $q->where('status', $v))
@@ -317,19 +301,13 @@ class FinanceController extends Controller
 
         // Vendors list - also filtered by user company
         $vendors = Vendor::active()->orderBy('company_name')
-            ->when(
-                !$user->isAdmin() && !empty($activeCode),
-                fn($q) => $q->where('company_code', [$activeCode])
-            )
+            ->where('company_code', [$activeCode]) 
             ->get();
 
         // KPI summary for the header cards
         try {
             $summaryQuery = VendorPayout::query()
-                ->when(
-                    !$user->isAdmin() && !empty($activeCode),
-                    fn($q) => $q->where('company_code', [$activeCode])
-                );
+                 ->where('company_code', [$activeCode]) ;
 
             $summary = [
                 'total_payouts' => (float) (clone $summaryQuery)
@@ -622,28 +600,11 @@ class FinanceController extends Controller
     // ─── PRICING REVIEW ──────────────────────────────────────────
     public function pricingReview(Request $request)
     {
-
-        $user = auth()->user();
-
-        // Handle company_codes (could be array or JSON string)
-        $userCompanyCodes = $user->company_codes ?? [];
-        if (is_string($userCompanyCodes)) {
-            $userCompanyCodes = json_decode($userCompanyCodes, true) ?? [];
-        }
-        $userCompanyCodes = array_filter(array_map('strval', $userCompanyCodes));
-
+        $activeCode = session('active_company');         
         $pricings = \App\Models\PlatformPricing::with('product', 'salesChannel', 'asn')
             ->where('status', 'submitted')
-            // Non-admin users: restrict to their assigned companies
-            ->when(
-                !$user->isAdmin() && !empty($userCompanyCodes),
-                fn($q) => $q->whereIn('company_code', $userCompanyCodes)
-            )
-            // Admin users: allow manual filter
-            ->when(
-                $user->isAdmin() && $request->company_code,
-                fn($q, $v) => $q->where('company_code', $v)
-            )->paginate(30);
+            ->where('company_code',$activeCode) 
+            ->paginate(30);
         return view('finance.pricing-review', compact('pricings'));
     }
 
@@ -656,18 +617,13 @@ class FinanceController extends Controller
     // ─── LIVE SHEETS — SAP CODE UPDATE ───────────────────────────
     public function liveSheets(Request $request)
     {
-        $user = auth()->user();
-
         $activeCode = session('active_company');
 
         $liveSheets = \App\Models\LiveSheet::with('vendor', 'offerSheet', 'items.product')
-            // Non-admin users: restrict to their assigned companies
-            ->when(
-                !$user->isAdmin() && !empty($activeCode),
-                fn($q) => $q->where('company_code', $activeCode)
-            )
+            ->where('company_code', $activeCode)
             ->when($request->status, fn($q, $v) => $q->where('status', $v))
             ->latest()->paginate(20);
+            
         return view('finance.live-sheets.index', compact('liveSheets'));
     }
 
@@ -735,7 +691,6 @@ class FinanceController extends Controller
                 }
             }
         }
-
 
         if (!empty($errors)) {
             return back()
@@ -982,15 +937,10 @@ class FinanceController extends Controller
 
     public function vendorRateCards(Request $request)
     {
-        $user = auth()->user();
-
         $activeCode = session('active_company');
 
         $rateCards = \App\Models\VendorRateCard::with('vendor', 'creator', 'approver')
-            // Restrict to user's allowed companies (unless admin)
-            ->when(!$user->isAdmin() && !empty($activeCode), function ($q) use ($activeCode) {
-                return $q->where('company_code', $activeCode);
-            })
+            ->where('company_code', $activeCode)            
             ->when($request->vendor_id, fn($q, $v) => $q->where('vendor_id', $v))
             ->orderByDesc('created_at')
             ->paginate(30)
@@ -998,7 +948,7 @@ class FinanceController extends Controller
 
         // Filter vendors based on user's allowed companies
         $vendors = \App\Models\Vendor::orderBy('company_name')
-            ->when(!$user->isAdmin() && !empty($activeCode), fn($q) => $q->where('company_code', $activeCode))
+            ->where('company_code', $activeCode)
             ->get();
 
 
@@ -1070,19 +1020,18 @@ class FinanceController extends Controller
 
     public function vendorCharges(Request $request)
     {
-        $user = auth()->user();
-        // User's allowed company codes
+       
         $activeCode = session('active_company');
 
         $month = $request->get('month', now()->month);
         $year = $request->get('year', now()->year);
         $charges = \App\Models\VendorMonthlyCharge::with('vendor', 'grn', 'warehouse')
-            ->when(!$user->isAdmin() && !empty($activeCode), fn($q) => $q->where('company_code', $activeCode))
+            ->where('company_code', $activeCode)
             ->byMonth($month, $year)->when($request->vendor_id, fn($q, $v) => $q->where('vendor_id', $v))
             ->orderBy('vendor_id')->paginate(50)->withQueryString();
 
         $vendors = \App\Models\Vendor::orderBy('company_name')
-            ->when(!$user->isAdmin() && !empty($activeCode), fn($q) => $q->where('company_code', $activeCode))
+            ->where('company_code', $activeCode)
             ->get();
         $baseQ = \App\Models\VendorMonthlyCharge::where('company_code', $activeCode)->byMonth($month, $year);
         $stats = [
@@ -1158,18 +1107,11 @@ class FinanceController extends Controller
 
     public function downloadVendorCharges(Request $request)
     {
-        $user = auth()->user();
-        // User's allowed company codes
-        $userCompanyCodes = $user->company_codes ?? [];
-        if (is_string($userCompanyCodes)) {
-            $userCompanyCodes = json_decode($userCompanyCodes, true) ?? [];
-        }
-        $userCompanyCodes = array_filter(array_map('strval', $userCompanyCodes));
-
+        $activeCode = session('active_company');        
         $month = $request->get('month', now()->month);
         $year = $request->get('year', now()->year);
         $charges = \App\Models\VendorMonthlyCharge::with('vendor', 'grn')
-            ->when(!$user->isAdmin() && !empty($userCompanyCodes), fn($q) => $q->whereIn('company_code', $userCompanyCodes))
+            ->where('company_code', $activeCode)
             ->byMonth($month, $year)->get();
         $csv = "Vendor,GRN,Inward,Storage,Fulfillment,Pick&Pack,Material,Total,Currency,Status\n";
         foreach ($charges as $c) {

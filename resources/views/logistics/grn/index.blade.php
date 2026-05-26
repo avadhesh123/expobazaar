@@ -115,7 +115,7 @@
             </thead>
             <tbody>
                 @forelse($grns as $grn)
-                <tr data-company-code="{{ $grn->company_code }}">   
+                <tr data-company-code="{{ $grn->company_code }}">
                     <td style="font-weight:700;font-family:monospace;font-size:.82rem;">{{ $grn->grn_number }}</td>
                     <td style="font-size:.8rem;">{{ $grn->shipment->shipment_code ?? '—' }}</td>
                     <td style="font-size:.8rem;">{{ $grn->warehouse->name ?? '—' }}</td>
@@ -144,5 +144,5 @@
     </div>
     @if($grns->hasPages())<div style="padding:1rem 1.4rem;border-top:1px solid #e8ecf1;">{{ $grns->links('pagination::tailwind') }}</div>@endif
 </div>
- 
+
 @endsection

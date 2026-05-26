@@ -17,7 +17,8 @@ class AdminController extends Controller
 
     public function dashboard(Request $request)
     {
-        $companyCode = $request->get('company_code');
+      //  $companyCode = $request->get('company_code');
+        $companyCode = session('active_company');
         $data = $this->dashboardService->getAdminDashboard($companyCode);
         return view('admin.dashboard', compact('data', 'companyCode'));
     }

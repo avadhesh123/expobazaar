@@ -35,14 +35,15 @@
         <form method="POST" action="{{ route('sales.upload.store') }}" enctype="multipart/form-data">
             @csrf
             <div style="display:flex;flex-wrap:wrap;gap:1rem;align-items:flex-end;">
-                <div style="min-width:120px;">
+                <!-- <div style="min-width:120px;">
                     <label style="font-size:.7rem;font-weight:600;color:#64748b;display:block;margin-bottom:.25rem;">Company Code *</label>
                     <select name="company_code" required style="padding:.4rem .5rem;border:1px solid #d1d5db;border-radius:8px;font-size:.82rem;">
                         <option value="2000">🇮🇳 2000</option>
                         <option value="2100" selected>🇺🇸 2100</option>
                         <option value="2200">🇳🇱 2200</option>
                     </select>
-                </div>
+                </div> -->
+                <input type="hidden" name="company_code" value="{{$activeCompany}}">
                 <div style="flex:1;min-width:250px;">
                     <label style="font-size:.7rem;font-weight:600;color:#64748b;display:block;margin-bottom:.25rem;">Sales File (CSV / XLSX) *</label>
                     <input type="file" name="sales_file" required accept=".csv,.xlsx,.xls" style="font-size:.82rem;">
@@ -52,22 +53,21 @@
         </form>
     </div>
 </div>
-{{-- Manual Entry Form --}}
-{{-- Manual Entry Form --}}
-{{-- Manual Entry Form --}}
+{{-- Manual Entry Form --}} 
 <form method="POST" action="{{ route('sales.upload.manual') }}" id="salesForm">
     @csrf
 
     <div class="card" style="margin-bottom:1.25rem;">
         <div class="card-header">
             <h3><i class="fas fa-keyboard" style="margin-right:.5rem;color:#1e3a5f;"></i> Enter Sales Data</h3>
-            <div style="display:flex;gap:.5rem;align-items:center;">
+            <!-- <div style="display:flex;gap:.5rem;align-items:center;">
                 <select name="company_code" required style="padding:.35rem .5rem;border:1px solid #d1d5db;border-radius:6px;font-size:.82rem;font-weight:600;font-family:inherit;">
                     <option value="2000">🇮🇳 2000 – India</option>
                     <option value="2100" selected>🇺🇸 2100 – USA</option>
                     <option value="2200">🇳🇱 2200 – NL</option>
                 </select>
-            </div>
+            </div> -->
+            <input type="hidden" name="company_code" value="{{$activeCompany}}">
         </div>
         <div class="card-body" style="padding:1rem 1.4rem;" id="ordersContainer">
 
@@ -202,7 +202,7 @@
                                     class="qty-input" style="width:100%;padding:.3rem .4rem;border:1px solid #d1d5db;border-radius:6px;font-size:.78rem;text-align:center;"></td>
                             <td><input type="number" step="0.01" name="orders[0][items][0][unit_price]" placeholder="0.00" required
                                     class="price-input" style="width:100%;padding:.3rem .4rem;border:1px solid #d1d5db;border-radius:6px;font-size:.78rem;font-family:monospace;text-align:right;"></td>
-                            <td class="line-total" style="text-align:right;font-family:monospace;font-weight:600;">$0.00</td>
+                            <td class="line-total" style="text-align:right;font-family:monospace;font-weight:600;">{{$activeCurrencySymbol}}0.00</td>
                             <td></td>
                         </tr>
                     </tbody>
@@ -211,7 +211,7 @@
                 <div style="display:flex;justify-content:space-between;align-items:center;">
                     <button type="button" class="btn btn-outline btn-sm" onclick="addItemRow(this)"><i class="fas fa-plus"></i> Add Item</button>
                     <div style="font-size:.85rem;font-weight:700;color:#1e3a5f;">
-                        Order Total: <span class="order-total" style="font-family:monospace;">$0.00</span>
+                        Order Total: <span class="order-total" style="font-family:monospace;">{{$activeCurrencySymbol}}0.00</span>
                         <input type="hidden" name="orders[0][total_amount]" class="order-total-input" value="0">
                     </div>
                 </div>
@@ -359,8 +359,8 @@ function addOrder() {
     newBlock.find('select').prop('selectedIndex', 0);
     newBlock.find('.sku-status').html('');
     newBlock.find('.product-name').text('—');
-    newBlock.find('.line-total').text('$0.00');
-    newBlock.find('.order-total').text('$0.00');
+    newBlock.find('.line-total').text('{{$activeCurrencySymbol}}0.00');
+    newBlock.find('.order-total').text('{{$activeCurrencySymbol}}0.00');
     newBlock.find('.order-total-input').val('0');
     // Show remove button
     newBlock.find('h4').next('button').show();

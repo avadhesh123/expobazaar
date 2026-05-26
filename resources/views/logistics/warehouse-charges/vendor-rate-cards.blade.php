@@ -96,8 +96,7 @@
             </thead>
             <tbody>
                 @forelse($vendorRateCards as $rc)
-                @php $s = $rc->getCurrencySymbol(); @endphp
-                <tr>
+                 <tr>
                     <td>
                         <div style="font-weight:600;">{{ $rc->vendor->company_name ?? '—' }}</div>
                         <div style="font-size:.6rem;color:#94a3b8;">{{ $rc->vendor->vendor_code ?? '' }} · {{ $rc->currency }}</div>
@@ -106,12 +105,12 @@
                         @php $wh = $warehouses->firstWhere('company_code', $rc->company_code); @endphp
                         {{ $wh->name ?? $rc->company_code }}
                     </td>
-                    <td style="text-align:right;font-family:monospace;">{{ $s }}{{ number_format(floatval($rc->inward_rate_per_carton), 2) }}</td>
-                    <td style="text-align:right;font-family:monospace;">{{ $s }}{{ number_format(floatval($rc->storage_rate_per_cft), 4) }}</td>
-                    <td style="text-align:right;font-family:monospace;">{{ $s }}{{ number_format(floatval($rc->fulfillment_rate_small), 2) }}</td>
-                    <td style="text-align:right;font-family:monospace;">{{ $s }}{{ number_format(floatval($rc->fulfillment_rate_large), 2) }}</td>
+                    <td style="text-align:right;font-family:monospace;">{{ $activeCurrencySymbol }}{{ number_format(floatval($rc->inward_rate_per_carton), 2) }}</td>
+                    <td style="text-align:right;font-family:monospace;">{{ $activeCurrencySymbol }}{{ number_format(floatval($rc->storage_rate_per_cft), 4) }}</td>
+                    <td style="text-align:right;font-family:monospace;">{{ $activeCurrencySymbol }}{{ number_format(floatval($rc->fulfillment_rate_small), 2) }}</td>
+                    <td style="text-align:right;font-family:monospace;">{{ $activeCurrencySymbol }}{{ number_format(floatval($rc->fulfillment_rate_large), 2) }}</td>
                     <td style="text-align:center;font-weight:600;">{{ $rc->fulfillment_qty_threshold }}</td>
-                    <td style="text-align:right;font-family:monospace;">{{ $s }}{{ number_format(floatval($rc->pick_pack_rate_per_unit), 2) }}</td>
+                    <td style="text-align:right;font-family:monospace;">{{ $activeCurrencySymbol }}{{ number_format(floatval($rc->pick_pack_rate_per_unit), 2) }}</td>
                     <td style="font-size:.72rem;">{{ $rc->effective_from?->format('d M Y') ?? '—' }}</td>
                     <td style="text-align:center;">v{{ $rc->version }}</td>
                     <td>

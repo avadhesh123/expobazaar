@@ -30,7 +30,7 @@
 </div>
 
 @forelse($charges as $c)
-@php $s = $c->getCurrencySymbol(); $hasInvoice = $c->actual_total !== null; @endphp
+@php  $hasInvoice = $c->actual_total !== null; @endphp
 <div class="card" style="margin-bottom:1.5rem;">
     <div class="card-header">
         <h3><i class="fas fa-warehouse" style="margin-right:.5rem;"></i> {{ $c->warehouse->name ?? '—' }} — {{ $c->period }}</h3>
@@ -66,9 +66,9 @@
                 @endphp
                 <tr style="{{ $over ? 'background:#fef2f2;' : '' }}">
                     <td style="font-weight:600;">{{ $label }}</td>
-                    <td style="text-align:right;font-family:monospace;">{{ $s }}{{ number_format($exp, 2) }}</td>
-                    <td style="text-align:right;font-family:monospace;">{{ $act !== null ? $s.number_format($act, 2) : '—' }}</td>
-                    <td style="text-align:right;font-family:monospace;font-weight:700;color:{{ $var > 0 ? '#dc2626' : ($var < 0 ? '#16a34a' : '#64748b') }};">{{ $var !== null ? ($var>0?'+':'').$s.number_format($var,2) : '—' }}</td>
+                    <td style="text-align:right;font-family:monospace;">{{ $activeCurrencySymbol }}{{ number_format($exp, 2) }}</td>
+                    <td style="text-align:right;font-family:monospace;">{{ $act !== null ? $activeCurrencySymbol.number_format($act, 2) : '—' }}</td>
+                    <td style="text-align:right;font-family:monospace;font-weight:700;color:{{ $var > 0 ? '#dc2626' : ($var < 0 ? '#16a34a' : '#64748b') }};">{{ $var !== null ? ($var>0?'+':'').$activeCurrencySymbol.number_format($var,2) : '—' }}</td>
                     <td style="text-align:right;font-size:.78rem;color:{{ $over?'#dc2626':'#64748b' }};">{{ $pct !== null ? ($pct>0?'+':'').$pct.'%' : '—' }}</td>
                     <td>@if($hasInvoice)<span class="badge {{ $over?'badge-danger':'badge-success' }}">{{ $over?'OVER LIMIT':'Within Limit' }}</span>@endif</td>
                     <td style="font-size:.72rem;color:#64748b;">{{ $expl ?: '—' }}</td>
@@ -78,8 +78,8 @@
                 <tr style="background:#fefce8;">
                     <td style="font-weight:600;">Other Charges</td>
                     <td style="text-align:right;">—</td>
-                    <td style="text-align:right;font-family:monospace;">{{ $s }}{{ number_format(floatval($c->actual_other),2) }}</td>
-                    <td style="text-align:right;font-family:monospace;color:#e8a838;">{{ $s }}{{ number_format(floatval($c->actual_other),2) }}</td>
+                    <td style="text-align:right;font-family:monospace;">{{ $activeCurrencySymbol }}{{ number_format(floatval($c->actual_other),2) }}</td>
+                    <td style="text-align:right;font-family:monospace;color:#e8a838;">{{ $activeCurrencySymbol }}{{ number_format(floatval($c->actual_other),2) }}</td>
                     <td>—</td>
                     <td><span class="badge badge-warning">For Review</span></td>
                     <td>—</td>
@@ -87,9 +87,9 @@
                 @endif
                 <tr style="background:#f0f4f8;font-weight:800;">
                     <td>TOTAL</td>
-                    <td style="text-align:right;font-family:monospace;">{{ $s }}{{ number_format(floatval($c->expected_total), 2) }}</td>
-                    <td style="text-align:right;font-family:monospace;">{{ $hasInvoice ? $s.number_format(floatval($c->actual_total),2) : '—' }}</td>
-                    <td style="text-align:right;font-family:monospace;color:{{ floatval($c->variance_total??0)>0?'#dc2626':'#16a34a' }};">{{ $hasInvoice ? ($c->variance_total>0?'+':'').$s.number_format(floatval($c->variance_total),2) : '—' }}</td>
+                    <td style="text-align:right;font-family:monospace;">{{ $activeCurrencySymbol }}{{ number_format(floatval($c->expected_total), 2) }}</td>
+                    <td style="text-align:right;font-family:monospace;">{{ $hasInvoice ? $activeCurrencySymbol.number_format(floatval($c->actual_total),2) : '—' }}</td>
+                    <td style="text-align:right;font-family:monospace;color:{{ floatval($c->variance_total??0)>0?'#dc2626':'#16a34a' }};">{{ $hasInvoice ? ($c->variance_total>0?'+':'').$activeCurrencySymbol.number_format(floatval($c->variance_total),2) : '—' }}</td>
                     <td colspan="3"></td>
                 </tr>
             </tbody>
@@ -167,11 +167,11 @@
                 @foreach($c->grnDetails as $d)
                 <tr style="border-bottom:1px solid #f1f5f9;">
                     <td style="padding:.3rem .5rem;font-family:monospace;">{{ $d->grn->grn_number ?? '#'.$d->grn_id }}</td>
-                    <td style="text-align:right;font-family:monospace;">{{ $s }}{{ number_format(floatval($d->inward_charge),2) }}</td>
-                    <td style="text-align:right;font-family:monospace;">{{ $s }}{{ number_format(floatval($d->storage_charge),2) }}</td>
-                    <td style="text-align:right;font-family:monospace;">{{ $s }}{{ number_format(floatval($d->fulfillment_charge),2) }}</td>
-                    <td style="text-align:right;font-family:monospace;">{{ $s }}{{ number_format(floatval($d->pick_pack_charge),2) }}</td>
-                    <td style="text-align:right;font-family:monospace;font-weight:600;">{{ $s }}{{ number_format(floatval($d->total_charge),2) }}</td>
+                    <td style="text-align:right;font-family:monospace;">{{ $activeCurrencySymbol }}{{ number_format(floatval($d->inward_charge),2) }}</td>
+                    <td style="text-align:right;font-family:monospace;">{{ $activeCurrencySymbol }}{{ number_format(floatval($d->storage_charge),2) }}</td>
+                    <td style="text-align:right;font-family:monospace;">{{ $activeCurrencySymbol }}{{ number_format(floatval($d->fulfillment_charge),2) }}</td>
+                    <td style="text-align:right;font-family:monospace;">{{ $activeCurrencySymbol }}{{ number_format(floatval($d->pick_pack_charge),2) }}</td>
+                    <td style="text-align:right;font-family:monospace;font-weight:600;">{{ $activeCurrencySymbol }}{{ number_format(floatval($d->total_charge),2) }}</td>
                 </tr>
                 @endforeach
             </table>

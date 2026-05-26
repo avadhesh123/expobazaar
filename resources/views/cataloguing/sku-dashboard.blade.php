@@ -5,10 +5,22 @@
 @section('content')
 {{-- Totals --}}
 <div class="grid-kpi" style="grid-template-columns:repeat(4,1fr);">
-    <div class="kpi-card"><div class="kpi-label">Total Products</div><div class="kpi-value">{{ $totals['total_products'] }}</div></div>
-    <div class="kpi-card" style="border-left:3px solid #16a34a;"><div class="kpi-label">SKUs Listed</div><div class="kpi-value" style="color:#16a34a;">{{ $totals['total_listed'] }}</div></div>
-    <div class="kpi-card" style="border-left:3px solid #1e40af;"><div class="kpi-label">Platforms Active</div><div class="kpi-value" style="color:#1e40af;">{{ $totals['platforms_covered'] }} / {{ $totals['total_platforms'] }}</div></div>
-    <div class="kpi-card" style="border-left:3px solid #e8a838;"><div class="kpi-label">Coverage</div><div class="kpi-value" style="color:#e8a838;">{{ $totals['total_products'] > 0 ? round(($totals['total_listed'] / $totals['total_products']) * 100) : 0 }}%</div></div>
+    <div class="kpi-card">
+        <div class="kpi-label">Total Products</div>
+        <div class="kpi-value">{{ $totals['total_products'] }}</div>
+    </div>
+    <div class="kpi-card" style="border-left:3px solid #16a34a;">
+        <div class="kpi-label">SKUs Listed</div>
+        <div class="kpi-value" style="color:#16a34a;">{{ $totals['total_listed'] }}</div>
+    </div>
+    <div class="kpi-card" style="border-left:3px solid #1e40af;">
+        <div class="kpi-label">Platforms Active</div>
+        <div class="kpi-value" style="color:#1e40af;">{{ $totals['platforms_covered'] }} / {{ $totals['total_platforms'] }}</div>
+    </div>
+    <div class="kpi-card" style="border-left:3px solid #e8a838;">
+        <div class="kpi-label">Coverage</div>
+        <div class="kpi-value" style="color:#e8a838;">{{ $totals['total_products'] > 0 ? round(($totals['total_listed'] / $totals['total_products']) * 100) : 0 }}%</div>
+    </div>
 </div>
 
 {{-- Filters --}}
@@ -16,10 +28,16 @@
     <div class="card-body" style="padding:.85rem 1.4rem;">
         <form method="GET" action="{{ route('cataloguing.sku-dashboard') }}" style="display:flex;gap:.75rem;align-items:flex-end;">
             <div style="min-width:110px;"><label style="font-size:.7rem;font-weight:600;color:#64748b;display:block;margin-bottom:.25rem;">Company</label><select name="company_code" style="width:100%;padding:.4rem .5rem;border:1px solid #d1d5db;border-radius:8px;font-size:.82rem;font-family:inherit;">
-                <option value="2000" {{ $companyCode==='2000'?'selected':'' }}>🇮🇳 2000</option><option value="2100" {{ $companyCode==='2100'?'selected':'' }}>🇺🇸 2100</option><option value="2200" {{ $companyCode==='2200'?'selected':'' }}>🇳🇱 2200</option>
-            </select></div>
-            <div style="min-width:140px;"><label style="font-size:.7rem;font-weight:600;color:#64748b;display:block;margin-bottom:.25rem;">Platform</label><select name="channel_id" style="width:100%;padding:.4rem .5rem;border:1px solid #d1d5db;border-radius:8px;font-size:.82rem;font-family:inherit;"><option value="">All Platforms</option>@foreach($channels as $ch)<option value="{{ $ch->id }}" {{ $channelId==(string)$ch->id?'selected':'' }}>{{ $ch->name }}</option>@endforeach</select></div>
-            <div style="min-width:130px;"><label style="font-size:.7rem;font-weight:600;color:#64748b;display:block;margin-bottom:.25rem;">Category</label><select name="category_id" style="width:100%;padding:.4rem .5rem;border:1px solid #d1d5db;border-radius:8px;font-size:.82rem;font-family:inherit;"><option value="">All Categories</option>@foreach($categories as $cat)<option value="{{ $cat->id }}" {{ $categoryId==(string)$cat->id?'selected':'' }}>{{ $cat->name }}</option>@endforeach</select></div>
+                    <option value="2000" {{ $companyCode==='2000'?'selected':'' }}>🇮🇳 2000</option>
+                    <option value="2100" {{ $companyCode==='2100'?'selected':'' }}>🇺🇸 2100</option>
+                    <option value="2200" {{ $companyCode==='2200'?'selected':'' }}>🇳🇱 2200</option>
+                </select></div>
+            <div style="min-width:140px;"><label style="font-size:.7rem;font-weight:600;color:#64748b;display:block;margin-bottom:.25rem;">Platform</label><select name="channel_id" style="width:100%;padding:.4rem .5rem;border:1px solid #d1d5db;border-radius:8px;font-size:.82rem;font-family:inherit;">
+                    <option value="">All Platforms</option>@foreach($channels as $ch)<option value="{{ $ch->id }}" {{ $channelId==(string)$ch->id?'selected':'' }}>{{ $ch->name }}</option>@endforeach
+                </select></div>
+            <div style="min-width:130px;"><label style="font-size:.7rem;font-weight:600;color:#64748b;display:block;margin-bottom:.25rem;">Category</label><select name="category_id" style="width:100%;padding:.4rem .5rem;border:1px solid #d1d5db;border-radius:8px;font-size:.82rem;font-family:inherit;">
+                    <option value="">All Categories</option>@foreach($categories as $cat)<option value="{{ $cat->id }}" {{ $categoryId==(string)$cat->id?'selected':'' }}>{{ $cat->name }}</option>@endforeach
+                </select></div>
             <button type="submit" class="btn btn-primary btn-sm"><i class="fas fa-filter"></i> Filter</button>
             <a href="{{ route('cataloguing.sku-dashboard') }}" class="btn btn-outline btn-sm"><i class="fas fa-times"></i></a>
         </form>
@@ -28,10 +46,22 @@
 
 {{-- Per-Platform Stats --}}
 <div class="card" style="margin-bottom:1.25rem;">
-    <div class="card-header"><h3><i class="fas fa-chart-bar" style="margin-right:.5rem;color:#1e3a5f;"></i> SKUs per Platform</h3></div>
+    <div class="card-header">
+        <h3><i class="fas fa-chart-bar" style="margin-right:.5rem;color:#1e3a5f;"></i> SKUs per Platform</h3>
+    </div>
     <div class="card-body" style="padding:0;overflow-x:auto;">
         <table class="data-table">
-            <thead><tr><th>Platform</th><th style="width:40%;">Listing Progress</th><th style="text-align:center;">Listed</th><th style="text-align:center;">Pending</th><th style="text-align:center;">Not Listed</th><th style="text-align:center;">Total</th><th style="text-align:center;">Coverage</th></tr></thead>
+            <thead>
+                <tr>
+                    <th>Platform</th>
+                    <th style="width:40%;">Listing Progress</th>
+                    <th style="text-align:center;">Listed</th>
+                    <th style="text-align:center;">Pending</th>
+                    <th style="text-align:center;">Not Listed</th>
+                    <th style="text-align:center;">Total</th>
+                    <th style="text-align:center;">Listing Rate</th>
+                </tr>
+            </thead>
             <tbody>
                 @foreach($channelStats as $cs)
                 @php $pct = $cs['total'] > 0 ? round(($cs['listed'] / $cs['total']) * 100) : 0; @endphp
@@ -69,10 +99,20 @@
 {{-- Per-Category Breakdown (when platform filter selected) --}}
 @if($channelId && $categoryStats->count() > 0)
 <div class="card" style="margin-bottom:1.25rem;">
-    <div class="card-header"><h3><i class="fas fa-tags" style="margin-right:.5rem;color:#7c3aed;"></i> Category Breakdown — {{ $channels->find($channelId)->name ?? 'Selected Platform' }}</h3></div>
+    <div class="card-header">
+        <h3><i class="fas fa-tags" style="margin-right:.5rem;color:#7c3aed;"></i> Category Breakdown — {{ $channels->find($channelId)->name ?? 'Selected Platform' }}</h3>
+    </div>
     <div class="card-body" style="padding:0;overflow-x:auto;">
         <table class="data-table">
-            <thead><tr><th>Category</th><th style="width:40%;">Progress</th><th style="text-align:center;">Listed</th><th style="text-align:center;">Pending</th><th style="text-align:center;">Total</th></tr></thead>
+            <thead>
+                <tr>
+                    <th>Category</th>
+                    <th style="width:40%;">Progress</th>
+                    <th style="text-align:center;">Listed</th>
+                    <th style="text-align:center;">Pending</th>
+                    <th style="text-align:center;">Total</th>
+                </tr>
+            </thead>
             <tbody>
                 @foreach($categoryStats as $cs)
                 @php $pct = $cs['total'] > 0 ? round(($cs['listed'] / $cs['total']) * 100) : 0; @endphp

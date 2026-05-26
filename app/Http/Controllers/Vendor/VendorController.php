@@ -9,6 +9,8 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Str;
 use Illuminate\Support\Facades\Log;
 use App\Models\ActivityLog;
+use App\Helpers\ActiveCompany;
+
 
 class VendorController extends Controller
 {
@@ -71,6 +73,7 @@ class VendorController extends Controller
             'gst_number'              => 'required|string|size:15|regex:/^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/',
             'rex_number'              => 'nullable|string|size:20|regex:/^[A-Za-z0-9]{20}$/',
             'company_name'            => 'required|string|max:255',
+            'address'                 => 'required|string|max:500',
             'street_address'          => 'required|string|max:500',
             'city'                    => 'required|string|max:100',
             'province_state'          => 'required|string|max:100',
@@ -99,6 +102,7 @@ class VendorController extends Controller
             'documents.cancelled_cheque.required'  => 'Cancelled cheque / bank proof is mandatory.',
             'documents.signed_contract.required'   => 'Signed consignment contract is mandatory.',
             'documents.gst_certificate.required'   => 'GST certificate is mandatory.',
+            'address.required'                      => 'Registered address is required.',
             'street_address.required'              => 'Street address is required.',
             'province_state.required'              => 'Province / State is required.',
         ]);
@@ -108,6 +112,7 @@ class VendorController extends Controller
             $vendor->update($request->only([
                 'gst_number',
                 'company_name',
+                'address',
                 'street_address',
                 'city',
                 'province_state',
@@ -241,124 +246,165 @@ class VendorController extends Controller
             'offer_file' => 'required|file|mimes:xlsx,xls,csv|max:20480',
         ]);
 
+        $activeCompany = session('active_company');
         $vendor = auth()->user()->vendor;
         $file = $request->file('offer_file');
         $path = $file->store('offer-sheets/' . $vendor->id, 'public');
 
-        // Parse Excel using PhpSpreadsheet / openpyxl-compatible reader
         $products = $this->parseOfferSheetExcel($file->getRealPath());
 
         if (empty($products)) {
-            return back()->with('error', 'No valid products found in the uploaded file. Please use the provided template.');
+            return back()->with('error', 'No valid products found. Please use the provided template.');
         }
 
-        // Create offer sheet
-        $offerSheet = OfferSheet::create([
-            'offer_sheet_number' => OfferSheet::generateNumber($vendor->company_code),
-            'vendor_id'          => $vendor->id,
-            'company_code'       => $vendor->company_code,
-            'status'             => 'submitted',
-            'total_products'     => count($products),
-            'selected_products'  => 0,
-        ]);
+        // ── Step 1: Validate ALL rows first before creating anything ──
+        $validatedItems = [];
+        $errors = [];
 
-        // Create items from parsed Excel data
-        foreach ($products as $p) {
+        foreach ($products as $idx => $p) {
+            $sku = trim($p['vendor_sku']) ?? '';
+            if (empty($sku)) {
+                $errors[] = "Row " . ($idx + 1) . ": SKU is empty.";
+                continue;
+            }
 
-            // Find or create category
-            $categoryId = null;
-            if (!empty($p['category'])) {
-                $cat = Category::firstOrCreate(
-                    ['slug' => Str::slug($p['category'])],
-                    ['name' => $p['category'], 'sort_order' => 0]
-                );
-                $categoryId = $cat->id;
+            // Check if SKU belongs to another vendor
+            $existingProduct = Product::withoutGlobalScopes()->where('sku', $sku)->first();
+            if ($existingProduct && $existingProduct->vendor_id !== $vendor->id) {
+                $errors[] = "Row " . ($idx + 1) . ": SKU '{$sku}' already exists under another vendor.";
+                continue;
+            }
 
-                // Sub-category as child
-                if (!empty($p['sub_category'])) {
-                    $subCat = Category::firstOrCreate(
-                        ['slug' => Str::slug($p['sub_category'])],
-                        ['name' => $p['sub_category'], 'parent_id' => $cat->id, 'sort_order' => 0]
-                    );
-                    $categoryId = $subCat->id;
+            // Check barcode uniqueness if provided
+            $barcode = trim($p['barcode'] ?? '');
+            if (!empty($barcode)) {
+                $dupBarcode = Product::withoutGlobalScopes()->where('barcode', $barcode)
+                    ->when($existingProduct, fn($q) => $q->where('id', '!=', $existingProduct->id))
+                    ->first();
+                if ($dupBarcode) {
+                    $errors[] = "Row " . ($idx + 1) . ": Barcode '{$barcode}' already assigned to SKU '{$dupBarcode->sku}'.";
+                    continue;
                 }
             }
-            // Use image extracted from Excel, or separate upload
-            $thumbnail = $p['image_path'] ?? null;
-            if (!$thumbnail && $request->hasFile('thumbnails.' . ($p['sno'] ?? ''))) {
-                $thumbnail = $request->file('thumbnails.' . $p['sno'])->store('offer-thumbnails/' . $vendor->id, 'public');
-            }
 
-            // Find existing product by SKU (unique index is on sku alone, not sku+vendor_id)
-            $product = Product::where('sku', $p['vendor_sku'])->first();
-            if (!$product) {
-                $product = Product::create([
-                    'sku'          => $p['vendor_sku'],
-                    'category_id'  => $categoryId,
-                    'vendor_id'    => $vendor->id,
-                    'name'         => $p['product_name'],
-                    'company_code' => $vendor->company_code,
-                    'length'        => $p['length'] ?? null,
-                    'width'         => $p['width'] ?? null,
-                    'height'        => $p['height'] ?? null,
-                    'weight_grams' => $p['weight'] ?? null,
-                    'vendor_price'   => $p['vendor_fob'] ?? 0,
-                    'status'       => 'draft',
-                ]);
-            } elseif ($product->vendor_id !== $vendor->id) {
-                // SKU already exists but belongs to another vendor                
-                // \Log::error('Offer sheet error: ' . "SKU '{$p['vendor_sku']}' already exists under another vendor");
-                \Log::channel('offer_sheet')->error('Error', [
-                    'error' => "SKU '{$p['vendor_sku']}' already exists under another vendor",
-                ]);
-                return back()->with('error', "SKU '{$p['vendor_sku']}' already exists under another vendor. Please use a unique SKU.");
-
-                //throw new \Exception("SKU '{$p['vendor_sku']}' already exists under another vendor. Please use a unique SKU.");
-            }
-
-            // // Auto-create or find product
-            // $product = Product::firstOrCreate(
-            //     ['sku' => $p['vendor_sku'], 'vendor_id' => $vendor->id],
-            //     [
-            //         'name'         => $p['product_name'],
-            //         'company_code' => $vendor->company_code,
-            //         'status'       => 'draft',
-            //     ]
-            // );
-
-
-
-            file_put_contents("storage/logs/OfferSheetItem.csv." . date("Y-m-d") . ".log", print_r($p, true) . "\n", FILE_APPEND);
-
-            OfferSheetItem::create([
-                'offer_sheet_id' => $offerSheet->id,
-                'product_id'     => $product->id,
-                'product_name'   => $p['product_name'],
-                'product_sku'    => $p['vendor_sku'],
-                'category_id'    => $categoryId,
-                'vendor_price'   => $p['vendor_fob'] ?? 0,
-                'currency'       => 'USD',
-                'thumbnail'      => $thumbnail,
-                'product_details' => [
-                    'sno'              => $p['sno'] ?? null,
-                    'length_inches'    => $p['length'] ?? null,
-                    'width_inches'     => $p['width'] ?? null,
-                    'height_inches'    => $p['height'] ?? null,
-                    'weight_grams'     => $p['weight'] ?? null,
-                    'material'         => $p['material'] ?? null,
-                    'color'            => $p['color'] ?? null,
-                    'finish'           => $p['finish'] ?? null,
-                    'category'         => $p['category'] ?? null,
-                    'sub_category'     => $p['sub_category'] ?? null,
-                    'comments'         => $p['comments'] ?? null,
-                ],
-                'is_selected' => false,
-            ]);
+            $validatedItems[] = $p;
         }
 
-        $count = count($products);
-        return redirect()->route('vendor.offer-sheets.show', $offerSheet)
-            ->with('success', "Offer sheet uploaded with {$count} products. Pending Sourcing team review.");
+        if (!empty($errors) && empty($validatedItems)) {
+            return back()->with('error', 'All rows had errors: ' . implode('; ', array_slice($errors, 0, 5)));
+        }
+
+        // ── Step 2: Create everything in a transaction ──
+        try {
+            \DB::beginTransaction();
+
+            $offerSheet = OfferSheet::create([
+                'offer_sheet_number' => OfferSheet::generateNumber($activeCompany ?? $vendor->company_code),
+                'vendor_id'          => $vendor->id,
+                'company_code'       => $activeCompany ?? $vendor->company_code,
+                'status'             => 'submitted',
+                'total_products'     => count($validatedItems),
+                'selected_products'  => 0,
+            ]);
+
+            foreach ($validatedItems as $p) {
+                // Find or create category
+                $categoryId = null;
+                if (!empty($p['category'])) {
+                    $cat = Category::firstOrCreate(
+                        ['slug' => Str::slug($p['category'])],
+                        ['name' => $p['category'], 'sort_order' => 0]
+                    );
+                    $categoryId = $cat->id;
+
+                    if (!empty($p['sub_category'])) {
+                        $subCat = Category::firstOrCreate(
+                            ['slug' => Str::slug($p['sub_category'])],
+                            ['name' => $p['sub_category'], 'parent_id' => $cat->id, 'sort_order' => 0]
+                        );
+                        $categoryId = $subCat->id;
+                    }
+                }
+
+                $thumbnail = $p['image_path'] ?? null;
+                $vendorSku = trim($p['vendor_sku'] ?? '');
+
+                // Find or create product
+                $product = Product::withoutGlobalScopes()->where('sku', $vendorSku)->where('vendor_id', $vendor->id)->first();
+                if (!$product) {
+                    $productData = [
+                        'sku'          => $vendorSku,
+                        'category_id'  => $categoryId,
+                        'vendor_id'    => $vendor->id,
+                        'name'         => $p['product_name'],
+                        'company_code' => $activeCompany ?? $vendor->company_code,
+                        'length'       => $p['length'] ?? null,
+                        'width'        => $p['width'] ?? null,
+                        'height'       => $p['height'] ?? null,
+                        'weight_grams' => $p['weight'] ?? null,
+                        'vendor_price' => $p['vendor_fob'] ?? 0,
+                        'status'       => 'draft',
+                    ];
+                    $barcode = trim($p['barcode'] ?? '');
+                    if (!empty($barcode)) $productData['barcode'] = $barcode;
+                    $product = Product::create($productData);
+
+                    file_put_contents(storage_path('logs/product-updates.log'), print_r($productData, true) . "Product ID {$product->id} created via offer sheet upload at " . now() . "\n", FILE_APPEND);
+                } else {
+                    // Update existing product with new data
+                    $updateData = array_filter([
+                        'name'         => $p['product_name'],
+                        'category_id'  => $categoryId,
+                        'vendor_price' => $p['vendor_fob'] ?? null,
+                    ]);
+                    $barcode = trim($p['barcode'] ?? '');
+                    if (!empty($barcode)) $updateData['barcode'] = $barcode;
+                    $product->update($updateData);
+                    file_put_contents(storage_path('logs/product-updates.log'), print_r($updateData, true) . "Product ID {$product->id} updated via offer sheet upload at " . now() . "\n", FILE_APPEND);
+                }
+
+                OfferSheetItem::create([
+                    'offer_sheet_id'  => $offerSheet->id,
+                    'product_id'      => $product->id,
+                    'product_name'    => $p['product_name'],
+                    'product_sku'     => $p['vendor_sku'],
+                    'category_id'     => $categoryId,
+                    'vendor_price'    => $p['vendor_fob'] ?? 0,
+                    'currency'        => $activeCurrencySymbol ?? 'USD',
+                    'thumbnail'       => $thumbnail,
+                    'product_details' => [
+                        'sno'           => $p['sno'] ?? null,
+                        'barcode'       => $barcode ?? null,
+                        'length_inches' => $p['length'] ?? null,
+                        'width_inches'  => $p['width'] ?? null,
+                        'height_inches' => $p['height'] ?? null,
+                        'weight_grams'  => $p['weight'] ?? null,
+                        'material'      => $p['material'] ?? null,
+                        'color'         => $p['color'] ?? null,
+                        'finish'        => $p['finish'] ?? null,
+                        'category'      => $p['category'] ?? null,
+                        'sub_category'  => $p['sub_category'] ?? null,
+                        'comments'      => $p['comments'] ?? null,
+                    ],
+                    'is_selected' => false,
+                ]);
+            }
+
+            \DB::commit();
+
+            $msg = "Offer sheet uploaded with " . count($validatedItems) . " products.";
+            if (!empty($errors)) {
+                $msg .= ' ' . count($errors) . ' row(s) skipped.';
+            }
+
+            return redirect()->route('vendor.offer-sheets.show', $offerSheet)
+                ->with('success', $msg)
+                ->with('upload_errors', $errors);
+        } catch (\Exception $e) {
+            \DB::rollBack();
+            \Log::error('Offer sheet creation failed: ' . $e->getMessage());
+            return back()->with('error', 'Upload failed: ' . $e->getMessage());
+        }
     }
 
     /**
@@ -726,20 +772,28 @@ class VendorController extends Controller
      */
     public function downloadOfferSheetTemplate()
     {
-        $path = public_path('downloads/Offer_Sheet_US.xlsx');
+        $activeCompany = session('active_company') ?? '2100';
+        $templateFiles = [
+            '2100' => 'Offer-Sheet-US.xlsx',
+            '2200' => 'Offer-Sheet-EU.xlsx',
+            '2400' => 'Offer-Sheet-UK.xlsx',
+        ];
+        $fileName = $templateFiles[$activeCompany] ?? 'Offer-Sheet-US.xlsx'; // fallback
+        $path = storage_path('app/public/downloads/' . $fileName);
 
         if (!file_exists($path)) {
             // Fallback: generate CSV template
-            $csv = "S.no,Vendor SKU,Product Name,Product Image,Product Length (In Inches),Product Width (In Inches),Product Height (In Inches),Product Weight (In Gram),Material Composition,Color,Product Finish,Category,Sub Category,Vendor FOB Mumbai ($),Comments\n";
+            $csv = "S.no,Vendor SKU,Product Name,Product Image,Product Length (In Inches),Product Width (In Inches),Product Height (In Inches),Product Weight (In Gram),Material Composition,Color,Product Finish,Category,Sub Category,Vendor FOB Mumbai,Comments\n";
             $csv .= "1,EB123,Glass Vase,,10,10,2,200,Glass,Clear,Glossy,Home & Décor,Décor,1,\n";
+
+            $fileName = $activeCompany . "_Offer_Sheet_Template.csv";
 
             return response($csv, 200, [
                 'Content-Type' => 'text/csv',
-                'Content-Disposition' => 'attachment; filename="Offer_Sheet_Template.csv"',
+                'Content-Disposition' => "attachment; filename=\"{$fileName}\"",
             ]);
         }
-
-        return response()->download($path, 'Offer_Sheet_Template.xlsx');
+        return response()->download($path,  $activeCompany . '_Offer_Sheet_Template.xlsx');
     }
 
     /**
@@ -821,16 +875,16 @@ class VendorController extends Controller
     public function consignments()
     {
         $vendor = auth()->user()->vendor;
-        
+
         $activeCode = session('active_company');
 
         //$consignments = $vendor->consignments()->with('liveSheet', 'grn', 'shipment')->latest()->paginate(20);
 
         $consignments = $vendor->consignments()
-        ->when($activeCode, function ($q) use ($activeCode) {
-            $q->where('company_code', $activeCode);
-        })
-        ->with('liveSheet', 'shipments')->latest()->paginate(20);
+            ->when($activeCode, function ($q) use ($activeCode) {
+                $q->where('company_code', $activeCode);
+            })
+            ->with('liveSheet', 'shipments')->latest()->paginate(20);
         return view('vendor.consignments.index', compact('consignments', 'vendor'));
     }
 
@@ -1031,13 +1085,13 @@ class VendorController extends Controller
     public function liveSheets()
     {
         $user = auth()->user();
-        
+
         $activeCode = session('active_company');
 
         $vendor = $user->vendor;
         $liveSheets = LiveSheet::where('vendor_id', $vendor->id)
             ->with('consignment', 'offerSheet', 'items.product')
-             ->when($activeCode, function ($query) use ($activeCode) {
+            ->when($activeCode, function ($query) use ($activeCode) {
                 $query->where('company_code', $activeCode);
             })
             ->latest()->paginate(20);
@@ -1216,21 +1270,17 @@ class VendorController extends Controller
      */
     public function downloadLiveSheetTemplate(LiveSheet $liveSheet)
     {
+        $currency = trim(config('app.active_currency_symbol')); // $, ₹, €
         $vendor = auth()->user()->vendor;
         if ($liveSheet->vendor_id !== $vendor->id) {
             abort(403);
         }
 
-        $currency = '€';
-        if ($vendor->company_code == '2200') {
-            $currency = '$';
-        }
-
         $liveSheet->load('items.product');
 
-        $headers = "S.no,Vendor SKU,Barcode,Product Name,Product Description (Min 100 words),Hsn & Hts Code,Duty %,Product Length (Inches),Product Width (Inches),Product Height (Inches),Product Weight (Gram),Material Composition,Other Material,Color,Product Finish,Category,Sub Category,Qty In Inner Pack,Inner Carton Length (Inches),Inner Carton Width (Inches),Inner Carton Height (Inches),Qty In Master Pack,Master Carton Length (Inches),Master Carton Width (Inches),Master Carton Height (Inches),Master Carton Weight (Kg),Qty Offered (Units/Sets),Vendor FOB Mumbai ({$currency})\n";
-
-        $csv = $headers;
+        $headers = "S.no,Vendor SKU,Barcode,Product Name,Product Description (Min 100 words),Product Specification,Hsn & Hts Code,Duty %,Product Length (Inches),Product Width (Inches),Product Height (Inches),Product Weight (Gram),Material Composition,Other Material,Color,Product Finish,Category,Sub Category,Qty In Inner Pack,Inner Carton Length (Inches),Inner Carton Width (Inches),Inner Carton Height (Inches),Inner Carton Weight (Kg),Qty In Master Pack,Master Carton Length (Inches),Master Carton Width (Inches),Master Carton Height (Inches),Master Carton Weight (Kg),No Of Master Carton,Qty Offered (Units/Sets),Vendor FOB({$currency})\n";
+        $csv = "\xEF\xBB\xBF"; // UTF-8 BOM
+        $csv .= $headers;
 
         // Track totals for numeric columns
         // Column indexes: 0=Sno, 6=Duty%, 7=Length, 8=Width, 9=Height, 10=Weight,
@@ -1246,11 +1296,12 @@ class VendorController extends Controller
             $row = [
                 $idx + 1,
                 '"' . str_replace('"', '""', $p->sku ?? '') . '"',
-                '', // Barcode
+                $p->barcode ?? $d['barcode'], // Barcode
                 '"' . str_replace('"', '""', $p->name ?? '') . '"',
-                '', // Description
-                '', // HSN
-                '', // Duty %
+                '"' . str_replace('"', '""', $d['description'] ?? '') . '"',                // Description
+                '"' . str_replace('"', '""', $d['specification'] ?? '') . '"', // Specification
+                '"' . str_replace('"', '""', $d['hsn_hts_code'] ?? '') . '"', // HSN
+                $d['duty_percent'] ?? '', // Duty %
                 $d['length_inches'] ?? '',
                 $d['width_inches'] ?? '',
                 $d['height_inches'] ?? '',
@@ -1261,16 +1312,18 @@ class VendorController extends Controller
                 '"' . str_replace('"', '""', $d['finish'] ?? '') . '"',
                 '"' . str_replace('"', '""', $d['category'] ?? '') . '"',
                 '"' . str_replace('"', '""', $d['sub_category'] ?? '') . '"',
-                '', // Inner pack qty
-                '', // Inner Carton Length
-                '', // Inner Carton Width
-                '', // Inner Carton Height
-                '', // Qty In Master Pack
-                '', // Master Carton Length
-                '', // Master Carton Width
-                '', // Master Carton Height
-                '', // Master Carton Weight
-                '', // Qty Offered
+                $d['qty_inner_pack'] ?? '', // Inner pack qty
+                $d['inner_length'] ?? '', // Inner Carton Length
+                $d['inner_width'] ?? '', // Inner Carton Width
+                $d['inner_height'] ?? '', // Inner Carton Height
+                $d['inner_weight_kg'] ?? '', // Inner Carton Weight
+                $d['qty_master_pack'] ?? '', // Qty In Master Pack
+                $d['master_length'] ?? '', // Master Carton Length
+                $d['master_width'] ?? '', // Master Carton Width
+                $d['master_height'] ?? '', // Master Carton Height
+                $d['master_weight_kg'] ?? '', // Master Carton Weight
+                $d['no_of_master_carton'] ?? '', // No of Master Cartons
+                $d['qty_offered'] ?? '', // Qty Offered
                 '"' . str_replace('"', '""', $p->vendor_price ?? '') . '"',
             ];
 
@@ -1290,7 +1343,7 @@ class VendorController extends Controller
         for ($i = 0; $i < 28; $i++) {
             if ($i === 0) {
                 $totalRow[] = ''; // S.no
-            } elseif ($i === 1) {
+            } elseif ($i === 5) {
                 $totalRow[] = '"LINE TOTAL"';
             } elseif (in_array($i, $numericCols) && $totals[$i] > 0) {
                 $totalRow[] = round($totals[$i], 2);
@@ -1306,70 +1359,6 @@ class VendorController extends Controller
             'Content-Disposition' => "attachment; filename=\"{$filename}\"",
         ]);
     }
-    public function downloadLiveSheetTemplateOLD(LiveSheet $liveSheet)
-    {
-        $vendor = auth()->user()->vendor;
-        //print_r($liveSheet->toArray());exit;
-        if ($liveSheet->vendor_id !== $vendor->id) {
-            abort(403);
-        }
-
-        $currency = '€';
-        if ($vendor->company_code == '2200') {
-            $currency = '$';
-        }
-
-        $liveSheet->load('items.product');
-
-        $headers = "S.no,Vendor SKU,Barcode,Product Name,Product Description (Min 100 words),Hsn & Hts Code,Duty %,Product Length (Inches),Product Width (Inches),Product Height (Inches),Product Weight (Gram),Material Composition,Other Material,Color,Product Finish,Category,Sub Category,Qty In Inner Pack,Inner Carton Length (Inches),Inner Carton Width (Inches),Inner Carton Height (Inches),Qty In Master Pack,Master Carton Length (Inches),Master Carton Width (Inches),Master Carton Height (Inches),Master Carton Weight (Kg),Qty Offered (Units/Sets),Vendor FOB Mumbai ({$currency})\n";
-
-        $csv = $headers;
-        foreach ($liveSheet->items as $idx => $item) {
-            $p = $item->product;
-            $d = $item->product_details ?? [];
-            // echo $p->vendor_price;
-
-            // print_r($item->toArray());
-            // exit;
-            $csv .= implode(',', [
-                $idx + 1,
-                '"' . str_replace('"', '""', $p->sku ?? '') . '"',
-                '', // Barcode
-                '"' . str_replace('"', '""', $p->name ?? '') . '"',
-                '', // Description
-                '', // HSN
-                '', // Duty %
-                $d['length_inches'] ?? '',
-                $d['width_inches'] ?? '',
-                $d['height_inches'] ?? '',
-                $d['weight_grams'] ?? '',
-                '"' . str_replace('"', '""', $d['material'] ?? '') . '"',
-                '', // Other Material
-                '"' . str_replace('"', '""', $d['color'] ?? '') . '"',
-                '"' . str_replace('"', '""', $d['finish'] ?? '') . '"',
-                '"' . str_replace('"', '""', $d['category'] ?? '') . '"',
-                '"' . str_replace('"', '""', $d['sub_category'] ?? '') . '"',
-                '', // Inner pack 
-                '', //Inner Carton Length(In Inches)
-                '', //Inner Carton Width(In Inches)
-                '', //Inner Carton Height(In Inches)
-                '', //Qty In Master Pack
-                '', //Master Carton Length(In Inches)
-                '', //Master Carton Width(In Inches)
-                '', //Master Carton Height(In Inches)
-                '', //Mastor Carton Weight in (Kg)
-                '', //Qty Offered (Units/Sets)
-                '"' . str_replace('"', '""', $p->vendor_price ?? '') . '"' //Vendor FOB Mumbai ($)                
-            ]) . "\n";
-        }
-
-        $filename = "live-sheet-{$liveSheet->live_sheet_number}.csv";
-        return response($csv, 200, [
-            'Content-Type' => 'text/csv',
-            'Content-Disposition' => "attachment; filename=\"{$filename}\"",
-        ]);
-    }
-
     /**
      * Download blank live sheet Excel template
      */
@@ -1440,6 +1429,19 @@ class VendorController extends Controller
                 continue;
             }
 
+            // ── Barcode validation ──
+            $barcode = trim($row['barcode'] ?? '');
+            if (!empty($barcode)) {
+                // Check uniqueness against other products (exclude current product)
+                $dupBarcode = \App\Models\Product::withoutGlobalScopes()->where('barcode', $barcode)
+                    ->where('id', '!=', $item->product_id)
+                    ->first();
+                if ($dupBarcode) {
+                    $errors[] = "Row " . ($idx + 1) . ": Barcode '{$barcode}' already assigned to SKU '{$dupBarcode->sku}'.";
+                    continue;
+                }
+            }
+
             // Calculate CBM and weight based on master carton details if provided
             $masterL = (float)($row['master_length'] ?? 0);
             $masterW = (float)($row['master_width'] ?? 0);
@@ -1476,8 +1478,7 @@ class VendorController extends Controller
             } catch (\Exception $e) {
                 \Log::warning('Vendor change tracking failed: ' . $e->getMessage());
             }
-
-            $item->update([
+            $itemData = [
                 'quantity'        => $finalQty,
                 'unit_price'      => $finalFob ?: $unitPrice,
                 'total_price'     => ($finalFob ?: $unitPrice) * $finalQty,
@@ -1491,6 +1492,7 @@ class VendorController extends Controller
                     'vendor_wsp'       => $row['vendor_wsp'] ?? null,
                     'barcode'          => $row['barcode'] ?? null,
                     'description'      => $row['description'] ?? null,
+                    'specification'    => $row['specification'] ?? null,
                     'hsn_hts_code'     => $row['hsn_code'] ?? null,
                     'duty_percent'     => $row['duty_percent'] ?? null,
                     'length_inches'    => $row['length'] ?? null,
@@ -1507,23 +1509,38 @@ class VendorController extends Controller
                     'inner_length'     => $row['inner_length'] ?? null,
                     'inner_width'      => $row['inner_width'] ?? null,
                     'inner_height'     => $row['inner_height'] ?? null,
+                    'inner_weight_kg'  => $row['inner_weight_kg'] ?? null,
                     'qty_master_pack'  => $row['qty_master_pack'] ?? null,
                     'master_length'    => $masterL,
                     'master_width'     => $masterW,
                     'master_height'    => $masterH,
                     'master_weight_kg' => $masterWeight,
+                    'no_of_master_carton' => $row['no_of_master_carton'] ?? null,
                     'qty_offered'      => $row['qty_offered'] ?? null,
                     'vendor_fob'       => $row['vendor_fob'] ?? null
                 ]),
-            ]);
+            ];
+            $item->update($itemData);
+
+            file_put_contents(storage_path('logs/live_sheet_upload.log'),  print_r($itemData, 1) . "\n", FILE_APPEND);
 
             // Update product master
-            $item->product->update(array_filter([
-                'vendor_price' => $finalFob ?: $unitPrice,
-                'cbm'          => $qtyMaster > 0 ? round($masterCbm / $qtyMaster, 6) : null,
-                'weight'    => $weightPerUnit ?: null,
-            ]));
 
+            $updateData = [];
+
+            $updateData['vendor_price'] = $finalFob ?: $unitPrice;
+            $updateData['cbm']          = $qtyMaster > 0 ? round($masterCbm / $qtyMaster, 6) : null;
+            $updateData['weight']       = $weightPerUnit ?: null;
+            $updateData['description']  = $row['description'] ?? null;
+            $updateData['hsn_code']     = $row['hsn_code'] ?? null;
+
+            if (!empty($barcode)) {
+                $updateData['barcode'] = $barcode;
+            }
+
+            // Remove null values before update
+            $updateData = array_filter($updateData, fn($val) => $val !== null);
+            $item->product->update($updateData);
             $updated++;
         }
 
@@ -1609,8 +1626,17 @@ class VendorController extends Controller
                 foreach ($row->getCellIterator() as $cell) {
                     $val = strtolower(trim(preg_replace('/\s+/', ' ', (string) $cell->getValue())));
                     $col = $cell->getColumn();
+
                     if (empty($val)) {
                         continue;
+                    }
+                    if (str_contains($val, 'inner carton weight') || $val === 'inner carton weight (kg)') {
+                        file_put_contents(storage_path('logs/live_sheet_upload.log'), $col . '===' .  $val  . "\n", FILE_APPEND);
+                        $colMap['inner_weight_kg'] = $col;
+                    }
+                    if (str_contains($val, 'master') && str_contains($val, 'weight')) {
+                        $colMap['master_weight_kg'] = $col;
+                        file_put_contents(storage_path('logs/live_sheet_upload.log'), $col . '===' .  $val  . "\n", FILE_APPEND);
                     }
 
                     if (str_contains($val, 'vendor sku') || $val === 'sku') {
@@ -1621,6 +1647,8 @@ class VendorController extends Controller
                         $colMap['product_name'] = $col;
                     } elseif (str_contains($val, 'description')) {
                         $colMap['description'] = $col;
+                    } elseif (str_contains($val, 'specification')) {
+                        $colMap['specification'] = $col;
                     } elseif (str_contains($val, 'hsn') || str_contains($val, 'hts')) {
                         $colMap['hsn_code'] = $col;
                     } elseif (str_contains($val, 'duty %') || str_contains($val, 'duty%')) {
@@ -1653,6 +1681,8 @@ class VendorController extends Controller
                         $colMap['inner_width'] = $col;
                     } elseif (str_contains($val, 'inner') && str_contains($val, 'height')) {
                         $colMap['inner_height'] = $col;
+                    } elseif (str_contains($val, 'inner carton weight') || $val === 'inner carton weight (kg)') {
+                        $colMap['inner_weight_kg'] = $col;
                     } elseif (str_contains($val, 'qty in master')) {
                         $colMap['qty_master_pack'] = $col;
                     } elseif (str_contains($val, 'master') && str_contains($val, 'length')) {
@@ -1663,6 +1693,8 @@ class VendorController extends Controller
                         $colMap['master_height'] = $col;
                     } elseif (str_contains($val, 'master') && str_contains($val, 'weight')) {
                         $colMap['master_weight_kg'] = $col;
+                    } elseif (str_contains($val, 'master') && str_contains($val, 'carton')) {
+                        $colMap['no_of_master_carton'] = $col;
                     } elseif (str_contains($val, 'qty offered')) {
                         $colMap['qty_offered'] = $col;
                     } elseif (str_contains($val, 'vendor fob')) {
@@ -1699,10 +1731,11 @@ class VendorController extends Controller
                     'sno'             => $getVal('sno'),
                     'vendor_sku'      => $sku,
                     'sap_code'        => $getVal('sap_code'),
-                    'vendor_wsp'        => $getVal('vendor_wsp'),
+                    'vendor_wsp'      => $getVal('vendor_wsp'),
                     'barcode'         => $getVal('barcode'),
                     'product_name'    => $getVal('product_name'),
                     'description'     => $getVal('description'),
+                    'specification'   => $getVal('specification'),
                     'hsn_code'        => $getVal('hsn_code'),
                     'duty_percent'    => $getVal('duty_percent'),
                     'length'          => $getVal('length'),
@@ -1719,11 +1752,13 @@ class VendorController extends Controller
                     'inner_length'    => $getVal('inner_length'),
                     'inner_width'     => $getVal('inner_width'),
                     'inner_height'    => $getVal('inner_height'),
+                    'inner_weight_kg' => $getVal('inner_weight_kg'),
                     'qty_master_pack' => $getVal('qty_master_pack'),
                     'master_length'   => $getVal('master_length'),
                     'master_width'    => $getVal('master_width'),
                     'master_height'   => $getVal('master_height'),
                     'master_weight_kg' => $getVal('master_weight_kg'),
+                    'no_of_master_carton' => $getVal('no_of_master_carton'),
                     'qty_offered'     => $getVal('qty_offered'),
                     'vendor_fob'      => $getVal('vendor_fob'),
 
@@ -1828,20 +1863,20 @@ class VendorController extends Controller
     public function salesReport(Request $request)
     {
         $vendor = auth()->user()->vendor;
-        
+
         $activeCode = session('active_company');
 
         $orders = Order::where('status', 'shipped')
             ->whereHas('items', fn($q) => $q->where('vendor_id', $vendor->id))
             ->with(['salesChannel', 'receivable', 'items' => fn($q) => $q->where('vendor_id', $vendor->id)->with('product')])
-           ->when($activeCode, fn($q) => $q->whereHas('salesChannel', fn($sq) => $sq->where('company_code', $activeCode)))
+            ->when($activeCode, fn($q) => $q->whereHas('salesChannel', fn($sq) => $sq->where('company_code', $activeCode)))
             ->get();
 
 
         // Before the loop — build FIFO commission map per product for this vendor
         $vendorLiveSheets = \App\Models\LiveSheet::where('vendor_id', $vendor->id)
             ->where('status', 'locked') // Only consider locked sheets for commission (approved but not yet paid out)
-          //  ->when($activeCode, fn($q) => $q->whereHas('salesChannel', fn($sq) => $sq->where('company_code', $activeCode)))
+            //  ->when($activeCode, fn($q) => $q->whereHas('salesChannel', fn($sq) => $sq->where('company_code', $activeCode)))
             ->orderBy('approved_at', 'asc') // FIFO — oldest first
             ->with(['items' => fn($q) => $q->select('id', 'live_sheet_id', 'product_id', 'quantity', 'product_details')])
             ->get();
@@ -1961,7 +1996,7 @@ class VendorController extends Controller
                 ]);
             }
         }
-       // exit;
+        // exit;
         //print_r($lineItems->toArray());exit;
 
         $orders = Order::whereHas('items', fn($q) => $q->where('vendor_id', $vendor->id))
@@ -1972,10 +2007,10 @@ class VendorController extends Controller
             ->latest('order_date')->paginate(25);
 
         $totalSales = Order::whereHas('items', fn($q) => $q->where('vendor_id', $vendor->id))
-        ->when($activeCode, fn($q) => $q->whereHas('salesChannel', fn($sq) => $sq->where('company_code', $activeCode)))
-        ->when($request->month, fn($q, $v) => $q->whereMonth('order_date', $v))
-        ->when($request->year, fn($q, $v) => $q->   whereYear('order_date', $v))
-        ->sum('total_amount');
+            ->when($activeCode, fn($q) => $q->whereHas('salesChannel', fn($sq) => $sq->where('company_code', $activeCode)))
+            ->when($request->month, fn($q, $v) => $q->whereMonth('order_date', $v))
+            ->when($request->year, fn($q, $v) => $q->whereYear('order_date', $v))
+            ->sum('total_amount');
 
         return view('vendor.sales.index', compact('orders', 'vendor', 'totalSales', 'lineItems'));
     }
@@ -1987,8 +2022,8 @@ class VendorController extends Controller
 
         $vendor = $user->vendor;
         $vendorProductIds = $vendor->products()
-        ->when(!$user->isAdmin() && !empty($activeCode), fn($q) => $q->where('company_code', $activeCode))
-        ->pluck('id')->toArray();
+            ->when(!$user->isAdmin() && !empty($activeCode), fn($q) => $q->where('company_code', $activeCode))
+            ->pluck('id')->toArray();
 
         // Get consignment IDs for this vendor
         $consignmentIds = Consignment::where('vendor_id', $vendor->id)
@@ -2081,7 +2116,7 @@ class VendorController extends Controller
     public function rateCard()
     {
         $user = auth()->user();
-   
+
         $activeCode = session('active_company');
         $vendor = $user->vendor;
 
@@ -2152,10 +2187,10 @@ class VendorController extends Controller
         $activeCode = session('active_company');
 
         $chargebacks = Chargeback::where('vendor_id', $vendor->id)->with('order.salesChannel')
-        ->when(!$vendor->user->isAdmin() && !empty($activeCode), function ($query) use ($activeCode) {
-            $query->whereHas('order.salesChannel', fn($q) => $q->where('company_code', $activeCode));
-        })
-        ->latest()->paginate(20);
+            ->when(!$vendor->user->isAdmin() && !empty($activeCode), function ($query) use ($activeCode) {
+                $query->whereHas('order.salesChannel', fn($q) => $q->where('company_code', $activeCode));
+            })
+            ->latest()->paginate(20);
         return view('vendor.chargebacks.index', compact('chargebacks', 'vendor'));
     }
 
@@ -2165,23 +2200,23 @@ class VendorController extends Controller
         $activeCode = session('active_company');
 
         $payouts = VendorPayout::where('vendor_id', $vendor->id)
-        ->when(!$vendor->user->isAdmin() && !empty($activeCode), function ($query) use ($activeCode) {
-            $query->where('company_code', $activeCode);
-        })
-        ->orderByDesc('payout_year')->orderByDesc('payout_month')->paginate(12);
+            ->when(!$vendor->user->isAdmin() && !empty($activeCode), function ($query) use ($activeCode) {
+                $query->where('company_code', $activeCode);
+            })
+            ->orderByDesc('payout_year')->orderByDesc('payout_month')->paginate(12);
 
         $warehouseCharges = WarehouseCharge::where('vendor_id', $vendor->id)
-        ->when(!$vendor->user->isAdmin() && !empty($activeCode), function ($query) use ($activeCode) {
-            $query->where('company_code', $activeCode);
-        })
-        ->latest()->take(10)->get();
+            ->when(!$vendor->user->isAdmin() && !empty($activeCode), function ($query) use ($activeCode) {
+                $query->where('company_code', $activeCode);
+            })
+            ->latest()->take(10)->get();
 
         $vendorMonthlyCharges = VendorMonthlyCharge::where('vendor_id', $vendor->id)
-        ->when(!$vendor->user->isAdmin() && !empty($activeCode), function ($query) use ($activeCode) {
-            $query->where('company_code', $activeCode);
-        })
-        ->latest()->take(10)->get();
- 
+            ->when(!$vendor->user->isAdmin() && !empty($activeCode), function ($query) use ($activeCode) {
+                $query->where('company_code', $activeCode);
+            })
+            ->latest()->take(10)->get();
+
         return view('vendor.payouts.index', compact('payouts', 'vendor', 'warehouseCharges', 'vendorMonthlyCharges'));
     }
 
@@ -2239,19 +2274,30 @@ class VendorController extends Controller
             $data['ex_factory_date'] = $request->ex_factory_date ?: null;
         }
 
-        // ── Final Inspection Date — must be within 10 days of ex_factory_date ─────
+        // ── Final Inspection Date — must be within 7 days of ex_factory_date ─────
         if ($request->has('final_inspection_date')) {
             $inspDate  = $request->final_inspection_date;
             $exFactory = $request->ex_factory_date
                 ?? $liveSheet->ex_factory_date?->toDateString();
 
-            if ($inspDate && $exFactory) {
-                $maxInspection = \Carbon\Carbon::parse($exFactory)->addDays(10)->toDateString();
 
-                if ($inspDate < $exFactory || $inspDate > $maxInspection) {
+            // $maxInspection = $exFactory ?? $maxExFactory;
+            // $minInspection = $exFactory
+            //                 ->copy()
+            //                 ->subDays(8)        // You can change 3 to any number 1-7
+            //                 ->toDateString();
+
+
+
+            if ($inspDate && $exFactory) {
+                //   $maxInspection = \Carbon\Carbon::parse($exFactory)->addDays(7)->toDateString();
+
+                $minInspection = \Carbon\Carbon::parse($exFactory)->subDays(8)->toDateString();
+
+                if ($inspDate > $exFactory || $inspDate < $minInspection) {
                     return response()->json([
                         'success' => false,
-                        'message' => "Final Inspection Date must be between {$exFactory} and {$maxInspection}.",
+                        'message' => "Final Inspection Date must be between  {$minInspection} and {$exFactory}.",
                     ], 422);
                 }
             }
@@ -2266,7 +2312,7 @@ class VendorController extends Controller
         file_put_contents("storage/logs/LiveSheetDates.log" . date("Y-m-d") . ".log", print_r($data, true) . "\n", FILE_APPEND);
         if (!empty($data)) {
             $liveSheet->update($data);
-            $data['test'] = 'dates updated';
+            $data['message'] = 'dates updated';
         }
 
         return response()->json(['success' => true, $data]);
@@ -2274,7 +2320,7 @@ class VendorController extends Controller
     public function inspectionReports(Request $request)
     {
         $vendor = auth()->user()->vendor;
-        
+
         $activeCode = session('active_company');
 
         $reports = \App\Models\InspectionReport::whereHas('consignment', fn($q) => $q->where('vendor_id', $vendor->id))
@@ -2293,19 +2339,19 @@ class VendorController extends Controller
 
         $stats = [
             'total'    => \App\Models\InspectionReport::whereHas('consignment', fn($q) => $q->where('vendor_id', $vendor->id))
-            ->when($activeCode, fn($q) => $q->whereHas('consignment', fn($cq) => $cq->where('company_code', $activeCode)))
-            ->count(),
+                ->when($activeCode, fn($q) => $q->whereHas('consignment', fn($cq) => $cq->where('company_code', $activeCode)))
+                ->count(),
             'passed'   => \App\Models\InspectionReport::whereHas('consignment', fn($q) => $q->where('vendor_id', $vendor->id))->where('result', 'passed')
-            ->when($activeCode, fn($q) => $q->whereHas('consignment', fn($cq) => $cq->where('company_code', $activeCode)))
-            ->count(),
-           
+                ->when($activeCode, fn($q) => $q->whereHas('consignment', fn($cq) => $cq->where('company_code', $activeCode)))
+                ->count(),
+
             'failed'   => \App\Models\InspectionReport::whereHas('consignment', fn($q) => $q->where('vendor_id', $vendor->id))->where('result', 'failed')
-            ->when($activeCode, fn($q) => $q->whereHas('consignment', fn($cq) => $cq->where('company_code', $activeCode)))
-            ->count(),
-          
+                ->when($activeCode, fn($q) => $q->whereHas('consignment', fn($cq) => $cq->where('company_code', $activeCode)))
+                ->count(),
+
             'conditional' => \App\Models\InspectionReport::whereHas('consignment', fn($q) => $q->where('vendor_id', $vendor->id))->where('result', 'conditional')
-            ->when($activeCode, fn($q) => $q->whereHas('consignment', fn($cq) => $cq->where('company_code', $activeCode)))
-            ->count(),
+                ->when($activeCode, fn($q) => $q->whereHas('consignment', fn($cq) => $cq->where('company_code', $activeCode)))
+                ->count(),
         ];
 
         return view('vendor.inspections.index', compact('reports', 'consignments', 'stats', 'vendor'));

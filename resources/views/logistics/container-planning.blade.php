@@ -65,11 +65,11 @@
                         <option value="AIR">AIR (10 CBM)</option>
                     </select></div>
                 <div><label style="font-size:.7rem;font-weight:600;color:#64748b;display:block;margin-bottom:.25rem;">Company</label>
-                    
-                <span style="padding:.15rem .4rem;background:{{ $activeCode === '2000' ? '#dcfce7' : ($activeCode === '2100' ? '#dbeafe' : '#fef3c7') }};border-radius:5px;font-size:.78rem;font-weight:600;">
-                     {{ $activeCode === '2000' ? '🇮🇳 2000 India' : ($activeCode === '2100' ? '🇺🇸 2100 USA' : '🇳🇱 2200 NL') }}
-                </span>
-                 <input type="hidden" name="company_code"  value="{{ $activeCode }}">  
+
+                    <span style="padding:.15rem .4rem;background:{{ $activeCode === '2400' ? '#dcfce7' : ($activeCode === '2100' ? '#dbeafe' : '#fef3c7') }};border-radius:5px;font-size:.78rem;font-weight:600;">
+                        {{ $activeCode === '2400' ? '🇬🇧 2400 UK' : ($activeCode === '2100' ? '🇺🇸 2100 USA' : '🇪🇺 2200 EU') }}
+                    </span>
+                    <input type="hidden" name="company_code" value="{{ $activeCode }}">
                 </div>
                 <div><label style="font-size:.7rem;font-weight:600;color:#64748b;display:block;margin-bottom:.25rem;">Container #</label><input type="text" name="container_number" placeholder="Optional" style="width:120px;padding:.4rem .5rem;border:1px solid #d1d5db;border-radius:8px;font-size:.82rem;"></div>
                 <button type="submit" class="btn btn-primary"><i class="fas fa-ship" style="margin-right:.3rem;"></i> Create Shipment</button>
@@ -91,7 +91,12 @@
                         <th>Factory Location</th>
                         <th>Goods Ready Date</th>
                         <th>Country</th>
-                        <th>Items</th>
+                        <th>Total Skus</th>
+                        <th>Total Qty</th>
+                        <th>Total FOB</th>
+                        <th>Total Net Wt</th>
+                        <th>Total Gross Wt</th>
+                        <th>Total Master Cartons</th>
                         <th>CBM</th>
                         <th>Value</th>
                         <th>Live Sheet</th>
@@ -99,7 +104,7 @@
                 </thead>
                 <tbody>
                     @forelse($consignments as $con)
-                   <tr class="consignment-row" data-company-code="{{ $con->company_code }}">
+                    <tr class="consignment-row" data-company-code="{{ $con->company_code }}">
                         <td style="text-align:center;"><input type="checkbox" name="consignment_ids[]" value="{{ $con->id }}" class="con-check" data-cbm="{{ $con->total_cbm }}" onchange="updateCbm()" style="width:16px;height:16px;accent-color:#16a34a;"></td>
                         <td style="font-weight:700;font-family:monospace;font-size:.82rem;">{{ $con->consignment_number }}</td>
                         <td>
@@ -107,12 +112,33 @@
                             <div style="font-size:.68rem;color:#94a3b8;">{{ $con->vendor->vendor_code ?? '' }}</div>
                         </td>
                         <td>{{ $con->liveSheet->factory_location ?? '—' }}</td>
-                        <td>{{ $con->liveSheet && $con->liveSheet->goods_ready_date ? $con->liveSheet->goods_ready_date->format('d M Y') : '—' }}</td>
-                        <td>@php $fl=['US'=>'🇺🇸','NL'=>'🇳🇱','IN'=>'🇮🇳']; @endphp {{ $fl[$con->destination_country] ?? '' }} {{ $con->destination_country }}</td>
-                        <td style="text-align:center;font-weight:600;">{{ $con->total_items }}</td>
-                        <td style="font-family:monospace;font-weight:700;">{{ number_format($con->total_cbm, 2) }} <span style="font-size:.65rem;color:#94a3b8;">CBM</span></td>
-                        <td style="font-family:monospace;">${{ number_format($con->total_value, 2) }}</td>
-                        <td>@if($con->liveSheet)<span class="badge badge-success"><i class="fas fa-lock" style="font-size:.5rem;margin-right:.15rem;"></i> {{ $con->liveSheet->live_sheet_number }}</span>@else<span class="badge badge-gray">—</span>@endif</td>
+                        <td>{{ $con->liveSheet && $con->liveSheet->ex_factory_date ? $con->liveSheet->ex_factory_date->format('d M Y') : '—' }}</td>
+                        <td>@php $fl=['US'=>'🇺🇸','NL'=>'🇳🇱','IN'=>'🇮🇳','UK'=>'🇬🇧','EU'=>'🇪🇺']; @endphp {{ $fl[$con->destination_country] ?? '' }} {{ $con->destination_country }}</td>
+                       
+                        <td>{{ number_format($con->stats['total_skus']) }}</td>
+                        <td>{{ number_format($con->stats['total_qty']) }}</td>
+                        <td>{{ $activeCurrencySymbol }}{{ number_format($con->stats['total_fob'], 2) }}</td>
+                        <td>{{ number_format($con->stats['total_net_wt'], 2) }} kg</td>
+                        <td>{{ number_format($con->stats['total_gross_wt'], 2) }} kg</td>
+                        <td>{{ number_format($con->stats['total_master_cartons']) }}</td>
+ 
+
+                        <!-- <th>Total Qty(sum of Final Qty)</th>
+                        <th>Total FOB(Final FOB)</th>
+                        <th>Total Net Wt(ntw = wt* Final Qty = sum of ntw (in kg))</th>
+                        <th>Total Gross Wt()</th>
+                        <th>Total Master Cartons</th> -->
+                         <td style="font-family:monospace;font-weight:700;">{{ number_format($con->total_cbm, 3) }} <span style="font-size:.65rem;color:#94a3b8;">CBM</span></td>
+                        <td style="font-family:monospace;">{{ $activeCurrencySymbol }}{{ number_format($con->total_value, 2) }}</td>
+                        <td>@if($con->liveSheet)
+                            <span class="badge badge-success">
+                                
+                            </span>
+                            <a href="{{ route('logistics.container-planning.download-livesheet', $con) }}" 
+   class="btn btn-success btn-sm" title="Download Live Sheet">
+    <i class="fas fa-lock" style="font-size:.5rem;margin-right:.15rem;"></i>  {{ $con->liveSheet->live_sheet_number }}
+</a>
+                        @else<span class="badge badge-gray">—</span>@endif</td>
                     </tr>
                     @empty
                     <tr>
@@ -127,7 +153,11 @@
 
 @push('scripts')
 <script>
-    var capacities = { 'FCL': 65, 'LCL': 30, 'AIR': 10 };
+    var capacities = {
+        'FCL': 65,
+        'LCL': 30,
+        'AIR': 10
+    };
     var fclCapacity = capacities[document.querySelector('[name="shipment_type"]').value] || 65;
 
     // Update capacity when shipment type changes
@@ -184,27 +214,28 @@
 
 
 <script>
-(function() {
-    var select = document.getElementById('companyFilter');
-    function filterConsignments() {
-        var selected = select.value;
-        document.querySelectorAll('.consignment-row').forEach(function(row) {
-            row.style.display = (row.getAttribute('data-company-code') === selected) ? '' : 'none';
-        });
-        // Uncheck hidden rows and update CBM
-        document.querySelectorAll('.consignment-row').forEach(function(row) {
-            if (row.style.display === 'none') {
-                var cb = row.querySelector('.con-check');
-                if (cb) cb.checked = false;
-            }
-        });
-        document.getElementById('selectAll').checked = false;
-        if (typeof updateCbm === 'function') updateCbm();
-    }
-    select.addEventListener('change', filterConsignments);
-    filterConsignments();
-})();
+    (function() {
+        var select = document.getElementById('companyFilter');
+
+        function filterConsignments() {
+            var selected = select.value;
+            document.querySelectorAll('.consignment-row').forEach(function(row) {
+                row.style.display = (row.getAttribute('data-company-code') === selected) ? '' : 'none';
+            });
+            // Uncheck hidden rows and update CBM
+            document.querySelectorAll('.consignment-row').forEach(function(row) {
+                if (row.style.display === 'none') {
+                    var cb = row.querySelector('.con-check');
+                    if (cb) cb.checked = false;
+                }
+            });
+            document.getElementById('selectAll').checked = false;
+            if (typeof updateCbm === 'function') updateCbm();
+        }
+        select.addEventListener('change', filterConsignments);
+        filterConsignments();
+    })();
 </script>
- 
+
 
 @endsection

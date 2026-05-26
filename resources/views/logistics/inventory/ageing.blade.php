@@ -59,7 +59,7 @@
                     <td style="text-align:center;">{{ $grn->total_items_received }}</td>
                     <td>
                         <span style="display:inline-flex;align-items:center;gap:.3rem;padding:.2rem .5rem;border-radius:6px;font-weight:700;font-size:.82rem;background:{{ $grn->ageing_days>90?'#fee2e2':($grn->ageing_days>60?'#fef3c7':($grn->ageing_days>30?'#fefce8':'#dcfce7')) }};color:{{ $grn->ageing_days>90?'#dc2626':($grn->ageing_days>60?'#e8a838':($grn->ageing_days>30?'#854d0e':'#166534')) }};">
-                            <i class="fas fa-clock" style="font-size:.65rem;"></i> {{ $grn->ageing_days }} days
+                            <i class="fas fa-clock" style="font-size:.65rem;"></i> {{ number_format($grn->ageing_days,2) }} days
                         </span>
                     </td>
                     <td><span class="badge {{ $grn->status==='completed'?'badge-success':'badge-warning' }}">{{ ucfirst($grn->status) }}</span></td>

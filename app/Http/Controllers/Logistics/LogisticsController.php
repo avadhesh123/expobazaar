@@ -30,15 +30,35 @@ class LogisticsController extends Controller
         $activeCode = session('active_company');
 
         $consignments = Consignment::with('vendor', 'liveSheet')
-            ->where('status', 'created')           
+            ->where('status', 'created')
             ->when(!$user->isAdmin() && !empty($activeCode), function ($q) use ($activeCode) {
                 return $q->where('company_code', $activeCode);
             })
             ->when($request->company_code, fn($q, $v) => $q->where('company_code', $v))
             ->whereDoesntHave('shipments')
             ->when($request->company_code, fn($q, $v) => $q->where('company_code', $v))
-            ->get();
+            ->get(); 
+
+        $consignments->each(function ($con)    {
+            $items = $con->liveSheet?->items ?? collect();
+            $con->stats = [
+                'total_skus'     => $items->unique('product_id')->count(),
+                'total_qty'      => $items->sum('quantity'),
+                'total_fob'      => $items->sum('total_price'), 
+                'total_net_wt' => $items->sum(fn($i) => (($i->product_details['weight_grams'] ?? 0)) * ($i->product_details['final_qty'] ?? 0)),
+                'total_gross_wt' => $items->sum(fn($i) => ($i->product_details['master_weight_kg'] ?? 0) * ($i->product_details['no_of_master_carton'] ?? 0)),
+                'total_master_cartons'=> $items->sum(fn($i) => ($i->product_details['no_of_master_carton'] ?? 0)),
+                'master_weight_kg'=> $items->sum(fn($i) => ($i->product_details['master_weight_kg'] ?? 0)),
+                 'total_cbm'      => floatval($con->total_cbm ?? $items->sum('total_cbm')),
+            ];
+        });
+
+    //  print '<pre>';
+    //  print_r($consignments->toArray());
+    //  print '</pre>';
+
         $totalCbm = $consignments->sum('total_cbm');
+
         return view('logistics.container-planning', compact('consignments', 'totalCbm', 'activeCode'));
     }
 
@@ -63,7 +83,7 @@ class LogisticsController extends Controller
     public function shipments(Request $request)
     {
         $user = auth()->user();
-       
+
         $activeCode = session('active_company');
 
         $shipments = Shipment::with('consignments.vendor')
@@ -123,30 +143,28 @@ class LogisticsController extends Controller
     public function grnList(Request $request)
     {
         $user = auth()->user();
-        $activeCode = session('active_company');
+        $activeCompany = session('active_company');
 
         $grns = Grn::with('shipment', 'warehouse')
             ->when($request->status, fn($q, $v) => $q->where('status', $v))
-            ->when(!$user->isAdmin() && !empty($activeCode), function ($q) use ($activeCode) {
-                return $q->where('company_code', $activeCode);
+            ->when(!$user->isAdmin() && !empty($activeCompany), function ($q) use ($activeCompany) {
+                return $q->where('company_code', $activeCompany);
             })
-            ->when($request->company_code, fn($q, $v) => $q->where('company_code', $v))
             ->when($request->warehouse_id, fn($q, $v) => $q->where('warehouse_id', $v))
             ->latest()->paginate(20);
 
         $pendingShipments = Shipment::whereIn('status', ['arrived', 'grn_pending', 'locked', 'asn_generated', 'in_transit', 'consolidated'])
             ->whereDoesntHave('grn')
             ->with('consignments.vendor', 'warehouse')
-            ->when(!$user->isAdmin() && !empty($activeCode), function ($q) use ($activeCode) {
-                return $q->where('company_code', $activeCode);
+            ->when(!$user->isAdmin() && !empty($activeCompany), function ($q) use ($activeCompany) {
+                return $q->where('company_code', $activeCompany);
             })
             ->latest()->get();
 
         $warehouses = Warehouse::active()
-            ->when(!$user->isAdmin() && !empty($activeCode), function ($q) use ($activeCode) {
-                return $q->where('company_code', $activeCode);
+            ->when(!$user->isAdmin() && !empty($activeCompany), function ($q) use ($activeCompany) {
+                return $q->where('company_code', $activeCompany);
             })
-            ->when($request->company_code, fn($q, $v) => $q->where('company_code', $v))
             ->get();
         return view('logistics.grn.index', compact('grns', 'pendingShipments', 'warehouses'));
     }
@@ -292,8 +310,7 @@ class LogisticsController extends Controller
             ->when($request->company_code, fn($q, $v) => $q->where('company_code', $v))
             ->when($request->warehouse_id, fn($q, $v) => $q->where('warehouse_id', $v))
             ->when($request->vendor_id, fn($q, $v) => $q->whereHas('product', fn($pq) => $pq->where('vendor_id', $v)))
-            ->when($request->search, fn($q, $v) => $q->whereHas('product', fn($pq) => $pq->where('sku', 'like', "%{$v}%")->orWhere('name', 'like', "%{$v}%")))
-            ;//->where('quantity', '>', 0);
+            ->when($request->search, fn($q, $v) => $q->whereHas('product', fn($pq) => $pq->where('sku', 'like', "%{$v}%")->orWhere('name', 'like', "%{$v}%"))); //->where('quantity', '>', 0);
 
         $inventory = $query->paginate(50)->appends($request->query());
 
@@ -377,9 +394,9 @@ class LogisticsController extends Controller
 
     public function inventoryAgeing(Request $request)
     {
-       // $companyCode = $request->get('company_code');
+        // $companyCode = $request->get('company_code');
 
-        $activeCode = session('active_company');
+        $activeCode = $companyCode = session('active_company');
 
         // Build flat ageing summary for KPI cards
         $allInventory = Inventory::when($activeCode, fn($q, $v) => $q->where('company_code', $v))
@@ -910,7 +927,7 @@ class LogisticsController extends Controller
     {
 
         $user = auth()->user();
-       $activeCode = session('active_company');
+        $activeCode = session('active_company');
 
         $rateCards = \App\Models\WarehouseRateCard::with('warehouse', 'creator', 'approver')
             ->when($request->warehouse_id, fn($q, $v) => $q->where('warehouse_id', $v))
@@ -984,7 +1001,7 @@ class LogisticsController extends Controller
     {
 
         $user = auth()->user();
-        $activeCode =  session('active_company'); 
+        $activeCode =  session('active_company');
 
         $month = $request->get('month', now()->month);
         $year = $request->get('year', now()->year);
@@ -1065,9 +1082,9 @@ class LogisticsController extends Controller
     // ─── RATE CARDS ──────────────────────────────────────────────
     public function rateCards(Request $request)
     {
-       // $companyCode = $request->get('company_code');
-        
-$companyCode =  session('active_company');
+        // $companyCode = $request->get('company_code');
+
+        $companyCode =  session('active_company');
 
         $warehouses = Warehouse::when($companyCode, fn($q, $v) => $q->where('company_code', $v))
             ->where('is_active', true)
@@ -1119,5 +1136,129 @@ $companyCode =  session('active_company');
         \App\Models\ActivityLog::log('updated', 'warehouse_rate_card', $warehouse, null, $newRates, "Rate card updated for {$warehouse->name}");
 
         return back()->with('success', "Rate card updated for {$warehouse->name}.");
+    }
+
+     public function downloadLiveSheet(\App\Models\Consignment $consignment)
+    {
+        $consignment->load('vendor', 'liveSheet.items.product');
+
+        $liveSheet = $consignment->liveSheet;
+        if (!$liveSheet) {
+            return back()->with('error', 'No live sheet found for this consignment.');
+        }
+
+        $items = $liveSheet->items;
+        $vendorName = preg_replace('/[^A-Za-z0-9\-]/', '', $consignment->vendor->company_name ?? 'Vendor');
+        $filename = "LiveSheet-{$liveSheet->live_sheet_number}-{$vendorName}.xlsx";
+        $outputPath = storage_path("app/temp/{$filename}");
+        @mkdir(storage_path('app/temp'), 0755, true);
+
+        $spreadsheet = new \PhpOffice\PhpSpreadsheet\Spreadsheet();
+        $ws = $spreadsheet->getActiveSheet();
+        $ws->setTitle('Live Sheet');
+
+        $headers = ['S.No','Vendor Name','Vendor SKU','SAP Code','Product Name','Barcode',
+            'Category','Material','Color','Length (cm)','Width (cm)','Height (cm)',
+            'Weight (g)','CBM/Unit','Qty','Unit Price','Total Price','Total CBM',
+            'Total Weight (kg)','Master Cartons','Net Weight','Gross Weight',
+            'Factory Location','Goods Ready Date','Consignment No','Live Sheet No'];
+
+        // Header styling
+        $hdrFill = new \PhpOffice\PhpSpreadsheet\Style\Fill();
+        $hdrFill->setFillType(\PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID)->getStartColor()->setRGB('1E3A5F');
+
+        $hdrFont = new \PhpOffice\PhpSpreadsheet\Style\Font();
+        $hdrFont->setBold(true)->setColor(new \PhpOffice\PhpSpreadsheet\Style\Color('FFFFFF'))->setSize(10)->setName('Arial');
+
+        foreach ($headers as $col => $header) {
+            $cell = $ws->getCell([$col + 1, 1]);
+            $cell->setValue($header);
+            $cell->getStyle()->getFont()->setBold(true)->setColor(new \PhpOffice\PhpSpreadsheet\Style\Color('FFFFFF'))->setSize(10)->setName('Arial');
+            $cell->getStyle()->getFill()->setFillType(\PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID)->getStartColor()->setRGB('1E3A5F');
+            $cell->getStyle()->getAlignment()->setHorizontal(\PhpOffice\PhpSpreadsheet\Style\Alignment::HORIZONTAL_CENTER)->setVertical(\PhpOffice\PhpSpreadsheet\Style\Alignment::VERTICAL_CENTER)->setWrapText(true);
+        }
+
+        // Data rows
+        $altFill = 'F8FAFC';
+        foreach ($items as $idx => $item) {
+            $p = $item->product;
+            $d = $item->product_details ?? [];
+            $row = $idx + 2;
+
+            $rowData = [
+                $idx + 1,
+                $consignment->vendor->company_name ?? '',
+                $p->sku ?? '',
+                $p->sap_code ?? '',
+                $p->name ?? '',
+                $p->barcode ?? $d['barcode'] ?? '',
+                $d['category'] ?? '',
+                $d['material'] ?? $p->material ?? '',
+                $d['color'] ?? $p->color ?? '',
+                floatval($d['length_inches'] ?? $p->length_cm ?? 0),
+                floatval($d['width_inches'] ?? $p->width_cm ?? 0),
+                floatval($d['height_inches'] ?? $p->height_cm ?? 0),
+                floatval($d['weight_grams'] ?? ($p->weight_kg ? $p->weight_kg * 1000 : 0)),
+                floatval($item->cbm_per_unit ?? 0),
+                intval($item->quantity),
+                floatval($item->unit_price ?? 0),
+                floatval($item->total_price ?? 0),
+                floatval($item->total_cbm ?? 0),
+                floatval($item->total_weight ?? 0),
+                intval($d['master_cartons'] ?? $d['no_of_master_cartons'] ?? 0),
+                floatval($d['net_weight'] ?? 0),
+                floatval($d['gross_weight'] ?? $d['weight_per_unit'] ?? 0) * intval($item->quantity),
+                $d['factory_location'] ?? $liveSheet->factory_location ?? '',
+                $d['goods_ready_date'] ?? $liveSheet->goods_ready_date ?? '',
+                $consignment->consignment_number ?? '',
+                $liveSheet->live_sheet_number ?? '',
+            ];
+
+            foreach ($rowData as $col => $val) {
+                $cell = $ws->getCell([$col + 1, $row]);
+                $cell->setValue($val);
+                $cell->getStyle()->getFont()->setSize(9)->setName('Arial');
+
+                // Alternating row fill
+                if ($idx % 2 === 0) {
+                    $cell->getStyle()->getFill()->setFillType(\PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID)->getStartColor()->setRGB($altFill);
+                }
+
+                // Borders
+                $cell->getStyle()->getBorders()->getAllBorders()->setBorderStyle(\PhpOffice\PhpSpreadsheet\Style\Border::BORDER_THIN)->getColor()->setRGB('D1D5DB');
+            }
+
+            // Number formats
+            $ws->getCell([14, $row])->getStyle()->getNumberFormat()->setFormatCode('0.000000'); // CBM/Unit
+            $ws->getCell([16, $row])->getStyle()->getNumberFormat()->setFormatCode('#,##0.00'); // Unit Price
+            $ws->getCell([17, $row])->getStyle()->getNumberFormat()->setFormatCode('#,##0.00'); // Total Price
+            $ws->getCell([18, $row])->getStyle()->getNumberFormat()->setFormatCode('0.0000');   // Total CBM
+            $ws->getCell([19, $row])->getStyle()->getNumberFormat()->setFormatCode('#,##0.00'); // Total Weight
+            $ws->getCell([21, $row])->getStyle()->getNumberFormat()->setFormatCode('#,##0.00'); // Net Weight
+            $ws->getCell([22, $row])->getStyle()->getNumberFormat()->setFormatCode('#,##0.00'); // Gross Weight
+        }
+
+        // Column widths
+        $widths = ['A'=>5,'B'=>22,'C'=>16,'D'=>12,'E'=>35,'F'=>16,'G'=>14,'H'=>12,'I'=>10,
+            'J'=>8,'K'=>8,'L'=>8,'M'=>10,'N'=>10,'O'=>6,'P'=>10,'Q'=>12,'R'=>10,
+            'S'=>12,'T'=>10,'U'=>10,'V'=>10,'W'=>18,'X'=>14,'Y'=>16,'Z'=>16];
+        foreach ($widths as $col => $w) {
+            $ws->getColumnDimension($col)->setWidth($w);
+        }
+
+        // Auto-filter and freeze
+        $ws->setAutoFilter("A1:Z1");
+        $ws->freezePane('A2');
+
+        // Header borders
+        $ws->getStyle("A1:Z1")->getBorders()->getAllBorders()->setBorderStyle(\PhpOffice\PhpSpreadsheet\Style\Border::BORDER_THIN)->getColor()->setRGB('0D1B2A');
+
+        $writer = new \PhpOffice\PhpSpreadsheet\Writer\Xlsx($spreadsheet);
+        $writer->save($outputPath);
+        $spreadsheet->disconnectWorksheets();
+
+        return response()->download($outputPath, $filename, [
+            'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        ])->deleteFileAfterSend(true);
     }
 }

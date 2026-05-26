@@ -62,8 +62,10 @@ class PricingService
                                 'selling_price'   => $sellingPrice,
                                 'map_price'       => null,
                                 'margin_percent'  => $margin,
-                                'status'          => 'submitted',
+                                'status'          => 'approved', //'submitted',
                                 'prepared_by'     => $preparer->id,
+                                'approved_by' => auth()->id(),
+                                'approved_at' => now(),
                             ]
                         );
                         $pricings[] = $pricing;
@@ -92,14 +94,16 @@ class PricingService
                             'platform_price' => $retailPrice,
                             'margin_percent' => $retailPrice > 0
                                 ? round((($retailPrice - $fob) / $retailPrice) * 100, 2) : 0,
-                            'status'         => 'submitted',
+                            'status'         => 'approved', //'submitted',
                             'prepared_by'    => $preparer->id,
+                            'approved_by' => auth()->id(),
+                            'approved_at' => now()
                         ]
                     );
                     $pricings[] = $pricing;
                 }
             }
-           $asn->update(['status' => 'pricing_done']);
+            $asn->update(['status' => 'pricing_done']);
         });
 
         // Notify Finance for review
@@ -137,6 +141,7 @@ class PricingService
      */
     public function finalizePricing(Asn $asn, User $approver): void
     {
+        Asn::where('id', $asn->id)->update(['status' => 'approved']);
         PlatformPricing::where('asn_id', $asn->id)->update([
             'status' => 'approved',
             'approved_by' => $approver->id,

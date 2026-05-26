@@ -56,7 +56,19 @@
                     <td>
                         @php $sc = ['draft'=>'badge-gray','submitted'=>'badge-warning','locked'=>'badge-success','unlocked'=>'badge-warning']; @endphp
                         <span class="badge {{ $sc[$ls->status]??'badge-gray' }}">{{ ucfirst($ls->status) }}</span>
-                        @if($ls->is_locked)<div style="font-size:.62rem;color:#166534;"><i class="fas fa-lock" style="font-size:.5rem;"></i> {{ $ls->locked_at?->format('d M') }}</div>@endif
+                        @if($ls->is_locked)
+                        <div style="font-size:.62rem;color:#166534;"><i class="fas fa-lock" style="font-size:.5rem;"></i> {{ $ls->locked_at?->format('d M') }}</div>
+                           @if(auth()->user()->isAdmin())
+                            <form method="POST" action="{{ route('admin.live-sheets.unlock', $ls) }}" style="margin:0;">
+                                @csrf
+                                <button type="submit" class="btn btn-danger btn-sm" onclick="return confirm('Unlock this live sheet? Vendor will be able to make changes.')">
+                                    <i class="fas fa-unlock" style="margin-right:.3rem;"></i> Unlock
+                                </button>
+                            </form>                            
+                            @endif
+                        @endif               
+                    
+                    
                     </td>
                     <td>
                         @if($ls->consignment)

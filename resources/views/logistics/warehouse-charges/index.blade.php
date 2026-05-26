@@ -7,15 +7,15 @@
 <div class="grid-kpi" style="grid-template-columns:repeat(3,1fr);">
     <div class="kpi-card" style="border-left:3px solid #dc2626;">
         <div class="kpi-label">Payable (to Warehouse)</div>
-        <div class="kpi-value" style="color:#dc2626;">${{ number_format($stats['total_payable'], 2) }}</div>
+        <div class="kpi-value" style="color:#dc2626;">{{$activeCurrencySymbol}}{{ number_format($stats['total_payable'], 2) }}</div>
     </div>
     <div class="kpi-card" style="border-left:3px solid #16a34a;">
         <div class="kpi-label">Receivable (from Vendors)</div>
-        <div class="kpi-value" style="color:#16a34a;">${{ number_format($stats['total_receivable'], 2) }}</div>
+        <div class="kpi-value" style="color:#16a34a;">{{$activeCurrencySymbol}}{{ number_format($stats['total_receivable'], 2) }}</div>
     </div>
     <div class="kpi-card" style="border-left:3px solid #e8a838;">
         <div class="kpi-label">Variance (Payable)</div>
-        <div class="kpi-value" style="color:#e8a838;">${{ number_format(abs($stats['total_variance']), 2) }} {{ $stats['total_variance'] > 0 ? '(over)' : ($stats['total_variance'] < 0 ? '(under)' : '') }}</div>
+        <div class="kpi-value" style="color:#e8a838;">{{$activeCurrencySymbol}}{{ number_format(abs($stats['total_variance']), 2) }} {{ $stats['total_variance'] > 0 ? '(over)' : ($stats['total_variance'] < 0 ? '(under)' : '') }}</div>
         <div style="font-size:.65rem;color:#94a3b8;">{{ $stats['pending_invoices'] }} pending invoices</div>
     </div>
 </div>
@@ -86,10 +86,10 @@
                         <div style="font-size:.62rem;color:#94a3b8;">{{ $c->vendor->vendor_code ?? '' }}</div>
                     </td>
                     <td><span class="badge {{ $c->charge_category==='payable'?'badge-danger':'badge-success' }}">{{ ucfirst($c->charge_category) }}</span></td>
-                    <td style="font-family:monospace;font-weight:700;">${{ number_format(floatval($c->calculated_amount), 2) }}</td>
+                    <td style="font-family:monospace;font-weight:700;">{{$activeCurrencySymbol}}{{ number_format(floatval($c->calculated_amount), 2) }}</td>
                     <td style="font-family:monospace;">
                         @if($c->actual_amount !== null)
-                        ${{ number_format(floatval($c->actual_amount), 2) }}
+                        {{$activeCurrencySymbol}}{{ number_format(floatval($c->actual_amount), 2) }}
                         @if($c->invoice_number)<div style="font-size:.62rem;color:#94a3b8;">#{{ $c->invoice_number }}</div>@endif
                         @else
                         <span style="color:#94a3b8;">—</span>
@@ -97,7 +97,7 @@
                     </td>
                     <td style="font-family:monospace;font-weight:700;color:{{ floatval($c->variance ?? 0) > 0 ? '#dc2626' : (floatval($c->variance ?? 0) < 0 ? '#16a34a' : '#64748b') }};">
                         @if($c->variance !== null)
-                        {{ floatval($c->variance) > 0 ? '+' : '' }}${{ number_format(floatval($c->variance), 2) }}
+                        {{ floatval($c->variance) > 0 ? '+' : '' }}{{$activeCurrencySymbol}}{{ number_format(floatval($c->variance), 2) }}
                         @else — @endif
                     </td>
                     <td>
@@ -133,13 +133,13 @@
                                 <td style="padding:.3rem .5rem;">{{ $item->charge_label }}</td>
                                 <td>{{ $item->uom }}</td>
                                 <td style="text-align:right;font-family:monospace;">{{ number_format(floatval($item->quantity), 2) }}</td>
-                                <td style="text-align:right;font-family:monospace;">${{ number_format(floatval($item->rate), 4) }}</td>
-                                <td style="text-align:right;font-family:monospace;font-weight:600;">${{ number_format(floatval($item->amount), 2) }}</td>
+                                <td style="text-align:right;font-family:monospace;">{{$activeCurrencySymbol}}{{ number_format(floatval($item->rate), 4) }}</td>
+                                <td style="text-align:right;font-family:monospace;font-weight:600;">{{$activeCurrencySymbol}}{{ number_format(floatval($item->amount), 2) }}</td>
                             </tr>
                             @endforeach
                             <tr style="background:#f0f4f8;font-weight:700;">
                                 <td colspan="4" style="padding:.3rem .5rem;">Total</td>
-                                <td style="text-align:right;font-family:monospace;">${{ number_format(floatval($c->calculated_amount), 2) }}</td>
+                                <td style="text-align:right;font-family:monospace;">{{$activeCurrencySymbol}}{{ number_format(floatval($c->calculated_amount), 2) }}</td>
                             </tr>
                         </table>
                     </td>

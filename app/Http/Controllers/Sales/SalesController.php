@@ -15,10 +15,13 @@ class SalesController extends Controller
     ) {}
 
     // ═══ DASHBOARD ═══
-
     public function dashboard(Request $request)
     {
-        $data = $this->dashboardService->getSalesDashboard($request->company_code);
+        $data = $this->dashboardService->getSalesDashboard(
+            session('active_company'),
+            $request->date_from,
+            $request->date_to
+        );
         return view('sales.dashboard', compact('data'));
     }
 
@@ -26,7 +29,9 @@ class SalesController extends Controller
 
     public function orders(Request $request)
     {
-        $baseQuery = Order::when($request->company_code, fn($q, $v) => $q->where('company_code', $v))
+        $activeCompany = session('active_company');
+
+        $baseQuery = Order::when($activeCompany, fn($q, $v) => $q->where('company_code', $v))
             ->when($request->status, fn($q, $v) => $q->where('status', $v))
             ->when($request->sales_channel_id, fn($q, $v) => $q->where('sales_channel_id', $v))
             ->when($request->search, fn($q, $v) => $q->where(function ($q2) use ($v) {
@@ -49,15 +54,8 @@ class SalesController extends Controller
         ];
 
 
-        $currencySymbol = match ($request->company_code) {
-            '2000' => '₹',
-            '2200' => '€',
-            '2400' => '£',
-            default => '$',
-        };
-
         $channels = SalesChannel::active()->get();
-        return view('sales.orders', compact('orders', 'channels', 'stats', 'currencySymbol'));
+        return view('sales.orders', compact('orders', 'channels', 'stats'));
     }
 
     public function showOrder(Order $order)
@@ -68,8 +66,9 @@ class SalesController extends Controller
 
     public function downloadOrders(Request $request)
     {
+        $activeCompany = session('active_company');
         $orders = Order::with('salesChannel', 'items.product.vendor', 'warehouse')
-            ->when($request->company_code, fn($q, $v) => $q->where('company_code', $v))
+            ->when($activeCompany, fn($q, $v) => $q->where('company_code', $v))
             ->when($request->status, fn($q, $v) => $q->where('status', $v))
             ->when($request->sales_channel_id, fn($q, $v) => $q->where('sales_channel_id', $v))
             ->when($request->search, fn($q, $v) => $q->where(function ($q2) use ($v) {
@@ -311,6 +310,9 @@ class SalesController extends Controller
 
     public function toBeShipped(Request $request)
     {
+
+        $activeCompany = session('active_company');
+
         $orders = Order::with('items.product', 'salesChannel', 'warehouse')
             ->where('status', '!=', 'cancelled')
             ->where(function ($q) {
@@ -319,7 +321,7 @@ class SalesController extends Controller
             ->where(function ($q) {
                 $q->whereNull('tracking_id')->orWhere('tracking_id', '');
             })
-            ->when($request->company_code, fn($q, $v) => $q->where('company_code', $v))
+            ->where('company_code', $activeCompany)
             ->when($request->channel_id, fn($q, $v) => $q->where('sales_channel_id', $v))
             ->latest('order_date')
             ->paginate(30)->withQueryString();
@@ -386,11 +388,12 @@ class SalesController extends Controller
 
     public function orderManagement(Request $request)
     {
+        $activeCompany = session('active_company');
         $orders = Order::with('items.product', 'salesChannel', 'warehouse')
             ->where(function ($q) {
                 $q->whereNotNull('tracking_id')->where('tracking_id', '!=', '');
             })
-            ->when($request->company_code, fn($q, $v) => $q->where('company_code', $v))
+            ->where('company_code', $activeCompany)
             ->when($request->channel_id, fn($q, $v) => $q->where('sales_channel_id', $v))
             ->when($request->status, fn($q, $v) => $q->where('current_status', $v))
             ->when($request->search, fn($q, $v) => $q->where(function ($q2) use ($v) {

@@ -63,7 +63,7 @@
                     <th>Finish</th>
                     <th>Category</th>
                     <th>Sub Category</th>
-                    <th>FOB ($)</th>
+                    <th>FOB ({{$activeCurrencySymbol}})</th>
                     <th style="min-width:120px;">Comments</th>
                 </tr>
             </thead>
@@ -132,7 +132,7 @@
                     <td style="font-size:.82rem;">{{ $d['finish'] ?? '—' }}</td>
                     <td style="font-size:.82rem;">{{ $d['category'] ?? ($item->category->name ?? '—') }}</td>
                     <td style="font-size:.82rem;">{{ $d['sub_category'] ?? '—' }}</td>
-                    <td style="font-family:monospace;font-weight:700;color:#166534;">${{ number_format($item->vendor_price, 2) }}</td>
+                    <td style="font-family:monospace;font-weight:700;color:#166534;">{{ $activeCurrencySymbol }}{{ number_format($item->vendor_price, 2) }}</td>
                     <td style="font-size:.78rem;color:#64748b;">{{ $d['comments'] ?? '—' }}</td>
                 </tr>
                 @endforeach

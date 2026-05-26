@@ -50,18 +50,19 @@
                 $exFactory = $ls->ex_factory_date?->toDateString() ?? '';
                 $finalInsp = $ls->final_inspection_date?->toDateString() ?? '';
                 $factoryLoc = $ls->factory_location ?? '';
-                // Max inspection = Goods Ready Date + 7 days (or today + 75 as fallback before Goods Ready Date is set)
+                // Max inspection = Goods Ready Date + 7 days (or today + 100 as fallback before Goods Ready Date is set)
                 // $maxInspection = $exFactory ? \Carbon\Carbon::parse($exFactory)->addDays(7)->toDateString() : '';
                 // For client-side validation, we only need to validate that the maximum inspection date is within the selected ex-factory date. The server-side validation will also enforce this rule.
 
-                $maxInspection = $exFactory ?? $maxExFactory;                
-                $minInspection = $exFactoryDate
-                                ->copy()
-                                ->subDays(8)        // You can change 3 to any number 1-7
-                                ->toDateString();
+                $maxInspection = $exFactory ?? $maxExFactory;
+                
+                  $minInspection = $exFactoryDate
+                    ->copy()
+                    ->subDays(8)        // You can change 3 to any number 1-7
+                    ->toDateString();
 
                 @endphp
-                <tr id="row-{{ $ls->id }}">
+                <tr id="row-{{ $ls->id }}">{{ $maxInspection}} 
                     <td style="font-family:monospace;font-weight:700;">{{ $ls->live_sheet_number }}</td>
                     <td style="font-size:.82rem;color:#64748b;">{{ $ls->offerSheet->offer_sheet_number ?? '—' }}</td>
                     <td style="text-align:center;font-weight:600;">{{ $ls->items->count() }}</td>
@@ -87,6 +88,7 @@
                         <div style="position:relative;">
                             <input
                                 type="date"
+                                name="goods_ready_date"
                                 class="ex-factory-input"
                                 data-id="{{ $ls->id }}"
                                 value="{{ $exFactory }}"
@@ -102,17 +104,20 @@
                         <div style="font-size:.65rem;color:#94a3b8;margin-top:.2rem;">
                             Latest: {{ now()->addDays(75)->format('d M Y') }}
                         </div>
+
                         @elseif($ls->consignment_id)
+
                         <span style="font-size:.82rem;font-family:monospace;color:#475569;">
                             {{ $formattedExFactory }}
                         </span>
+
                         @else
+
                         <span style="font-size:.72rem;color:#94a3b8;">
                             <i class="fas fa-lock-open"></i> Available after approval
                         </span>
-                        @endif
-                        <span class="msg-ex-factory-{{ $ls->id }}" style="display:none;font-size:.65rem;color:#94a3b8;margin-top:.2rem;"></span>
 
+                        @endif
                     </td>
                     {{-- Factory Location --}}
                     <td>
@@ -129,14 +134,14 @@
                         <span style="font-size:.82rem;color:#475569;">{{ $factoryLoc ?: '—' }}</span>
                         @else
                         <span style="font-size:.72rem;color:#94a3b8;"><i class="fas fa-lock-open"></i> Available after approval</span>
+
                         @endif
-                        <span class="msg-factory-location-{{ $ls->id }}" style="display:none;font-size:.65rem;color:#94a3b8;margin-top:.2rem;"></span>
                     </td>
                     {{-- Final Inspection Date --}}
                     <td>
                         @if(!$ls->consignment_id && $ls->is_locked)
                         <div style="position:relative;">
-                            <input
+                            <!-- <input
                                 type="date"
                                 class="inspection-input"
                                 data-id="{{ $ls->id }}"
@@ -145,11 +150,20 @@
                                 max="{{ $maxInspection }}"
                                 {{ !$exFactory ? 'disabled' : '' }}
                                 style="width:100%;padding:.32rem .45rem;border:1px solid {{ $finalInsp ? '#86efac' : '#d1d5db' }};border-radius:6px;font-size:.8rem;font-family:monospace;color:#0d1b2a;background:{{ $finalInsp ? '#f0fdf4' : ($exFactory ? '#fff' : '#f8fafc') }};opacity:{{ $exFactory ? '1' : '.55' }};"
-                                title="{{ $exFactory ? 'Select within 7 days of Ex-Factory date' : 'Set Ex-Factory date first' }}">
+                                title="{{ $exFactory ? 'Select within 10 days of Ex-Factory date' : 'Set Ex-Factory date first' }}"
+                                > -->
+
+                                <input 
+                                type="date" 
+       class="inspection-input" 
+       data-id="{{ $ls->id }}"
+       min="{{ \Carbon\Carbon::parse($maxExFactory)->subDays(7)->format('Y-m-d') }}" 
+       max="{{ \Carbon\Carbon::parse($maxExFactory)->format('Y-m-d') }}" 
+       value="{{ $finalInsp ?? '' }}">
                         </div>
                         <div class="insp-hint-{{ $ls->id }}" style="font-size:.65rem;color:#94a3b8;margin-top:.2rem;">
                             @if($exFactory)
-                            Latest: {{ now()->addDays(75)->format('d M Y') }}
+                            Latest: {{ now()->addDays(65)->format('d M Y') }}
                             @else
                             Set Goods Ready Date first
                             @endif
@@ -162,8 +176,7 @@
                         <span style="font-size:.72rem;color:#94a3b8;">
                             <i class="fas fa-lock-open"></i> Available after approval
                         </span>
-                        @endif                        
-                        <span class="msg-insp-date-{{ $ls->id }}" style="display:none;font-size:.65rem;color:#94a3b8;margin-top:.2rem;"></span>
+                        @endif
                     </td>
 
 
@@ -181,7 +194,6 @@
                         @endif
 
                     </td>
-                   
                 </tr>
                 @empty
                 <tr>
@@ -239,27 +251,6 @@
                     return r.json();
                 })
                 .then(function(data) {
-
-                    let msgContainer = null;
-                    if(field === 'ex_factory_date') {
-                        msgContainer = document.querySelector('.msg-ex-factory-' + lsId); 
-                    }else if(field === 'final_inspection_date') {
-                        msgContainer = document.querySelector('.msg-insp-date-' + lsId);
-                    }else if(field === 'factory_location') {
-                        msgContainer = document.querySelector('.msg-factory-location-' + lsId);
-                    }  
-                   
-                    if (msgContainer) {
-                        msgContainer.textContent = data.message || (data.success ? 'Data saved.' : 'Error while saving:'+data.message); 
-                        msgContainer.style.color = data.success ? '#16a34a' : '#dc2626';
-                        msgContainer.style.display = 'block';
-                        setTimeout(() => {
-                            msgContainer.style.display = 'none';
-                            msgContainer.textContent = '';
-                            msgContainer.style.color = '';
-                        }, 3000);
-
-                    }
                     if (data.success && onSuccess) onSuccess();
                 })
                 .catch(function(e) {
@@ -289,24 +280,12 @@
                 // Update inspection input constraints for this row
                 var inspInput = document.querySelector('.inspection-input[data-id="' + lsId + '"]');
                 var inspHint = document.querySelector('.insp-hint-' + lsId);
-              //  var maxInsp = exDate; //addDays(exDate, 10);
-
-                 // Calculate last 7 days window
-            var maxDate = new Date(exDate);
-            var minDate = new Date(exDate);
-            minDate.setDate(maxDate.getDate() - 7);
-
-            // Set min and max on inspection date input
-          //  inspectionInput.min = minDate.toISOString().split('T')[0];
-          //  inspectionInput.max = maxDate.toISOString().split('T')[0];
-            console.log(`Set inspection date range for LS ${lsId}: ${inspInput.min} to ${inspInput.max}`);
-            // Optional: Auto-fill with a default date (3 days before max)
-
+                var maxInsp = exDate; //addDays(exDate, 10);
 
                 if (inspInput) {
                     inspInput.disabled = false;
-                    inspInput.min = minDate.toISOString().split('T')[0]//exDate;
-                    inspInput.max = maxDate.toISOString().split('T')[0]//maxInsp;
+                    inspInput.min = exDate;
+                    inspInput.max = maxInsp;
                     inspInput.style.opacity = '1';
                     inspInput.style.background = '#fff';
                     inspInput.style.borderColor = '#d1d5db';
@@ -322,7 +301,7 @@
                 }
 
                 if (inspHint) {
-                    inspHint.textContent = 'Latest: ' + formatDisplay(maxDate);
+                    inspHint.textContent = 'Latest: ' + formatDisplay(maxInsp);
                 }
 
                 // Save ex-factory date
@@ -353,35 +332,50 @@
                 });
             });
         });
-        // ── Final Inspection inputs ───────────────────────────────────────────────
-        document.querySelectorAll('.inspection-input').forEach(function(input) {
-            input.addEventListener('change', function() {
-                var lsId = this.getAttribute('data-id');
-                var inspDate = this.value;
-                var inputEl = this;
+        // ── Final Inspection inputs ─────────────────────────────────────────────── 
+        // ── Final Inspection Date Logic (Last 7 Days) ─────────────────────────────
+document.querySelectorAll('.inspection-input').forEach(function(input) {
+    input.addEventListener('change', function() {
+        var lsId = this.getAttribute('data-id');
+        var inspDate = this.value;
+        var inputEl = this;
 
-                if (!inspDate) return;
+        if (!inspDate) return;
 
-                var minDate = this.min;
-                var maxDate = this.max;
+        // Get the Goods Ready Date (Max Ex-Factory) for this row
+        var goodsReadyInput = document.querySelector(`[data-id="${lsId}"][name*="goods_ready_date"], [data-id="${lsId}"][name*="max_ex_factory"]`);
+        var maxExFactory = goodsReadyInput ? goodsReadyInput.value : null;
+console.log('Max Ex-Factory for validation:', maxExFactory,goodsReadyInput);
+        if (maxExFactory) {
+            var maxDate = new Date(maxExFactory);
+            var minDate = new Date(maxExFactory);
+            minDate.setDate(maxDate.getDate() - 7); // Last 7 days
 
-                // Enforce bounds
-                if (maxDate && inspDate > maxDate) {
-                    this.value = maxDate;
-                    inspDate = maxDate;
-                }
-                if (minDate && inspDate < minDate) {
-                    this.value = minDate;
-                    inspDate = minDate;
-                }
+            // Enforce range
+            if (new Date(inspDate) > maxDate) {
+                this.value = maxExFactory;
+                inspDate = maxExFactory;
+            }
+            if (new Date(inspDate) < minDate) {
+                this.value = minDate.toISOString().split('T')[0];
+                inspDate = this.value;
+            }
+        }
 
-                // Save inspection date
-                saveDate(lsId, 'final_inspection_date', inspDate, function() {
-                    inputEl.style.borderColor = '#86efac';
-                    inputEl.style.background = '#f0fdf4';
-                });
-            });
+        // Save inspection date
+        saveDate(lsId, 'final_inspection_date', inspDate, function() {
+            inputEl.style.borderColor = '#86efac';
+            inputEl.style.background = '#f0fdf4';
+            
+            setTimeout(() => {
+                inputEl.style.borderColor = '';
+                inputEl.style.background = '';
+            }, 1500);
         });
+    });
+});
+
+
     })();
 </script>
 @endpush

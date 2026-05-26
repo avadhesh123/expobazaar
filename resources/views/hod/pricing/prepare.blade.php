@@ -84,7 +84,11 @@
                     $fulfillment =  $ex ? floatval($ex->fulfillment ?? 0) : 0;
                     $storage = $ex ? floatval($ex->storage ?? 0) : 0;
                     $adBudget = $ex ? floatval($ex->ad_budget ?? 0) : 0;
-                    $finalWsp = $wsp + $inward + $fulfillment + $storage + $adBudget;
+
+                      
+                    $divisor = 1 - ($adBudget / 100);
+                    $finalWsp = ($wsp + $inward + $fulfillment + $storage) / ($divisor > 0 ? $divisor : 1);
+                    $finalWsp = number_format($finalWsp, 2);
                     @endphp
                     <tr>
                         <td style="font-family:monospace;font-weight:600;font-size:.78rem;">

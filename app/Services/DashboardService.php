@@ -2,7 +2,7 @@
 
 namespace App\Services;
 
-use App\Models\{Vendor, Product, Order, Shipment, Inventory, Consignment, FinanceReceivable, VendorPayout, WarehouseCharge, ProductCatalogue, SalesChannel, Category, Grn, LiveSheet};
+use App\Models\{Vendor, Product, Order, Shipment, Inventory, Consignment, FinanceReceivable, VendorPayout, WarehouseCharge, ProductCatalogue, SalesChannel, Category, Grn, LiveSheet, Warehouse};
 use Illuminate\Support\Facades\DB;
 
 class DashboardService
@@ -18,9 +18,42 @@ class DashboardService
         if ($companyCode) {
             $vendorQuery->byCompanyCode($companyCode);
             $productQuery->byCompanyCode($companyCode);
-            $orderQuery->byCompanyCode($companyCode);
+         //   $orderQuery->byCompanyCode($companyCode);
             $shipmentQuery->byCompanyCode($companyCode);
         }
+
+
+        // ==================== OPTIMIZED SALES CALCULATION ====================
+        $currentMonth = now()->month;
+        $currentYear  = now()->year;
+
+        // Get monthly and YTD sales for all companies in one go
+        $salesData = Order::select('company_code')
+            ->selectRaw('SUM(CASE WHEN MONTH(order_date) = ? THEN total_amount ELSE 0 END) as monthly_sales', [$currentMonth])
+            ->selectRaw('SUM(CASE WHEN YEAR(order_date) = ? THEN total_amount ELSE 0 END) as ytd_sales', [$currentYear])
+            ->groupBy('company_code')
+            ->get()
+            ->keyBy('company_code');
+
+        // Extract values with fallback
+        $usMonthly = $salesData['2100']->monthly_sales ?? 0;
+        $euMonthly = $salesData['2200']->monthly_sales ?? 0;
+        $ukMonthly = $salesData['2400']->monthly_sales ?? 0;
+
+        $usYtd = $salesData['2100']->ytd_sales ?? 0;
+        $euYtd = $salesData['2200']->ytd_sales ?? 0;
+        $ukYtd = $salesData['2400']->ytd_sales ?? 0;
+
+
+        // $usSales =  (clone $orderQuery)->byCompanyCode('2100')->whereMonth('order_date', now()->month)->sum('total_amount');
+        // $euSales =   (clone $orderQuery)->byCompanyCode('2200')->whereMonth('order_date', now()->month)->sum('total_amount');
+        // $ukSales =   (clone $orderQuery)->byCompanyCode('2400')->whereMonth('order_date', now()->month)->sum('total_amount');
+
+        // $usYtdSales =  (clone $orderQuery)->byCompanyCode('2100')->whereYear('order_date', now()->year)->sum('total_amount');
+        // $euYtdSales =   (clone $orderQuery)->byCompanyCode('2200')->whereYear('order_date', now()->year)->sum('total_amount');
+        // $ukYtdSales =   (clone $orderQuery)->byCompanyCode('2400')->whereYear('order_date', now()->year)->sum('total_amount');
+
+
 
         return [
             'kpis' => [
@@ -28,7 +61,6 @@ class DashboardService
                 'active_vendors' => (clone $vendorQuery)->active()->count(),
                 'total_skus' => (clone $productQuery)->count(),
                 'listed_skus' => (clone $productQuery)->listed()->count(),
-                'shipments_in_transit' => (clone $shipmentQuery)->inTransit()->count(),
 
                 // 'inventory_value' => Inventory::when($companyCode, fn($q) => $q->byCompanyCode($companyCode))
                 //     ->join('products', 'inventory.product_id', '=', 'products.id')
@@ -40,6 +72,11 @@ class DashboardService
                     ->join('products', 'inventory.product_id', '=', 'products.id')
                     ->sum(DB::raw('inventory.quantity * products.vendor_price')),
 
+                'sales' => [
+                    'us_sales' => ['monthly' => $usMonthly, 'ytd' => $usYtd],
+                    'eu_sales' => ['monthly' => $euMonthly, 'ytd' => $euYtd],
+                    'uk_sales' => ['monthly' => $ukMonthly, 'ytd' => $ukYtd],
+                ],
 
                 'monthly_sales' => (clone $orderQuery)->whereMonth('order_date', now()->month)->sum('total_amount'),
                 'ytd_sales' => (clone $orderQuery)->whereYear('order_date', now()->year)->sum('total_amount'),
@@ -74,7 +111,7 @@ class DashboardService
                 'products_approved' => Product::where('vendor_id', $vendorId)->where('company_code', $activeCode)->whereIn('status', ['approved', 'listed'])->count(),
                 'inventory_available' => Inventory::whereHas('product', fn($q) => $q->where('vendor_id', $vendorId))->where('company_code', $activeCode)->sum('available_quantity'),
                 'units_sold' => Order::whereHas('items', fn($q) => $q->where('vendor_id', $vendorId))
-                ->where('company_code', $activeCode)
+                    ->where('company_code', $activeCode)
                     ->whereMonth('order_date', now()->month)->withSum('items', 'quantity')->get()->sum('items_sum_quantity'),
                 'monthly_sales' => Order::whereHas('items', fn($q) => $q->where('vendor_id', $vendorId))
                     ->where('company_code', $activeCode)
@@ -127,7 +164,7 @@ class DashboardService
     public function getLogisticsDashboard(): array
     {
         $activeCode = session('active_company');
-        
+
         return [
             'kpis' => [
                 'containers_planned' => Shipment::where('status', 'planning')->when($activeCode, fn($q) => $q->byCompanyCode($activeCode))->count(),
@@ -177,7 +214,44 @@ class DashboardService
     }
 
     // ─── SALES DASHBOARD ──────────────────────────────────────────
-    public function getSalesDashboard(?string $companyCode = null): array
+    public function getSalesDashboard(?string $companyCode = null, ?string $dateFrom = null, ?string $dateTo = null): array
+    {
+        $dateFrom = $dateFrom ?? now()->startOfMonth()->toDateString();
+        $dateTo = $dateTo ?? now()->toDateString();
+
+        $orderQuery = Order::when($companyCode, fn($q) => $q->where('company_code', $companyCode));
+
+        return [
+            'kpis' => [
+                'daily_sales'      => (clone $orderQuery)->whereDate('order_date', today())->sum('total_amount'),
+                'period_sales'     => (clone $orderQuery)->whereBetween('order_date', [$dateFrom, $dateTo])->sum('total_amount'),
+                'orders_received'  => (clone $orderQuery)->whereBetween('order_date', [$dateFrom, $dateTo])->count(),
+                'pending_shipment' => (clone $orderQuery)->where(function ($q) {
+                    $q->whereNull('shipment_status')->orWhere('shipment_status', 'pending');
+                })->count(),
+                'orders_shipped'   => (clone $orderQuery)->where('shipment_status', 'shipped')
+                    ->whereBetween('order_date', [$dateFrom, $dateTo])->count(),
+            ],
+            'by_platform' => Order::when($companyCode, fn($q) => $q->where('company_code', $companyCode))
+                ->select('sales_channel_id', DB::raw('SUM(total_amount) as total'), DB::raw('COUNT(*) as count'))
+                ->whereBetween('order_date', [$dateFrom, $dateTo])
+                ->groupBy('sales_channel_id')
+                ->with('salesChannel')
+                ->get(),
+            'pending_shipment' => (clone $orderQuery)->where(function ($q) {
+                $q->whereNull('shipment_status')->orWhere('shipment_status', 'pending');
+            })->count(),
+            'pending_tracking' => (clone $orderQuery)->where('shipment_status', 'shipped')
+                ->where(function ($q) {
+                    $q->whereNull('tracking_id')->orWhere('tracking_id', '');
+                })->count(),
+            'recent_orders' => (clone $orderQuery)->with('salesChannel')
+                ->latest('order_date')->limit(10)->get(),
+            'date_from' => $dateFrom,
+            'date_to'   => $dateTo,
+        ];
+    }
+    public function getSalesDashboard1(?string $companyCode = null): array
     {
         $orderQuery = Order::when($companyCode, fn($q) => $q->where('company_code', $companyCode));
 
@@ -232,13 +306,13 @@ class DashboardService
     }
 
     // ─── HOD / MANAGEMENT DASHBOARD ──────────────────────────────
-    public function getHodDashboard(): array
+    public function getHodDashboard(?string $companyCode = null): array
     {
         return [
             'kpis' => [
-                'total_revenue' => Order::whereYear('order_date', now()->year)->sum('total_amount'),
+                'total_revenue' => Order::when($companyCode, fn($q) => $q->where('company_code', $companyCode))->whereYear('order_date', now()->year)->sum('total_amount'),
                 'gross_margin' => $this->calculateGrossMargin(),
-                'inventory_value' => Inventory::join('products', 'inventory.product_id', '=', 'products.id')
+                'inventory_value' => Inventory::when($companyCode, fn($q) => $q->where('inventory.company_code', $companyCode))->join('products', 'inventory.product_id', '=', 'products.id')
                     ->sum(DB::raw('inventory.quantity * products.vendor_price')),
                 'top_vendors' => $this->getTopVendors(5),
                 'top_platforms' => $this->getTopPlatforms(5),

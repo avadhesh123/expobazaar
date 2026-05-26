@@ -65,6 +65,12 @@ $signedContractDoc = $documents->where('document_type', 'signed_contract')->firs
                 {{-- 3. Registered Address --}}
                 <div style="font-size:.82rem;font-weight:700;color:#0d1b2a;margin-bottom:.5rem;margin-top:.5rem;">3. Registered Address</div>
                 <div class="form-group">
+                    <label>Address <span style="color:#dc2626;">*</span></label>
+                    <input type="text" name="address" value="{{ old('address', $vendor->address ?? '') }}" required placeholder="Registered address" {{ $disabled }}>
+                    <span id="address_error" class="error-text"></span>
+                    @error('address')<span style="font-size:.72rem;color:#dc2626;">{{ $message }}</span>@enderror
+                </div>
+                 <div class="form-group">
                     <label>Street Name & Number <span style="color:#dc2626;">*</span></label>
                     <input type="text" name="street_address" value="{{ old('street_address', $vendor->street_address ?? '') }}" required placeholder="Street name and number" {{ $disabled }}>
                     <span id="street_address_error" class="error-text"></span>

@@ -178,25 +178,26 @@ $disabled = $liveSheet->is_locked ? 'disabled' : '';
                         <th style="min-width:120px;">Description</th>
                         <th style="min-width:80px;">HSN/HTS</th>
                         <th style="min-width:55px;">Duty %</th>
-                        <th style="min-width:55px;">L (in)</th>
-                        <th style="min-width:55px;">W (in)</th>
-                        <th style="min-width:55px;">H (in)</th>
-                        <th style="min-width:60px;">Wt (g)</th>
+                        <th style="min-width:55px;">Lenght (inch)</th>
+                        <th style="min-width:55px;">Width (inch)</th>
+                        <th style="min-width:55px;">Height (inch)</th>
+                        <th style="min-width:60px;">Weight (grm)</th>
                         <th style="min-width:90px;">Material</th>
                         <th style="min-width:80px;">Other Mat.</th>
                         <th style="min-width:60px;">Color</th>
                         <th style="min-width:60px;">Finish</th>
                         <th style="min-width:80px;">Category</th>
                         <th style="min-width:80px;">Sub Cat.</th>
-                        <th style="min-width:50px;">Inner Qty</th>
-                        <th style="min-width:55px;">Inner L</th>
-                        <th style="min-width:55px;">Inner W</th>
-                        <th style="min-width:55px;">Inner H</th>
-                        <th style="min-width:55px;">Master Qty</th>
-                        <th style="min-width:55px;">Master L</th>
-                        <th style="min-width:55px;">Master W</th>
-                        <th style="min-width:55px;">Master H</th>
-                        <th style="min-width:65px;">Master Wt</th>
+                        <th style="min-width:50px;">Qty in Inner Carton</th>
+                        <th style="min-width:55px;">Inner Carton Length</th>
+                        <th style="min-width:55px;">Inner Carton Width</th>
+                        <th style="min-width:55px;">Inner Carton Height</th>
+                         <th style="min-width:55px;">Inner Carton Weight(KG)</th>
+                        <th style="min-width:55px;">Qty in Master Carton</th>
+                        <th style="min-width:55px;">Master Carton Length</th>
+                        <th style="min-width:55px;">Master Carton Width</th>
+                        <th style="min-width:55px;">Master Carton Height</th>
+                        <th style="min-width:65px;">Master Carton Weight(KG)</th>
                         <th style="min-width:60px;">Qty Offered</th>
                         <th style="min-width:70px;">Vendor FOB</th>
                         <th style="min-width:80px;background:#dbeafe;">Target FOB *</th>
@@ -206,12 +207,12 @@ $disabled = $liveSheet->is_locked ? 'disabled' : '';
                         <th style="min-width:65px;">CBM Ship</th>
                         <th style="min-width:80px;background:#dbeafe;">Final FOB *</th>
                         <th style="min-width:55px;">Duty</th>
-                        <th style="min-width:70px;background:#dbeafe;">Freight F. *</th>
+                        <th style="min-width:70px;background:#dbeafe;">Freight Factor *</th>
                         <th style="min-width:60px;">Freight</th>
                         <th style="min-width:70px;">Landed Cost</th>
-                        <th style="min-width:70px;background:#dbeafe;">WSP F. *</th>
+                        <th style="min-width:70px;background:#dbeafe;">WSP Factor *</th>
                         <th style="min-width:60px;">WSP ($)</th>
-                        <th style="min-width:120px;background:#dbeafe;">Comments *</th>
+                        <th style="min-width:120px;background:#dbeafe;">Comments</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -244,7 +245,7 @@ $disabled = $liveSheet->is_locked ? 'disabled' : '';
                     $wsp = $landedCost * $wspFactor;
                     @endphp
                     
-                    <tr id="ls-row-{{ $idx }}" style="{{ ($item->is_selected ?? 1) ? 'background:#f0fdf4;' : 'background:#fef2f2;opacity:.7;' }}">
+                    <tr id="ls-row-{{ $idx }}" data-duty="{{ $d['duty_percent'] ?? 0 }}" style="{{ ($item->is_selected ?? 1) ? 'background:#f0fdf4;' : 'background:#fef2f2;opacity:.7;' }}">
                         <td style="text-align:center;position:sticky;left:0;background:{{ ($item->is_selected ?? 1) ? '#f0fdf4' : '#fef2f2' }};z-index:1;">
                             <input type="hidden" name="items[{{ $idx }}][is_selected]" value="0">
                             <input type="checkbox" name="items[{{ $idx }}][is_selected]" value="1" {{ ($item->is_selected ?? 1) ? 'checked' : '' }} onchange="toggleRowSelected({{ $idx }}, this.checked)" class="ls-select" style="width:16px;height:16px;accent-color:#16a34a;">
@@ -274,13 +275,14 @@ $disabled = $liveSheet->is_locked ? 'disabled' : '';
                         <td style="text-align:center;font-family:monospace;">{{ $d['inner_length'] ?? '—' }}</td>
                         <td style="text-align:center;font-family:monospace;">{{ $d['inner_width'] ?? '—' }}</td>
                         <td style="text-align:center;font-family:monospace;">{{ $d['inner_height'] ?? '—' }}</td>
+                        <td style="text-align:center;font-family:monospace;">{{ $d['inner_weight_kg'] ?? '—' }}</td>
                         <td style="text-align:center;">{{ $d['qty_master_pack'] ?? '—' }}</td>
                         <td style="text-align:center;font-family:monospace;">{{ $masterL ?: '—' }}</td>
                         <td style="text-align:center;font-family:monospace;">{{ $masterW ?: '—' }}</td>
                         <td style="text-align:center;font-family:monospace;">{{ $masterH ?: '—' }}</td>
                         <td style="text-align:center;font-family:monospace;">{{ $d['master_weight_kg'] ?? '—' }}</td>
                         <td style="text-align:center;">{{ $item->quantity }}</td>
-                        <td style="font-family:monospace;">${{ number_format($item->unit_price, 2) }}</td>
+                        <td style="font-family:monospace;">{{$activeCurrencySymbol}}{{ number_format($item->unit_price, 2) }}</td>
                         {{-- EDITABLE: Target FOB --}}
                         <td style="background:#eff6ff;"><input {{$disabled }} type="number" step="0.01" name="items[{{ $idx }}][target_fob]" value="{{ $d['target_fob'] ?? '' }}" placeholder="0.00" style="width:70px;padding:.2rem .3rem;border:1px solid #93c5fd;border-radius:4px;font-size:.78rem;font-family:monospace;text-align:right;background:#fff;"></td>
                         {{-- EDITABLE: Final Qty --}}
@@ -289,15 +291,13 @@ $disabled = $liveSheet->is_locked ? 'disabled' : '';
                         <td style="font-family:monospace;">{{ $masterCbm > 0 ? number_format($masterCbm, 4) : '—' }}</td>
                         <td style="font-family:monospace;font-weight:600;color:#1e40af;">{{ $cbmShipment > 0 ? number_format($cbmShipment, 4) : number_format($item->total_cbm, 4) }}</td>
                         {{-- EDITABLE: Final FOB --}}
-                        <td style="background:#eff6ff;"><input {{$disabled }} type="number" step="0.01" name="items[{{ $idx }}][final_fob]" value="{{ $d['final_fob'] ?? '' }}" placeholder="0.00" style="width:70px;padding:.2rem .3rem;border:1px solid #93c5fd;border-radius:4px;font-size:.78rem;font-family:monospace;text-align:right;background:#fff;"></td>
-                        <td style="font-family:monospace;">{{ $dutyAmt > 0 ? '$'.number_format($dutyAmt, 2) : '—' }}</td>
-                        {{-- EDITABLE: Freight Factor --}}
-                        <td style="background:#eff6ff;"><input {{$disabled }} type="number" step="0.01" name="items[{{ $idx }}][freight_factor]" value="{{ $d['freight_factor'] ?? '' }}" placeholder="0.00" style="width:60px;padding:.2rem .3rem;border:1px solid #93c5fd;border-radius:4px;font-size:.78rem;font-family:monospace;text-align:right;background:#fff;"></td>
-                        <td style="font-family:monospace;">{{ $freightAmt > 0 ? '$'.number_format($freightAmt, 2) : '—' }}</td>
-                        <td style="font-family:monospace;font-weight:600;">{{ $landedCost > 0 ? '$'.number_format($landedCost, 2) : '—' }}</td>
-                        {{-- EDITABLE: WSP Factor --}}
+                        <td style="background:#eff6ff;"><input {{$disabled }} readonly  type="number" step="0.01" name="items[{{ $idx }}][final_fob]" value="{{ $d['final_fob'] ?? '' }}" placeholder="0.00" style="width:70px;padding:.2rem .3rem;border:1px solid #93c5fd;border-radius:4px;font-size:.78rem;font-family:monospace;text-align:right;background:#fff;"></td>
+                        <td style="font-family:monospace;" id="duty-amt-{{ $idx }}">{{ $dutyAmt > 0 ? $activeCurrencySymbol.number_format($dutyAmt, 2) : '—' }}</td>                        {{-- EDITABLE: Freight Factor --}}
+                        <td style="background:#eff6ff;"><input {{$disabled }}  type="number" step="0.01" name="items[{{ $idx }}][freight_factor]" value="{{ $d['freight_factor'] ?? '' }}" placeholder="0.00" style="width:60px;padding:.2rem .3rem;border:1px solid #93c5fd;border-radius:4px;font-size:.78rem;font-family:monospace;text-align:right;background:#fff;"></td>
+                        <td style="font-family:monospace;" id="freight-amt-{{ $idx }}">{{ $freightAmt > 0 ? $activeCurrencySymbol.number_format($freightAmt, 2) : '—' }}</td>
+                        <td style="font-family:monospace;font-weight:600;" id="landed-cost-{{ $idx }}">{{ $landedCost > 0 ? $activeCurrencySymbol.number_format($landedCost, 2) : '—' }}</td>                        {{-- EDITABLE: WSP Factor --}}
                         <td style="background:#eff6ff;"><input {{$disabled }} type="number" step="0.01" name="items[{{ $idx }}][wsp_factor]" value="{{ $d['wsp_factor'] ?? '' }}" placeholder="0.00" style="width:60px;padding:.2rem .3rem;border:1px solid #93c5fd;border-radius:4px;font-size:.78rem;font-family:monospace;text-align:right;background:#fff;"></td>
-                        <td style="font-family:monospace;font-weight:700;color:#166534;">{{ $wsp > 0 ? '$'.number_format($wsp, 2) : '—' }}</td>
+                        <td style="font-family:monospace;font-weight:700;color:#166534;" id="wsp-val-{{ $idx }}">{{ $wsp > 0 ? $activeCurrencySymbol.number_format($wsp, 2) : '—' }}</td>
                         {{-- EDITABLE: Comments --}}
                         <td style="background:#eff6ff;"><input {{$disabled }} type="text" name="items[{{ $idx }}][comments]" value="{{ $d['comments'] ?? '' }}" placeholder="..." style="width:110px;padding:.2rem .3rem;border:1px solid #93c5fd;border-radius:4px;font-size:.78rem;background:#fff;"></td>
                     </tr>
@@ -331,4 +331,68 @@ $disabled = $liveSheet->is_locked ? 'disabled' : '';
         </div>
     </div>
 </form>
+<style>
+    .data-table th{ padding: .5rem; text-align: center;}
+    </style>
+ <script>
+$(document).on('input', 'input[name*="[target_fob]"], input[name*="[final_fob]"], input[name*="[freight_factor]"], input[name*="[wsp_factor]"]', function() {
+    var name = $(this).attr('name');
+    var match = name.match(/items\[(\d+)\]/);
+    if (!match) return;
+    recalcRow(match[1]);
+});
+// When target_fob changes, copy to final_fob and recalculate
+$(document).on('input', 'input[name*="[target_fob]"]', function() {
+    var match = $(this).attr('name').match(/items\[(\d+)\]/);
+    if (!match) return;
+    var idx = match[1];
+    var targetVal = parseFloat($(this).val()) || 0;
+    $('input[name="items[' + idx + '][final_fob]"]').val(targetVal > 0 ? targetVal.toFixed(2) : '');
+    recalcRow(idx);
+});
+
+// When freight_factor or wsp_factor changes, recalculate
+$(document).on('input', 'input[name*="[freight_factor]"], input[name*="[wsp_factor]"]', function() {
+    var match = $(this).attr('name').match(/items\[(\d+)\]/);
+    if (match) recalcRow(match[1]);
+});
+function recalcRow(idx) {
+    var finalFob = parseFloat($('input[name="items[' + idx + '][final_fob]"]').val()) || 0;
+    var dutyPercent = parseFloat($('#ls-row-' + idx).data('duty')) || 0;
+    var freightFactor = parseFloat($('input[name="items[' + idx + '][freight_factor]"]').val()) || 0;
+    var wspFactor = parseFloat($('input[name="items[' + idx + '][wsp_factor]"]').val()) || 0;
+
+    var dutyAmt = finalFob * (dutyPercent / 100);
+    var freightAmt = freightFactor * finalFob;
+    var landedCost = finalFob + dutyAmt + freightAmt;
+    var wsp = landedCost * wspFactor;
+
+    $('#duty-amt-' + idx).text(dutyAmt > 0 ? '$' + dutyAmt.toFixed(2) : '—');
+    $('#freight-amt-' + idx).text(freightAmt > 0 ? '$' + freightAmt.toFixed(2) : '—');
+    $('#landed-cost-' + idx).text(landedCost > 0 ? '$' + landedCost.toFixed(2) : '—')
+        .css('color', landedCost > 0 ? '#0d1b2a' : '');
+    $('#wsp-val-' + idx).text(wsp > 0 ? '$' + wsp.toFixed(2) : '—');
+
+    // Also copy target_fob to final_fob if final_fob is empty
+    // var targetFob = parseFloat($('input[name="items[' + idx + '][target_fob]"]').val()) || 0;
+    // var finalFobInput = $('input[name="items[' + idx + '][final_fob]"]');
+    // if (targetFob > 0 && !finalFobInput.val()) {
+    //     finalFobInput.val(targetFob.toFixed(2));
+    //     recalcRow(idx); // recalc with new final_fob
+    // }
+}
+
+// Also recalculate when bulk fill is applied
+var origBulkFill = window.bulkFill;
+window.bulkFill = function(fieldName, sourceId) {
+    origBulkFill(fieldName, sourceId);
+    // Recalculate all visible rows after bulk fill
+    setTimeout(function() {
+        $('input[name*="[final_fob]"]').each(function() {
+            var match = $(this).attr('name').match(/items\[(\d+)\]/);
+            if (match) recalcRow(match[1]);
+        });
+    }, 300);
+};
+</script>
 @endsection

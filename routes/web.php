@@ -179,6 +179,9 @@ Route::middleware(['auth'])->group(function () {
         ->group(function () {
             Route::get('dashboard', [LogisticsController::class, 'dashboard'])->name('dashboard');
             Route::get('container-planning', [LogisticsController::class, 'containerPlanning'])->name('container-planning');
+            
+            Route::get('container-planning/download-livesheet/{consignment}', [LogisticsController::class, 'downloadLiveSheet'])->name('container-planning.download-livesheet');
+
             Route::post('shipments/create', [LogisticsController::class, 'createShipment'])->name('shipments.create');
             Route::get('shipments', [LogisticsController::class, 'shipments'])->name('shipments');
             Route::get('shipments/{shipment}', [LogisticsController::class, 'showShipment'])->name('shipments.show');

@@ -125,7 +125,7 @@
                         enctype="multipart/form-data"
                         style="display:flex;gap:.5rem;align-items:center;flex-wrap:wrap;">
                         @csrf
-                        <input type="file" name="sap_file" accept=".xlsx,.xls" required
+                        <input type="file" name="sap_file" required
                             style="flex:1;min-width:180px;font-size:.78rem;padding:.35rem .5rem;border:1px solid #93c5fd;border-radius:6px;background:#fff;">
                         <button type="submit" onclick="return confirm('Upload and apply SAP codes and Vendor WSPs from this file?')"
                             style="padding:.42rem .85rem;background:#1e40af;color:#fff;border:none;border-radius:8px;font-size:.78rem;font-weight:700;cursor:pointer;white-space:nowrap;flex-shrink:0;">
@@ -137,7 +137,7 @@
                     @enderror
                     <div style="font-size:.68rem;color:#64748b;margin-top:.35rem;">
                         <i class="fas fa-info-circle" style="margin-right:.2rem;"></i>
-                        Only column E (SAP Code) and column G (Vendor WSP) are read. Columns A–C are reference only. Blank cells are skipped.
+                        Only column E (SAP Code) and column G (Vendor WSP) are read. Columns A - C are reference only. Blank cells are skipped.
                     </div>
                 </div>
 
@@ -198,14 +198,6 @@
                         $freightAmt = floatval($d['freight_factor'] ?? 0) * $finalFob;
                         $landedCost = $finalFob + $dutyAmt + $freightAmt;
                         $wsp = $landedCost * floatval($d['wsp_factor'] ?? 0);
-
-                        $currencyInfo = match ($item->product->company_code ?? '') {
-                        '2000' => ['code' => 'INR', 'symbol' => '₹'],
-                        '2100' => ['code' => 'EUR', 'symbol' => '€'],
-                        '2200' => ['code' => 'USD', 'symbol' => '$'],
-                        default => ['code' => 'USD', 'symbol' => '$'],
-                        };
-
                         @endphp
                         <tr style="{{ !empty($sapCode) ? 'background:#f0fdf4;' : '' }}">
                             <td style="text-align:center;color:#94a3b8;">{{ $idx + 1 }}</td>

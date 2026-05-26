@@ -60,10 +60,17 @@
                             <div style="font-size:.65rem;color:#94a3b8;">{{ $product->category->name ?? '' }}</div>
                         </td>
                         <td style="font-size:.78rem;color:#64748b;">{{ $product->vendor->company_name ?? '—' }}</td>
+                       
                         @foreach($channels as $ch)
                         @php
+                            $productId = $product->id;
                             $catalogue = $product->catalogues->where('sales_channel_id', $ch->id)->first();
-                            $isListed = $catalogue && $catalogue->listing_status === 'listed';
+                            // $isListed = $catalogue && $catalogue->listing_status === 'listed';
+                            $skuListing = is_string($product->platform_listing_status ?? null)
+                            ? json_decode($product->platform_listing_status,true)
+                            : ($product->platform_listing_status ?? []);
+                            
+                            $isListed = $skuListing && isset($skuListing[$ch->id]) && $skuListing[$ch->id] === 'listed';
                         @endphp
                         <td style="text-align:center;">
                             <input type="hidden" name="listings[{{ $listIdx }}][product_id]" value="{{ $product->id }}">
@@ -82,9 +89,11 @@
                         </td>
                         @php $listIdx++; @endphp
                         @endforeach
-                        <td>
-                            @php $shopifyCat = $product->catalogues->whereNotNull('shopify_url')->first(); @endphp
-                            <input type="text" value="{{ $shopifyCat->shopify_url ?? '' }}" placeholder="Shopify URL..." style="width:140px;padding:.25rem .4rem;border:1px solid #e2e8f0;border-radius:5px;font-size:.72rem;">
+                        <td>                          
+                            <input type="text" name="shopify_url[{{ $productId }}]" value="{{ $product->shopify_url ?? '' }}" placeholder="Shopify URL..." style="width:140px;padding:.25rem .4rem;border:1px solid #e2e8f0;border-radius:5px;font-size:.72rem;">
+                            @if($product->shopify_url)
+                                <a href="{{ $product->shopify_url }}" target="_blank" style="font-size:.55rem;color:#1e40af;">view</a>
+                            @endif
                         </td>
                     </tr>
                     @empty

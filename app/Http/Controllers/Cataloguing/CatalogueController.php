@@ -16,7 +16,7 @@ class CatalogueController extends Controller
 
     public function dashboard(Request $request)
     {
-       // $companyCode = $request->get('company_code');
+        // $companyCode = $request->get('company_code');
         $companyCode = session('company_code'); // For view to highlight selected code
         $data = $this->dashboardService->getCataloguingDashboard($companyCode);
         return view('cataloguing.dashboard', compact('data', 'companyCode'));
@@ -25,38 +25,38 @@ class CatalogueController extends Controller
     public function pricingSheets(Request $request)
     {
         $user = auth()->user();
-      
+
         $companyCode = session('active_company'); // For view to highlight selected code
 
         $pricings = PlatformPricing::with('product.category', 'product.vendor', 'salesChannel', 'asn')
-            ->whereIn('status', ['approved','submitted'])
+            ->whereIn('status', ['approved', 'submitted'])
             ->when(!$user->isAdmin() && !empty($companyCode), function ($q) use ($companyCode) {
                 return $q->where('company_code', $companyCode);
             })
-             ->when($request->channel_id, fn($q, $v) => $q->where('sales_channel_id', $v))
+            ->when($request->channel_id, fn($q, $v) => $q->where('sales_channel_id', $v))
             ->when($request->asn_id, fn($q, $v) => $q->where('asn_id', $v))
             ->when($request->search, function ($q, $v) {
                 $q->whereHas('product', fn($p) => $p->where('sku', 'LIKE', "%{$v}%")->orWhere('name', 'LIKE', "%{$v}%"));
             })
-            ->latest()->paginate(30);//->withQueryString();
-            
-            $pricings->setCollection(
-                $pricings->getCollection()->groupBy('product_id')
-            );        
- 
- 
+            ->latest()->paginate(30); //->withQueryString();
+
+        $pricings->setCollection(
+            $pricings->getCollection()->groupBy('product_id')
+        );
+
+
 
         $channels = SalesChannel::active()
             ->when(!$user->isAdmin() && !empty($companyCode), function ($q) use ($companyCode) {
                 return $q->whereJsonContains('company_codes', $companyCode);
             })
-             ->orderBy('name')->get();
-            
+            ->orderBy('name')->get();
+
         $asns = \App\Models\Asn::orderBy('asn_number', 'desc')
             ->when(!$user->isAdmin() && !empty($companyCode), function ($q) use ($companyCode) {
                 return $q->where('company_code', $companyCode);
             })
-           // ->when($request->company_code, fn($q, $v) => $q->where('company_code', $v))
+            // ->when($request->company_code, fn($q, $v) => $q->where('company_code', $v))
             ->limit(100)->get(['id', 'asn_number']);
 
         return view('cataloguing.pricing-sheets', compact('pricings', 'channels', 'asns'));
@@ -64,8 +64,9 @@ class CatalogueController extends Controller
 
     public function listingPanel(Request $request)
     {
+        $activeCompany = session('active_company'); // For view to highlight selected code
         $products = Product::with('category', 'vendor')
-            ->when($request->company_code, fn($q, $v) => $q->where('company_code', $v))
+            ->where('company_code', $activeCompany)
             ->when($request->category_id, fn($q, $v) => $q->where('category_id', $v))
             ->when($request->search, function ($q, $v) {
                 $q->where(function ($s) use ($v) {
@@ -106,6 +107,7 @@ class CatalogueController extends Controller
             '' => 'pending',
         ];
 
+
         try {
             $updated = 0;
             foreach ($request->listings as $l) {
@@ -123,7 +125,13 @@ class CatalogueController extends Controller
                 $product->update(['platform_listing_status' => $pls]);
                 $updated++;
             }
-
+            foreach ($request->shopify_url as $productId => $url) {
+                $product = Product::find($productId);
+                if (!$product) continue;
+                $shopify_url = $url ? $url: $product->shopify_url ?? null;
+                $product->update(['shopify_url' => $shopify_url]);
+                file_put_contents(storage_path('logs/shopify_urls.log'), "Updated Product ID {$productId} {$product->name} with Shopify URL: {$shopify_url}\n", FILE_APPEND);
+            }
             return back()->with('success', "{$updated} listing(s) updated successfully.");
         } catch (\Exception $e) {
             \Log::error('Listing update failed: ' . $e->getMessage());

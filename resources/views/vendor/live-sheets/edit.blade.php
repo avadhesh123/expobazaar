@@ -82,8 +82,9 @@
                         <th style="min-width:100px;position:sticky;left:30px;background:#f0f4f8;z-index:2;">Vendor SKU</th>
                         <th style="min-width:80px;">SAP Code</th>
                         <th style="min-width:100px;">Barcode</th>
-                        <th style="min-width:160px;">Product Name</th>
-                        <th style="min-width:120px;">Description</th>
+                        <th style="min-width:120px;">Product Name</th>
+                        <th style="min-width:100px;">Description</th>
+                        <th style="min-width:80px;">Specification</th>
                         <th style="min-width:80px;">HSN/HTS</th>
                         <th style="min-width:55px;">Duty %</th>
                         <th style="min-width:55px;">L (in)</th>
@@ -100,13 +101,14 @@
                         <th style="min-width:55px;">Inner L</th>
                         <th style="min-width:55px;">Inner W</th>
                         <th style="min-width:55px;">Inner H</th>
+                        <th style="min-width:60px;">Inner Wt</th>
                         <th style="min-width:55px;">Master Qty</th>
                         <th style="min-width:55px;">Master L</th>
                         <th style="min-width:55px;">Master W</th>
                         <th style="min-width:55px;">Master H</th>
                         <th style="min-width:65px;">Master Wt</th>
                         <th style="min-width:60px;background:#eff6ff;">Qty Offered*</th>
-                        <th style="min-width:70px;background:#eff6ff;">FOB ($) *</th>
+                        <th style="min-width:70px;background:#eff6ff;">FOB ({{$activeCurrencySymbol}}) *</th>
                         <th style="min-width:70px;">Target FOB</th>
                         <th style="min-width:60px;">Final Qty</th>
                         <th style="min-width:55px;">Total No Of Master Cartons</th>
@@ -149,9 +151,10 @@
                             {{ $item->product->sku ?? '—' }}
                         </td>
                         <td>{{ $d['sap_code'] ?? '—' }}</td>
-                        <td>{{ $d['barcode'] ?? '—' }}</td>
+                        <td>{{$item->product->barcode ?? $d['barcode'] ?? '—' }}</td>
                         <td style="font-weight:500;">{{ $item->product->name ?? '—' }}</td>
                         <td style="font-size:.7rem;max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="{{ $d['description'] ?? '' }}">{{ Str::limit($d['description'] ?? '—', 40) }}</td>
+                        <td style="font-size:.7rem;max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="{{ $d['specification'] ?? '' }}">{{ Str::limit($d['specification'] ?? '—', 40) }}</td>
                         <td>{{ $d['hsn_hts_code'] ?? '—' }}</td>
                         <td style="text-align:center;">{{ $d['duty_percent'] ?? '—' }}</td>
                         <td style="text-align:center;font-family:monospace;">{{ $d['length_inches'] ?? '—' }}</td>
@@ -168,6 +171,7 @@
                         <td style="text-align:center;font-family:monospace;">{{ $d['inner_length'] ?? '—' }}</td>
                         <td style="text-align:center;font-family:monospace;">{{ $d['inner_width'] ?? '—' }}</td>
                         <td style="text-align:center;font-family:monospace;">{{ $d['inner_height'] ?? '—' }}</td>
+                        <td style="text-align:center;font-family:monospace;">{{ $d['inner_weight_kg'] ?? '—' }}P</td>
                         <td style="text-align:center;">{{ $d['qty_master_pack'] ?? '—' }}</td>
                         <td style="text-align:center;font-family:monospace;">{{ $d['master_length'] ?? '—' }}</td>
                         <td style="text-align:center;font-family:monospace;">{{ $d['master_width'] ?? '—' }}</td>
@@ -178,7 +182,7 @@
                         <td style="background:#eff6ff;"><input type="number" step="0.01" name="items[{{ $idx }}][unit_price]" value="{{ $item->unit_price ?? 0 }}" min="0" required onchange="calcRow({{ $idx }})" style="width:65px;padding:.2rem .3rem;border:1px solid #93c5fd;border-radius:4px;font-size:.78rem;font-family:monospace;text-align:right;background:#fff;" {{ $dis }}></td>
                         <td style="font-family:monospace;color:#64748b;">{{ $d['target_fob'] ?? '—' }}</td>
                         <td style="font-family:monospace;font-weight:600;">{{ $d['final_qty'] ?? $item->quantity }}</td>
-                        <td style="text-align:center;">{{ $d['total_master_cartons'] ?? '—' }}</td>
+                        <td style="text-align:center;">{{ $d['no_of_master_carton'] ?? '—' }}</td>
                         <td style="font-family:monospace;">{{ isset($d['master_cbm']) ? number_format(floatval($d['master_cbm']), 4) : '—' }}</td>
                         <td style="font-family:monospace;font-weight:600;color:#1e40af;">{{ isset($d['cbm_shipment']) ? number_format(floatval($d['cbm_shipment']), 4) : number_format(floatval($item->total_cbm ?? 0), 4) }}</td>
                         <td style="font-family:monospace;">{{ $d['final_fob'] ?? '—' }}</td>

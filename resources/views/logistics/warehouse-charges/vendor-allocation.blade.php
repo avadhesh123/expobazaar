@@ -36,13 +36,13 @@
     $grandVariance = collect($allocations)->sum('total_variance');
 @endphp
 <div class="grid-kpi" style="grid-template-columns:repeat(auto-fill,minmax(145px,1fr));">
-    <div class="kpi-card" style="border-left:3px solid #1e40af;"><div class="kpi-label">Inward</div><div class="kpi-value" style="font-size:1.3rem;color:#1e40af;">${{ number_format($grandInward,0) }}</div></div>
-    <div class="kpi-card" style="border-left:3px solid #e8a838;"><div class="kpi-label">Storage</div><div class="kpi-value" style="font-size:1.3rem;color:#e8a838;">${{ number_format($grandStorage,0) }}</div></div>
-    <div class="kpi-card" style="border-left:3px solid #2d6a4f;"><div class="kpi-label">Pick & Pack</div><div class="kpi-value" style="font-size:1.3rem;color:#2d6a4f;">${{ number_format($grandPickPack,0) }}</div></div>
-    <div class="kpi-card" style="border-left:3px solid #7c3aed;"><div class="kpi-label">Consumable</div><div class="kpi-value" style="font-size:1.3rem;color:#7c3aed;">${{ number_format($grandConsumable,0) }}</div></div>
-    <div class="kpi-card" style="border-left:3px solid #dc2626;"><div class="kpi-label">Last Mile</div><div class="kpi-value" style="font-size:1.3rem;color:#dc2626;">${{ number_format($grandLastMile,0) }}</div></div>
-    <div class="kpi-card" style="border-left:3px solid #0d1b2a;"><div class="kpi-label">Total Charges</div><div class="kpi-value" style="font-size:1.3rem;">${{ number_format($grandTotal,0) }}</div></div>
-    <div class="kpi-card" style="border-left:3px solid {{ $grandVariance!=0?'#dc2626':'#16a34a' }};"><div class="kpi-label">Variance</div><div class="kpi-value" style="font-size:1.3rem;color:{{ $grandVariance!=0?'#dc2626':'#16a34a' }};">${{ number_format(abs($grandVariance),0) }}</div></div>
+    <div class="kpi-card" style="border-left:3px solid #1e40af;"><div class="kpi-label">Inward</div><div class="kpi-value" style="font-size:1.3rem;color:#1e40af;">{{$activeCurrencySymbol}}{{ number_format($grandInward,0) }}</div></div>
+    <div class="kpi-card" style="border-left:3px solid #e8a838;"><div class="kpi-label">Storage</div><div class="kpi-value" style="font-size:1.3rem;color:#e8a838;">{{$activeCurrencySymbol}}{{ number_format($grandStorage,0) }}</div></div>
+    <div class="kpi-card" style="border-left:3px solid #2d6a4f;"><div class="kpi-label">Pick & Pack</div><div class="kpi-value" style="font-size:1.3rem;color:#2d6a4f;">{{$activeCurrencySymbol}}{{ number_format($grandPickPack,0) }}</div></div>
+    <div class="kpi-card" style="border-left:3px solid #7c3aed;"><div class="kpi-label">Consumable</div><div class="kpi-value" style="font-size:1.3rem;color:#7c3aed;">{{$activeCurrencySymbol}}{{ number_format($grandConsumable,0) }}</div></div>
+    <div class="kpi-card" style="border-left:3px solid #dc2626;"><div class="kpi-label">Last Mile</div><div class="kpi-value" style="font-size:1.3rem;color:#dc2626;">{{$activeCurrencySymbol}}{{ number_format($grandLastMile,0) }}</div></div>
+    <div class="kpi-card" style="border-left:3px solid #0d1b2a;"><div class="kpi-label">Total Charges</div><div class="kpi-value" style="font-size:1.3rem;">{{$activeCurrencySymbol}}{{ number_format($grandTotal,0) }}</div></div>
+    <div class="kpi-card" style="border-left:3px solid {{ $grandVariance!=0?'#dc2626':'#16a34a' }};"><div class="kpi-label">Variance</div><div class="kpi-value" style="font-size:1.3rem;color:{{ $grandVariance!=0?'#dc2626':'#16a34a' }};">{{$activeCurrencySymbol}}{{ number_format(abs($grandVariance),0) }}</div></div>
 </div>
 
 {{-- Vendor Allocation Table --}}
@@ -79,16 +79,16 @@
                         @php $ccBg = ['2000'=>'#dcfce7','2100'=>'#dbeafe','2200'=>'#fef3c7']; @endphp
                         <span style="padding:.15rem .4rem;background:{{ $ccBg[$a['vendor']->company_code] ?? '#f1f5f9' }};border-radius:5px;font-size:.78rem;font-weight:600;">{{ $a['vendor']->company_code }}</span>
                     </td>
-                    <td style="font-family:monospace;color:#1e40af;">${{ number_format($a['inward'],2) }}</td>
-                    <td style="font-family:monospace;color:#e8a838;">${{ number_format($a['storage'],2) }}</td>
-                    <td style="font-family:monospace;color:#2d6a4f;">${{ number_format($a['pick_pack'],2) }}</td>
-                    <td style="font-family:monospace;color:#7c3aed;">${{ number_format($a['consumable'],2) }}</td>
-                    <td style="font-family:monospace;color:#dc2626;">${{ number_format($a['last_mile'],2) }}</td>
-                    <td style="font-family:monospace;font-weight:800;">${{ number_format($a['total_calculated'],2) }}</td>
+                    <td style="font-family:monospace;color:#1e40af;">{{$activeCurrencySymbol}}{{ number_format($a['inward'],2) }}</td>
+                    <td style="font-family:monospace;color:#e8a838;">{{$activeCurrencySymbol}}{{ number_format($a['storage'],2) }}</td>
+                    <td style="font-family:monospace;color:#2d6a4f;">{{$activeCurrencySymbol}}{{ number_format($a['pick_pack'],2) }}</td>
+                    <td style="font-family:monospace;color:#7c3aed;">{{$activeCurrencySymbol}}{{ number_format($a['consumable'],2) }}</td>
+                    <td style="font-family:monospace;color:#dc2626;">{{$activeCurrencySymbol}}{{ number_format($a['last_mile'],2) }}</td>
+                    <td style="font-family:monospace;font-weight:800;">{{$activeCurrencySymbol}}{{ number_format($a['total_calculated'],2) }}</td>
                     <td style="font-family:monospace;font-weight:600;color:{{ $a['total_actual']>0?'#0d1b2a':'#94a3b8' }};">{{ $a['total_actual']>0?'$'.number_format($a['total_actual'],2):'—' }}</td>
                     <td>
                         @if($a['total_variance'] != 0)
-                            <span style="font-family:monospace;font-weight:700;color:{{ $a['total_variance']>0?'#dc2626':'#16a34a' }};">{{ $a['total_variance']>0?'+':'' }}${{ number_format($a['total_variance'],2) }}</span>
+                            <span style="font-family:monospace;font-weight:700;color:{{ $a['total_variance']>0?'#dc2626':'#16a34a' }};">{{ $a['total_variance']>0?'+':'' }}{{$activeCurrencySymbol}}{{ number_format($a['total_variance'],2) }}</span>
                         @else
                             <span style="color:#94a3b8;">—</span>
                         @endif
@@ -103,13 +103,13 @@
                 @if(count($allocations) > 0)
                 <tr style="background:#f8fafc;font-weight:800;border-top:2px solid #e2e8f0;">
                     <td colspan="2" style="text-align:right;">GRAND TOTAL</td>
-                    <td style="font-family:monospace;color:#1e40af;">${{ number_format($grandInward,2) }}</td>
-                    <td style="font-family:monospace;color:#e8a838;">${{ number_format($grandStorage,2) }}</td>
-                    <td style="font-family:monospace;color:#2d6a4f;">${{ number_format($grandPickPack,2) }}</td>
-                    <td style="font-family:monospace;color:#7c3aed;">${{ number_format($grandConsumable,2) }}</td>
-                    <td style="font-family:monospace;color:#dc2626;">${{ number_format($grandLastMile,2) }}</td>
-                    <td style="font-family:monospace;">${{ number_format($grandTotal,2) }}</td>
-                    <td style="font-family:monospace;">${{ number_format(collect($allocations)->sum('total_actual'),2) }}</td>
+                    <td style="font-family:monospace;color:#1e40af;">{{$activeCurrencySymbol}}{{ number_format($grandInward,2) }}</td>
+                    <td style="font-family:monospace;color:#e8a838;">{{$activeCurrencySymbol}}{{ number_format($grandStorage,2) }}</td>
+                    <td style="font-family:monospace;color:#2d6a4f;">{{$activeCurrencySymbol}}{{ number_format($grandPickPack,2) }}</td>
+                    <td style="font-family:monospace;color:#7c3aed;">{{$activeCurrencySymbol}}{{ number_format($grandConsumable,2) }}</td>
+                    <td style="font-family:monospace;color:#dc2626;">{{$activeCurrencySymbol}}{{ number_format($grandLastMile,2) }}</td>
+                    <td style="font-family:monospace;">{{$activeCurrencySymbol}}{{ number_format($grandTotal,2) }}</td>
+                    <td style="font-family:monospace;">{{$activeCurrencySymbol}}{{ number_format(collect($allocations)->sum('total_actual'),2) }}</td>
                     <td style="font-family:monospace;color:{{ $grandVariance!=0?'#dc2626':'#16a34a' }};">{{ $grandVariance!=0?'$'.number_format(abs($grandVariance),2):'—' }}</td>
                     <td></td>
                 </tr>

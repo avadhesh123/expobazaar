@@ -10,38 +10,8 @@
 <div class="card" style="margin-bottom:1.25rem;">
     <div class="card-body" style="padding:.85rem 1.4rem;">
         <form method="GET" action="{{ route('finance.live-sheets') }}" style="display:flex;gap:.75rem;align-items:flex-end;">
-            @php
-            $user = auth()->user();
-            $userCompanyCodes = $user->company_codes ?? [];
-
-            // Convert to array if stored as JSON string
-            if (is_string($userCompanyCodes)) {
-            $userCompanyCodes = json_decode($userCompanyCodes, true) ?? [];
-            }
-
-            $allowedCompanies = array_filter(array_map('strval', $userCompanyCodes));
-            @endphp
-
-            <div style="min-width:110px;">
-                <label style="font-size:.7rem;font-weight:600;color:#64748b;display:block;margin-bottom:.25rem;">Company</label>
-                <select name="company_code" style="width:100%;padding:.4rem .5rem;border:1px solid #d1d5db;border-radius:8px;font-size:.82rem;font-family:inherit;">
-                    <option value="">All</option>
-
-                    @if($user->isAdmin())
-                    <!-- Admin sees all companies -->
-                    <option value="2000" {{ request('company_code')==='2000'?'selected':'' }}>2000</option>
-                    <option value="2100" {{ request('company_code')==='2100'?'selected':'' }}>2100</option>
-                    <option value="2200" {{ request('company_code')==='2200'?'selected':'' }}>2200</option>
-                    @else
-                    <!-- Normal user sees only assigned companies -->
-                    @foreach($allowedCompanies as $code)
-                    <option value="{{ $code }}" {{ request('company_code') === $code ? 'selected' : '' }}>
-                        {{ $code }}
-                    </option>
-                    @endforeach
-                    @endif
-                </select>
-            </div>
+           
+            <input type="hidden" name="company_code" value="{{ request('company_code') ?? $activeCompany }}"  >
             <div style="min-width:120px;"><label style="font-size:.7rem;font-weight:600;color:#64748b;display:block;margin-bottom:.25rem;">Status</label><select name="status" style="width:100%;padding:.4rem .5rem;border:1px solid #d1d5db;border-radius:8px;font-size:.82rem;">
                     <option value="">All</option>@foreach(['draft','submitted','locked'] as $s)<option value="{{ $s }}" {{ request('status')===$s?'selected':'' }}>{{ ucfirst($s) }}</option>@endforeach
                 </select></div>

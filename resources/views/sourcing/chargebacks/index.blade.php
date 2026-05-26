@@ -27,7 +27,7 @@
                         <div style="font-size:.82rem;">{{ $cb->vendor->company_name ?? '—' }}</div>
                         <div style="font-size:.68rem;color:#94a3b8;">{{ $cb->vendor->vendor_code ?? '' }}</div>
                     </td>
-                    <td style="font-family:monospace;font-weight:700;color:#dc2626;font-size:.9rem;">${{ number_format($cb->amount, 2) }}</td>
+                    <td style="font-family:monospace;font-weight:700;color:#dc2626;font-size:.9rem;">{{$activeCurrencySymbol}}{{ number_format($cb->amount, 2) }}</td>
                     <td>
                         <div style="font-size:.82rem;font-weight:500;">{{ $cb->reason }}</div>
                         @if($cb->description)<div style="font-size:.72rem;color:#64748b;margin-top:.15rem;">{{ Str::limit($cb->description, 80) }}</div>@endif

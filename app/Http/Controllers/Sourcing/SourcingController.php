@@ -73,19 +73,11 @@ class SourcingController extends Controller
 
     public function offerSheets(Request $request)
     {
-        $user = auth()->user();
-        // User's allowed company codes
-        $userCompanyCodes = $user->company_codes ?? [];
-        if (is_string($userCompanyCodes)) {
-            $userCompanyCodes = json_decode($userCompanyCodes, true) ?? [];
-        }
-        $userCompanyCodes = array_filter(array_map('strval', $userCompanyCodes));
+        $activeCompany = session('active_company');
 
         $sheets = OfferSheet::with('vendor', 'items')
             ->when($request->status, fn($q, $v) => $q->where('status', $v))
-            ->when(!$user->isAdmin() && !empty($userCompanyCodes), fn($q) => $q->whereIn('company_code', $userCompanyCodes))
-            ->when($request->company_code, fn($q, $v) => $q->where('company_code', $v))
-
+            ->where('company_code', $activeCompany)
             ->latest()->paginate(20);
         return view('sourcing.offer-sheets.index', compact('sheets'));
     }
@@ -193,17 +185,10 @@ class SourcingController extends Controller
 
     public function liveSheets(Request $request)
     {
-        $user = auth()->user();
-        // User's allowed company codes
-        $userCompanyCodes = $user->company_codes ?? [];
-        if (is_string($userCompanyCodes)) {
-            $userCompanyCodes = json_decode($userCompanyCodes, true) ?? [];
-        }
-        $userCompanyCodes = array_filter(array_map('strval', $userCompanyCodes));
-
+        $activeCompany = session('active_company');
         $liveSheets = LiveSheet::with('vendor', 'offerSheet', 'consignment', 'items.product')
             ->when($request->status, fn($q, $v) => $q->where('status', $v))
-            ->when(!$user->isAdmin() && !empty($userCompanyCodes), fn($q) => $q->whereIn('company_code', $userCompanyCodes))
+            ->where('company_code', $activeCompany)
             ->when($request->company_code, fn($q, $v) => $q->where('company_code', $v))
             ->latest()->paginate(20);
         return view('sourcing.live-sheets.index', compact('liveSheets'));
@@ -466,18 +451,10 @@ class SourcingController extends Controller
 
     public function consignments(Request $request)
     {
-
-        $user = auth()->user();
-        // User's allowed company codes
-        $userCompanyCodes = $user->company_codes ?? [];
-        if (is_string($userCompanyCodes)) {
-            $userCompanyCodes = json_decode($userCompanyCodes, true) ?? [];
-        }
-        $userCompanyCodes = array_filter(array_map('strval', $userCompanyCodes));
-
+        $activeCompany = session('active_company');
         $consignments = Consignment::with('vendor', 'liveSheet', 'inspectionReports')
             ->when($request->status, fn($q, $v) => $q->where('status', $v))
-            ->when(!$user->isAdmin() && !empty($userCompanyCodes), fn($q) => $q->whereIn('company_code', $userCompanyCodes))
+            ->where('company_code', $activeCompany)
             ->when($request->company_code, fn($q, $v) => $q->where('company_code', $v))
             ->latest()->paginate(20);
         return view('sourcing.consignments.index', compact('consignments'));
@@ -495,33 +472,20 @@ class SourcingController extends Controller
 
     public function inspections(Request $request)
     {
-
-        $user = auth()->user();
-        // User's allowed company codes
-        $userCompanyCodes = $user->company_codes ?? [];
-        if (is_string($userCompanyCodes)) {
-            $userCompanyCodes = json_decode($userCompanyCodes, true) ?? [];
-        }
-        $userCompanyCodes = array_filter(array_map('strval', $userCompanyCodes));
+        $activeCompany = session('active_company');
 
         $inspections = \App\Models\InspectionReport::with('consignment.vendor', 'uploader')
             ->when($request->type, fn($q, $v) => $q->where('inspection_type', $v))
             ->when($request->result, fn($q, $v) => $q->where('result', $v))
-            ->when(!$user->isAdmin() && !empty($userCompanyCodes), function ($q) use ($userCompanyCodes) {
-                $q->whereHas('consignment', function ($cq) use ($userCompanyCodes) {
-                    $cq->whereIn('company_code', $userCompanyCodes);
+            ->when(!empty($activeCompany), function ($q) use ($activeCompany) {
+                $q->whereHas('consignment', function ($cq) use ($activeCompany) {
+                    $cq->where('company_code', $activeCompany);
                 });
-            })
-            ->when($request->company_code, function ($q) use ($request) {
-                $q->whereHas('consignment', function ($cq) use ($request) {
-                    $cq->where('company_code', $request->company_code);
-                });
-            })
+            }) 
             ->latest()->paginate(20);
 
         $consignments = Consignment::with('vendor')
-            ->when(!$user->isAdmin() && !empty($userCompanyCodes), fn($q) => $q->whereIn('company_code', $userCompanyCodes))
-            ->when($request->company_code, fn($q, $v) => $q->where('company_code', $v))
+            ->where('company_code', $activeCompany)
             ->whereIn('status', ['created', 'in_shipment', 'live_sheet_locked'])
             ->latest()->get();
 
@@ -611,7 +575,8 @@ class SourcingController extends Controller
 
     public function pendingChargebacks()
     {
-        $chargebacks = \App\Models\Chargeback::pending()->with('order', 'vendor')->latest()->paginate(20);
+         $chargebacks = \App\Models\Chargeback::where('company_code', session('active_company'))
+             ->pending()->with('order', 'vendor')->latest()->paginate(20);
         return view('sourcing.chargebacks.index', compact('chargebacks'));
     }
 

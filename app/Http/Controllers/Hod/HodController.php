@@ -16,15 +16,18 @@ class HodController extends Controller
 
     public function dashboard(Request $request)
     {
-        $data = $this->dashboardService->getHodDashboard();
+
+        $activeCompany =  session('active_company');
+
+        $data = $this->dashboardService->getHodDashboard($activeCompany);
         $data['pricing_stats'] = [
-            'pending_preparation'  => Asn::whereIn('status', ['generated', 'locked'])->count(),
-            'submitted_to_finance' => PlatformPricing::where('status', 'submitted')->distinct('asn_id')->count('asn_id'),
-            'finance_approved'     => PlatformPricing::where('status', 'finance_approved')->distinct('asn_id')->count('asn_id'),
-            'finalized'            => PlatformPricing::where('status', 'approved')->distinct('asn_id')->count('asn_id'),
-            'rejected'             => PlatformPricing::where('status', 'rejected')->distinct('asn_id')->count('asn_id'),
+            'pending_preparation'  => Asn::where('company_code', $activeCompany)->whereIn('status', ['generated', 'locked'])->count(),
+            'submitted_to_finance' => PlatformPricing::where('company_code', $activeCompany)->where('status', 'submitted')->distinct('asn_id')->count('asn_id'),
+            'finance_approved'     => PlatformPricing::where('company_code', $activeCompany)->where('status', 'finance_approved')->distinct('asn_id')->count('asn_id'),
+            'finalized'            => PlatformPricing::where('company_code', $activeCompany)->where('status', 'approved')->distinct('asn_id')->count('asn_id'),
+            'rejected'             => PlatformPricing::where('company_code', $activeCompany)->where('status', 'rejected')->distinct('asn_id')->count('asn_id'),
         ];
-        $data['recent_asns'] = Asn::with('shipment')->latest()->take(5)->get();
+        $data['recent_asns'] = Asn::where('company_code', $activeCompany)->with('shipment')->latest()->take(5)->get();
         return view('hod.dashboard', compact('data'));
     }
 
@@ -37,18 +40,20 @@ class HodController extends Controller
             $userCompanyCodes = json_decode($userCompanyCodes, true) ?? [];
         }
         $userCompanyCodes = array_filter(array_map('strval', $userCompanyCodes));
+        $activeCompany =  session('active_company');
 
         $asns = Asn::with('shipment', 'platformPricing')
-            ->when(!$user->isAdmin() && !empty($userCompanyCodes), fn($q) => $q->whereIn('company_code', $userCompanyCodes))
+            // ->when(!$user->isAdmin() && !empty($userCompanyCodes), fn($q) => $q->whereIn('company_code', $userCompanyCodes))
+            ->where('company_code', $activeCompany)
             ->when($request->status, fn($q, $v) => $q->where('status', $v))
-            ->when($request->company_code, fn($q, $v) => $q->where('company_code', $v))
+            // ->when($request->company_code, fn($q, $v) => $q->where('company_code', $v))
             ->latest()->paginate(20);
 
         $stats = [
-            'total'         => Asn::count(),
-            'needs_pricing' => Asn::whereIn('status', ['generated', 'locked'])->count(),
-            'pricing_done'  => Asn::where('status', 'pricing_done')->count(),
-            'finalized'     => Asn::where('status', 'finalized')->count(),
+            'total'         => Asn::where('company_code', $activeCompany)->count(),
+            'needs_pricing' => Asn::where('company_code', $activeCompany)->whereIn('status', ['generated', 'locked'])->count(),
+            'pricing_done'  => Asn::where('company_code', $activeCompany)->where('status', 'pricing_done')->count(),
+            'finalized'     => Asn::where('company_code', $activeCompany)->where('status', 'finalized')->count(),
         ];
 
         return view('hod.asn.index', compact('asns', 'stats'));
@@ -123,22 +128,22 @@ class HodController extends Controller
         ]);
 
         $this->pricingService->preparePricing($asn, $request->pricing, auth()->user());
-        return redirect()->route('hod.asn-list')->with('success', 'Pricing submitted to Finance for review.');
+        return redirect()->route('hod.asn-list')->with('success', 'Pricing is submitted.');
     }
 
-   public function pricingStatus(Asn $asn)
-{
-    $channels = SalesChannel::active()->orderBy('name')->get();
+    public function pricingStatus(Asn $asn)
+    {
+        $channels = SalesChannel::active()->orderBy('name')->get();
 
-    $existingPricing = PlatformPricing::where('asn_id', $asn->id)
-        ->with(['product', 'salesChannel'])   // Important
-        ->orderBy('product_id')
-        ->orderBy('sales_channel_id')
-        ->get()
-        ->keyBy(fn($p) => $p->product_id . '-' . $p->sales_channel_id); // Better key
+        $existingPricing = PlatformPricing::where('asn_id', $asn->id)
+            ->with(['product', 'salesChannel'])   // Important
+            ->orderBy('product_id')
+            ->orderBy('sales_channel_id')
+            ->get()
+            ->keyBy(fn($p) => $p->product_id . '-' . $p->sales_channel_id); // Better key
 
-    return view('hod.pricing.status', compact('asn', 'existingPricing', 'channels'));
-}
+        return view('hod.pricing.status', compact('asn', 'existingPricing', 'channels'));
+    }
 
     public function pricingStatus2(Asn $asn)
     {
@@ -171,14 +176,15 @@ class HodController extends Controller
             $userCompanyCodes = json_decode($userCompanyCodes, true) ?? [];
         }
         $userCompanyCodes = array_filter(array_map('strval', $userCompanyCodes));
-
+        $activeCompany =  session('active_company');
         $asn->load(
             'shipment.consignments.vendor',
             'shipment.consignments.liveSheet.items.product.category'
         );
 
         $channels = SalesChannel::active()
-            ->when(!$user->isAdmin() && !empty($userCompanyCodes), fn($q) => $q->whereIn('company_codes', $userCompanyCodes))
+            // ->when(!$user->isAdmin() && !empty($userCompanyCodes), fn($q) => $q->whereIn('company_codes', $userCompanyCodes))
+            ->whereJsonContains('company_codes', $activeCompany)
             ->orderBy('name')->get();
 
         $existingPricing = PlatformPricing::where('asn_id', $asn->id)
@@ -585,12 +591,22 @@ class HodController extends Controller
     public function finalizePricing(Asn $asn)
     {
         $pending = PlatformPricing::where('asn_id', $asn->id)
-            ->whereNotIn('status', ['finance_approved', 'approved'])
+            ->whereNotIn('status', ['submitted', 'finance_approved', 'approved'])
             ->count();
 
+
         if ($pending > 0) {
-            return back()->with('error', "Cannot finalize — {$pending} item(s) still pending Finance approval.");
+            return back()->with('error', "Cannot finalize — {$pending} item(s) still in draft.");
         }
+        
+        // Auto-approve all submitted items before finalizing
+        PlatformPricing::where('asn_id', $asn->id)
+            ->where('status', 'submitted')
+            ->update([
+                'status'      => 'approved',
+                'approved_by' => auth()->id(),
+                'approved_at' => now(),
+            ]);
 
         $this->pricingService->finalizePricing($asn, auth()->user());
         return redirect()->route('hod.asn-list')->with('success', 'Pricing finalized and sent to Cataloguing Team.');
