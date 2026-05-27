@@ -8,20 +8,46 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Product extends Model
 {
-    use HasFactory,\App\Traits\FiltersByCompany;
+    use HasFactory, \App\Traits\FiltersByCompany;
     use SoftDeletes;
 
     protected $fillable = [
-        'sku', 'sap_code','vendor_wsp', 'name', 'description', 'category_id', 'vendor_id', 'company_code',
-        'length', 'width', 'height', 'weight', 'cbm', 'color', 'material',
-        'variations', 'vendor_price', 'fob_price', 'currency', 'thumbnail', 'images',
-        'status', 'hsn_code', 'barcode', 'stock_quantity', 'reserved_quantity',
-        'shopify_url', 'platform_listing_status','product_details_dropship','eb_wsp','comments',
+        'sku',
+        'sap_code',
+        'vendor_wsp',
+        'name',
+        'description',
+        'category_id',
+        'vendor_id',
+        'company_code',
+        'length',
+        'width',
+        'height',
+        'weight',
+        'cbm',
+        'color',
+        'material',
+        'variations',
+        'vendor_price',
+        'fob_price',
+        'currency',
+        'thumbnail',
+        'images',
+        'status',
+        'hsn_code',
+        'barcode',
+        'stock_quantity',
+        'reserved_quantity',
+        'shopify_url',
+        'platform_listing_status',
+        'product_details_dropship',
+        'eb_wsp',
+        'comments',
     ];
 
     protected $casts = [
-		'vendor_wsp'=>'decimal:2',
-		'eb_wsp'=>'decimal:2',
+        'vendor_wsp' => 'decimal:2',
+        'eb_wsp' => 'decimal:2',
         'variations' => 'array',
         'images' => 'array',
         'platform_listing_status' => 'array',
@@ -90,10 +116,16 @@ class Product extends Model
     {
         return $this->inventory()->sum('available_quantity');
     }
-
+    /**
+     * Get all Offer Sheet Items for this product
+     */
+    public function offerSheetItems()
+    {
+        return $this->hasMany(\App\Models\OfferSheetItem::class, 'product_id');
+    }
     public static function generateSku(string $companyCode, int $categoryId): string
     {
-        $prefix = match($companyCode) {
+        $prefix = match ($companyCode) {
             '2000' => 'IN',
             '2100' => 'US',
             '2200' => 'EU',

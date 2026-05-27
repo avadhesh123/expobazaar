@@ -52,6 +52,8 @@ class Shipment extends Model
         'entry_summary_date',
         'entry_summary_upload_by',
         'entry_summary_upload_date',
+        'status_changed_at',
+        'status_changed_by',
     ];
 
     protected $casts = [
@@ -66,6 +68,7 @@ class Shipment extends Model
         'capacity_cbm' => 'decimal:2',
         'entry_summary_date' => 'date',
         'entry_summary_upload_date' => 'date',
+        'status_changed_at'=>'datetime',
     ];
 
     public function consignments()

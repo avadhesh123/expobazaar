@@ -67,12 +67,21 @@ class VendorRateCard extends Model
     {
         $date = $date ?? now()->toDateString();
         return $q->where('effective_from', '<=', $date)
-            ->where(fn ($q2) => $q2->whereNull('effective_to')->orWhere('effective_to', '>=', $date));
+            ->where(fn($q2) => $q2->whereNull('effective_to')->orWhere('effective_to', '>=', $date));
     }
     // public function scopeActive($query)
     // {
     //     return $query->where(1);
     // }
+
+    public function scopeActive($query)
+    {
+        return $query->where('status', 'approved')
+            ->where(function ($q) {
+                $q->whereNull('effective_from')
+                    ->orWhere('effective_from', '<=', now());
+            });
+    }
     public static function getActive(int $vendorId, ?string $date = null): ?self
     {
         return static::where('vendor_id', $vendorId)->approved()->effectiveOn($date)->orderByDesc('version')->first();
@@ -80,7 +89,7 @@ class VendorRateCard extends Model
 
     public function getCurrencySymbol(): string
     {
-        return match($this->currency) {
+        return match ($this->currency) {
             'INR' => '₹',
             'EUR' => '€',
             'USD' => '$',

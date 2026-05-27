@@ -68,7 +68,7 @@ class LogisticsService
     {
         return DB::transaction(function () use ($shipment, $data, $user) {
 
-        if( $data['sailing_date'] > )
+        if( $data['sailing_date']   )
             $shipment->update([
                 'sailing_date' => $data['sailing_date'],
                 'eta_date' => $data['eta_date'] ?? null,
@@ -85,8 +85,7 @@ class LogisticsService
                 'pickup_date' => $data['pickup_date'] ?? null,
                 'arrival_date' => $data['arrival_date'] ?? null,
                 'carrier_name' => $data['carrier_name'] ?? null,
-                'tracking_number' => $data['tracking_number'] ?? null,                 
-                'status' => 'in_transit',               
+                'tracking_number' => $data['tracking_number'] ?? null,  
             ]);
 //'planning','shipment','consolidated','locked','asn_generated','in_transit','arrived','grn_pending','grn_completed','cancelled'
             // Auto-generate ASN

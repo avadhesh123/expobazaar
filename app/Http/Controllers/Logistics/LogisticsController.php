@@ -150,28 +150,25 @@ class LogisticsController extends Controller
     public function updateShipmentStatus(Request $request, \App\Models\Shipment $shipment)
     {
         $request->validate([
-            'status' => 'required|in:created,in_transit,at_port,customs_clearance,delivered,delayed',
+            'status' => 'required|in:planning,shipment,consolidated,locked,asn_generated,in_transit,arrived,grn_pending,grn_completed,cancelled,delivered',
         ]);
 
         $shipment->update([
-            'status'    => $request->shipment_status,
+            'status'             => $request->status,
             'status_changed_at'  => now(),
             'status_changed_by'  => auth()->id(),
         ]);
 
-       // file_put_contents(storage_path('logs/shipment-status.log'), auth()->username()."\n", FILE_APPEND);
+        // Optional: Log the change
+        // \Log::info("Shipment {$shipment->shipment_code} status changed to {$request->status} by " . auth()->user()->name);
 
-
-        if ($request->ajax()) {
-            return response()->json([
-                'success' => true,
-                'status'  => $request->shipment_status,
-                'changed_at' => now()->format('d M Y H:i'),
-                'changed_by' => auth()->user()->name,
-            ]);
-        }
-
-        return back()->with('success', 'Shipment status updated.');
+        return response()->json([
+            'success'     => true,
+            'message'     => 'Shipment status updated successfully.',
+            'status'      => $request->status,
+            'changed_at'  => now()->format('d M Y H:i'),
+            'changed_by'  => auth()->user()->name ?? 'System',
+        ]);
     }
     // ─── GRN ─────────────────────────────────────────────────────
     public function grnList(Request $request)

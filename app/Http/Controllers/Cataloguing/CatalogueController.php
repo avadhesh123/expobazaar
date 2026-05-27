@@ -233,7 +233,7 @@ class CatalogueController extends Controller
 
         $currency = trim(config('app.active_currency_symbol')); // $, ₹, €
 
-        $pricings = PlatformPricing::with('product.vendor', 'product.category', 'salesChannel', 'asn')
+        $pricings = PlatformPricing::with('product.vendor', 'product.category', 'salesChannel', 'asn', 'product.offerSheetItems')
             ->where('status', 'approved')
             ->where('company_code', $activeCompany)
             ->when($request->channel_id, fn($q, $v) => $q->where('sales_channel_id', $v))
@@ -331,7 +331,7 @@ class CatalogueController extends Controller
 
             $lsItem = \App\Models\LiveSheetItem::where('product_id', $p->product_id)->latest()->first();
             $d = $lsItem ? ($lsItem->product_details ?? []) : [];
-
+            //print_r( $d );exit;
             // Basic Data
             $sheet->setCellValue('A' . $row, $row - 1);
             $sheet->setCellValue('B' . $row, $p->product->sku ?? '');
@@ -342,25 +342,46 @@ class CatalogueController extends Controller
             $sheet->setCellValue('G' . $row, $d['specification'] ?? '');
 
             // **Product Image**
-            if (!empty($p->product->thumbnail)) {
-                $imagePath = public_path('storage/' . $p->product->thumbnail);
-                if (file_exists($imagePath)) {
-                    $drawing = new Drawing();
-                    $drawing->setName('Product Image');
-                    $drawing->setPath($imagePath);
-                    $drawing->setHeight(60);
-                    $drawing->setCoordinates('H' . $row);
-                    $drawing->setWorksheet($sheet);
+
+            // Get image from OfferSheetItem
+            $offerItem = $p->product->offerSheetItems->first(); // or ->sortByDesc('id')->first();        
+
+            $imagePath = null;
+
+            if ($offerItem && !empty($offerItem->thumbnail)) {
+                // Correct full server path
+                $relativePath = $offerItem->thumbnail;
+
+                // Handle both cases: with or without 'storage/' prefix
+                if (str_starts_with($relativePath, 'storage/')) {
+                    $imagePath = storage_path('app/public/' . substr($relativePath, 8));
+                } else {
+                    $imagePath = storage_path('app/public/' . $relativePath);
                 }
             }
+
+
+            if ($imagePath && file_exists($imagePath)) {
+                $drawing = new \PhpOffice\PhpSpreadsheet\Worksheet\Drawing();
+                $drawing->setPath($imagePath);
+                $drawing->setHeight(75);
+                $drawing->setCoordinates('H' . $row);
+                $drawing->setWorksheet($sheet);
+
+                $drawing->setOffsetX(8);                   // Horizontal offset
+                $drawing->setOffsetY(5);
+
+                $sheet->getRowDimension($row)->setRowHeight(75);
+            }
+
 
             $sheet->setCellValue('I' . $row, $d['hsn_code'] ?? $d['hts_code'] ?? '');
 
             // Dimensions
-            $sheet->setCellValue('J' . $row, $d['product_length'] * $lwhConverter ?? $d['length'] * $lwhConverter ?? '');
-            $sheet->setCellValue('K' . $row, $d['product_width'] * $lwhConverter ?? $d['width'] * $lwhConverter ?? '');
-            $sheet->setCellValue('L' . $row, $d['product_height'] * $lwhConverter ?? $d['height'] * $lwhConverter ?? '');
-            $sheet->setCellValue('M' . $row, $d['product_weight'] ?? $d['weight_per_unit'] * $weightConverter ?? '');
+            $sheet->setCellValue('J' . $row, $d['length_inches'] * $lwhConverter ?? '');
+            $sheet->setCellValue('K' . $row, $d['width_inches'] * $lwhConverter ?? '');
+            $sheet->setCellValue('L' . $row, $d['height_inches'] * $lwhConverter ?? '');
+            $sheet->setCellValue('M' . $row, $d['weight_grams'] * $weightConverter ?? '');
 
             $sheet->setCellValue('N' . $row, $d['material'] ?? '');
             $sheet->setCellValue('O' . $row, $d['other_material'] ?? '');
@@ -368,19 +389,30 @@ class CatalogueController extends Controller
             $sheet->setCellValue('Q' . $row, $d['finish'] ?? '');
             $sheet->setCellValue('R' . $row, $p->product->category->name ?? $d['category'] ?? '');
             $sheet->setCellValue('S' . $row, $d['sub_category'] ?? '');
-
+            $innerWeight = $d['inner_weight_kg'] ?? $d['inner_weight'] ?? 0;
             // Carton Info
             $sheet->setCellValue('T' . $row, $d['qty_inner_pack'] ?? '');
-            $sheet->setCellValue('U' . $row, $d['inner_length'] * $lwhConverter ?? '');
-            $sheet->setCellValue('V' . $row, $d['inner_width'] * $lwhConverter ?? '');
-            $sheet->setCellValue('W' . $row, $d['inner_height'] * $lwhConverter ?? '');
-            $sheet->setCellValue('X' . $row, $d['inner_weight'] * $weightConverter ?? '');
+
+            // Inner Carton Dimensions with safe conversion
+            $sheet->setCellValue('U' . $row, isset($d['inner_length']) && $d['inner_length'] > 0
+                ? round($d['inner_length'] * $lwhConverter, 2)
+                : '');
+
+            $sheet->setCellValue('V' . $row, isset($d['inner_width']) && $d['inner_width'] > 0
+                ? round($d['inner_width'] * $lwhConverter, 2)
+                : '');
+
+            $sheet->setCellValue('W' . $row, isset($d['inner_height']) && $d['inner_height'] > 0
+                ? round($d['inner_height'] * $lwhConverter, 2)
+                : '');
+
+            $sheet->setCellValue('X' . $row, $innerWeight * $weightConverter);
             $sheet->setCellValue('Y' . $row, $d['qty_master_pack'] ?? '');
 
-            $sheet->setCellValue('Z' . $row, $d['master_length'] * $lwhConverter ?? '');
-            $sheet->setCellValue('AA' . $row, $d['master_width'] * $lwhConverter ?? '');
-            $sheet->setCellValue('AB' . $row, $d['master_height'] * $lwhConverter ?? '');
-            $sheet->setCellValue('AC' . $row, $d['master_weight'] * $weightConverter ?? '');
+            $sheet->setCellValue('Z' . $row, isset($d['master_length']) ? $d['master_length'] * $lwhConverter : '');
+            $sheet->setCellValue('AA' . $row, isset($d['master_width']) ? $d['master_width'] * $lwhConverter : '');
+            $sheet->setCellValue('AB' . $row, isset($d['master_height']) ? $d['master_height'] * $lwhConverter : '');
+            $sheet->setCellValue('AC' . $row, isset($d['master_weight_kg']) ? $d['master_weight_kg'] * $weightConverter : '');
 
             $sheet->setCellValue('AD' . $row, $d['final_qty'] ?? $lsItem->quantity ?? '');
             $sheet->setCellValue('AE' . $row, $d['final_fob'] ?? $lsItem->unit_price ?? '');
@@ -399,8 +431,46 @@ class CatalogueController extends Controller
             $row++;
         }
 
-        // Auto-size columns
+        // Final Formatting
+        $sheet->getColumnDimension('H')->setWidth(16);           // Image column
+        $sheet->getColumnDimension('E')->setWidth(35);           // Product Name
+        $sheet->getColumnDimension('F')->setWidth(40);           // Description
 
+        // Freeze Header Row
+        $lastRow = $sheet->getHighestRow();
+        $lastColumn = $sheet->getHighestColumn();
+
+        // Apply top alignment to all data cells (from Row 2 onwards)
+        $sheet->getStyle('A2:' . $lastColumn . $lastRow)->applyFromArray([
+            'alignment' => [
+                'vertical'   => \PhpOffice\PhpSpreadsheet\Style\Alignment::VERTICAL_TOP,
+                'horizontal' => \PhpOffice\PhpSpreadsheet\Style\Alignment::HORIZONTAL_LEFT,
+                'wrapText'   => true,
+            ],
+        ]);
+
+        // Keep header row centered
+        $sheet->getStyle('A1:' . $lastColumn . '1')->applyFromArray([
+            'alignment' => [
+                'vertical'   => \PhpOffice\PhpSpreadsheet\Style\Alignment::VERTICAL_CENTER,
+                'horizontal' => \PhpOffice\PhpSpreadsheet\Style\Alignment::HORIZONTAL_CENTER,
+            ],
+            'font' => ['bold' => true],
+        ]);
+
+
+        // Final Formatting
+        $sheet->getColumnDimension('H')->setWidth(18);        // Image column
+        $sheet->getStyle('H2:H' . $lastRow)->getAlignment()->setHorizontal(\PhpOffice\PhpSpreadsheet\Style\Alignment::HORIZONTAL_CENTER);
+
+        $sheet->freezePane('A2');
+
+
+        // Set default row height for all rows
+
+        $sheet->getDefaultRowDimension()->setRowHeight(25);
+
+        // Auto-size columns
         $highestColumn = $sheet->getHighestColumn();
         for ($col = 'A'; $col !== $highestColumn; $col++) {
             $sheet->getColumnDimension($col)->setAutoSize(true);
