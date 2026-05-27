@@ -3,12 +3,7 @@
 @section('page-title', 'Cataloguing Dashboard')
 
 @section('content')
-<div class="grid-kpi">
-    <div class="kpi-card"><div style="display:flex;justify-content:space-between;align-items:start;"><div><div class="kpi-label">Total SKUs</div><div class="kpi-value">{{ $data['listing_summary']['total_skus'] ?? 0 }}</div></div><div class="kpi-icon" style="background:#dbeafe;color:#1e40af;"><i class="fas fa-box"></i></div></div></div>
-    <div class="kpi-card"><div style="display:flex;justify-content:space-between;align-items:start;"><div><div class="kpi-label">Listed</div><div class="kpi-value" style="color:#16a34a;">{{ $data['listing_summary']['listed'] ?? 0 }}</div></div><div class="kpi-icon" style="background:#dcfce7;color:#16a34a;"><i class="fas fa-check-circle"></i></div></div></div>
-    <div class="kpi-card"><div style="display:flex;justify-content:space-between;align-items:start;"><div><div class="kpi-label">Pending Listing</div><div class="kpi-value" style="color:#e8a838;">{{ $data['listing_summary']['pending'] ?? 0 }}</div></div><div class="kpi-icon" style="background:#fef3c7;color:#e8a838;"><i class="fas fa-clock"></i></div></div></div>
-    <div class="kpi-card"><div style="display:flex;justify-content:space-between;align-items:start;"><div><div class="kpi-label">Pricing Ready</div><div class="kpi-value" style="color:#7c3aed;">{{ $data['listing_summary']['pricing_ready'] ?? 0 }}</div></div><div class="kpi-icon" style="background:#ede9fe;color:#7c3aed;"><i class="fas fa-tags"></i></div></div></div>
-</div>
+
 
 {{-- Per Channel Listing Status --}}
 <div class="card" style="margin-bottom:1.25rem;">

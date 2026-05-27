@@ -260,18 +260,18 @@
 
 {{-- Lock Shipment (if still consolidated) --}}
 
-@if($shipment->shipment_type !== 'AIR')
+@if($shipment->status === 'consolidated')
 <div class="card" style="margin-top:1.25rem;border-color:#e8a838;">
     <div class="card-header" style="background:#fffbeb;">
         <h3><i class="fas fa-lock" style="margin-right:.5rem;color:#e8a838;"></i> Lock Shipment & Generate ASN</h3>
     </div>
     <div class="card-body">
-        <form method="POST" action="{{ route('logistics.shipments.logistics', $shipment) }}">
+        <form method="POST" action="{{ route('logistics.shipments.lock', $shipment) }}" onsubmit="return confirm('Lock this shipment?\n\nThis will set the sailing date, lock the shipment, and auto-generate an ASN for HOD pricing.')">
             @csrf
             <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:.75rem;">
                 <div class="form-group"><label>Sailing Date <span style="color:#dc2626;">*</span></label><input type="date" name="sailing_date" required></div>
                 <div class="form-group"><label>ETA Date</label><input type="date" name="eta_date"></div>
-                <div class="form-group"><label>Delivery Date</label><input type="date" name="delivery_date"></div>
+                <div class="form-group"><label>Delivery Date</label><input type="date" name="delivery _date"></div>
                 <div class="form-group"><label>Shipping Line</label><input type="text" name="shipping_line" placeholder="e.g. Maersk"></div>
                 <div class="form-group"><label>Vessel Name</label><input type="text" name="vessel_name" placeholder="Vessel name"></div>
                 <div class="form-group"><label>Voyage Number</label><input type="text" name="voyage_number" placeholder="Voyage #"></div>
@@ -279,108 +279,37 @@
                 <div class="form-group"><label>Shipping Bill Number</label><input type="text" name="shipping_bill_number" placeholder="Shipping Bill No"></div>
                 <div class="form-group"><label>Shipping Bill Date</label><input type="date" name="shipping_bill_date"></div>
                 <div class="form-group"><label>Booking No</label><input type="text" name="booking_no"></div>
-                <div class="form-group"><label>Forwarder Name</label><input type="text" name="forwarder_name"></div>
+                <div class="form-group"><label>Forwarder Name</label><input type="date" name="forwarder_name"></div>
             </div>
-             <button type="submit" class="btn btn-primary"><i class="fas fa-lock" style="margin-right:.3rem;"></i> Save Info</button>
-        </form>
-        <div>
-            <form method="POST" action="{{ route('logistics.shipments.lock', $shipment) }}" onsubmit="return confirm('Lock this shipment?\n\nThis will set the sailing date, lock the shipment, and auto-generate an ASN for HOD pricing.')">
-                @csrf
-                <button type="submit" class="btn btn-success"><i class="fas fa-lock" style="margin-right:.3rem;"></i> Lock Shipment & Generate ASN </button>
-            </form>
-        </div>
+<a href=""> Lock Shipment & Generate ASN</a>
+            <button type="submit" class="btn btn-primary"><i class="fas fa-lock" style="margin-right:.3rem;"></i> Save Info</button>
+              </form>
     </div>
 </div>
 @endif
-@if($shipment->shipment_type === 'AIR')
+@if($shipment->status === 'shipment')
 <div class="card" style="margin-top:1.25rem;border-color:#e8a838;">
     <div class="card-header" style="background:#fffbeb;">
         <h3><i class="fas fa-lock" style="margin-right:.5rem;color:#e8a838;"></i> Lock Shipment & Generate ASN</h3>
     </div>
     <div class="card-body">
-
-        {{-- Status Dropdown --}}
-        <div style="display:flex;gap:1rem;align-items:flex-end;margin-bottom:1rem;padding:.75rem;background:#f8fafc;border-radius:8px;border:1px solid #e2e8f0;">
-            <div>
-                <label style="font-size:.65rem;font-weight:600;color:#64748b;display:block;margin-bottom:.2rem;">Shipment Status</label>
-                <select id="shipmentStatus" onchange="updateShipmentStatus(this.value)" style="padding:.4rem .6rem;border:1px solid #d1d5db;border-radius:8px;font-size:.82rem;font-weight:600;min-width:180px;">
-                    @php $currentStatus = $shipment->shipment_status ?? 'created'; @endphp
-                    <option value="created" {{ $currentStatus === 'created' ? 'selected' : '' }}>📦 Created</option>
-                    <option value="in_transit" {{ $currentStatus === 'in_transit' ? 'selected' : '' }}>🚢 In Transit</option>
-                    <option value="at_port" {{ $currentStatus === 'at_port' ? 'selected' : '' }}>⚓ At Port</option>
-                    <option value="customs_clearance" {{ $currentStatus === 'customs_clearance' ? 'selected' : '' }}>🛃 Customs Clearance</option>
-                    <option value="delivered" {{ $currentStatus === 'delivered' ? 'selected' : '' }}>✅ Delivered</option>
-                    <option value="delayed" {{ $currentStatus === 'delayed' ? 'selected' : '' }}>⚠️ Delayed</option>
-                </select>
-            </div>
-            <div id="statusInfo" style="font-size:.72rem;color:#64748b;">
-                @if($shipment->status_changed_at)
-                    Changed {{ $shipment->status_changed_at->format('d M Y H:i') }} by {{ $shipment->statusChangedBy->name ?? '—' }}
-                @endif
-            </div>
-            <div id="statusSaving" style="font-size:.72rem;display:none;color:#e8a838;"><i class="fas fa-spinner fa-spin"></i> Saving...</div>
-        </div>
-
-        {{-- Shipment Details Form --}}
-        <form method="POST" action="{{ route('logistics.shipments.logistics', $shipment) }}">
+        <form method="POST" action="{{ route('logistics.shipments.lock', $shipment) }}" onsubmit="return confirm('Lock this shipment?\n\nThis will set the sailing date, lock the shipment, and auto-generate an ASN for HOD pricing.')">
             @csrf
             <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:.75rem;">
-                <div class="form-group"><label>Pick Up Date</label><input type="date" name="pickup_date" value="{{ $shipment->pickup_date?->format('Y-m-d') }}"></div>
-                <div class="form-group"><label>Departure Date <span style="color:#dc2626;">*</span></label><input type="date" name="sailing_date" required value="{{ $shipment->sailing_date?->format('Y-m-d') }}"></div>
-                <div class="form-group"><label>Arrival Date</label><input type="date" name="arrival_date" value="{{ $shipment->arrival_date?->format('Y-m-d') }}"></div>
-                <div class="form-group"><label>Delivery Date</label><input type="date" name="delivery_date" value="{{ $shipment->delivery_date?->format('Y-m-d') }}"></div>
-                <div class="form-group"><label>Carrier Name</label><input type="text" name="carrier_name" placeholder="e.g. FedEx" value="{{ $shipment->carrier_name }}"></div>
-                <div class="form-group"><label>Tracking Number</label><input type="text" name="tracking_number" placeholder="Tracking name" value="{{ $shipment->tracking_number }}"></div>
-                <div class="form-group"><label>Airway Bill of Lading</label><input type="text" name="bill_of_lading" placeholder="B/L number" value="{{ $shipment->bill_of_lading }}"></div>
-                <div class="form-group"><label>Shipping Bill Number</label><input type="text" name="shipping_bill_number" placeholder="Shipping Bill No" value="{{ $shipment->shipping_bill_number }}"></div>
-                <div class="form-group"><label>Shipping Bill Date</label><input type="date" name="shipping_bill_date" value="{{ $shipment->shipping_bill_date?->format('Y-m-d') }}"></div>
+                <div class="form-group"><label>Pick Up Date</label><input type="date" name="pickup_date"></div>
+                <div class="form-group"><label>Departure Date <span style="color:#dc2626;">*</span></label><input type="date" name="sailing_date" required></div>
+                <div class="form-group"><label>Arrival Date</label><input type="date" name="arrival_date"></div>
+                <div class="form-group"><label>Delivery Date</label><input type="date" name="delivery _date"></div>
+                <div class="form-group"><label>Carrier Name</label><input type="text" name="carrier_name" placeholder="e.g. FedEx"></div>
+                <div class="form-group"><label>Tracking Number</label><input type="text" name="tracking_number" placeholder="Tracking name"></div>
+                <div class="form-group"><label>Airway bill of Lading</label><input type="text" name="bill_of_lading" placeholder="B/L number"></div>
+                <div class="form-group"><label>Shipping Bill Number</label><input type="text" name="shipping_bill_number" placeholder="Shipping Bill No"></div>
+                <div class="form-group"><label>Shipping Bill Date</label><input type="date" name="shipping_bill_date"></div>
             </div>
-            <button type="submit" class="btn btn-primary"><i class="fas fa-save" style="margin-right:.3rem;"></i> Save Info</button>
+            <a href=""> Lock Shipment & Generate ASN</a>
+            <button type="submit" class="btn btn-primary"><i class="fas fa-lock" style="margin-right:.3rem;"></i> Save Info</button>
         </form>
-
-        <div style="margin-top:.75rem;">
-            <form method="POST" action="{{ route('logistics.shipments.lock', $shipment) }}" onsubmit="return confirm('Lock this shipment?\n\nThis will lock the shipment and auto-generate an ASN for HOD pricing.')">
-                @csrf
-                <button type="submit" class="btn btn-success"><i class="fas fa-lock" style="margin-right:.3rem;"></i> Lock Shipment & Generate ASN</button>
-            </form>
-        </div>
     </div>
 </div>
 @endif
-
-<script>
-function updateShipmentStatus(status) {
-    document.getElementById('statusSaving').style.display = 'inline';
-    document.getElementById('statusInfo').style.display = 'none';
-
-    fetch("{{ route('logistics.shipments.update-status', $shipment) }}", {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            'X-CSRF-TOKEN': '{{ csrf_token() }}',
-            'Accept': 'application/json',
-        },
-        body: JSON.stringify({ shipment_status: status })
-    })
-    .then(r => r.json())
-    .then(data => {
-        document.getElementById('statusSaving').style.display = 'none';
-        document.getElementById('statusInfo').style.display = 'inline';
-        if (data.success) {
-            document.getElementById('statusInfo').innerHTML =
-                '<span style="color:#16a34a;"><i class="fas fa-check-circle"></i></span> Changed ' +
-                data.changed_at + ' by ' + data.changed_by;
-        } else {
-            document.getElementById('statusInfo').innerHTML =
-                '<span style="color:#dc2626;"><i class="fas fa-times-circle"></i> Failed</span>';
-        }
-    })
-    .catch(() => {
-        document.getElementById('statusSaving').style.display = 'none';
-        document.getElementById('statusInfo').style.display = 'inline';
-        document.getElementById('statusInfo').innerHTML =
-            '<span style="color:#dc2626;"><i class="fas fa-times-circle"></i> Error saving</span>';
-    });
-}
-</script>
 @endsection

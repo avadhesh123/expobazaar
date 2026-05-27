@@ -1278,7 +1278,7 @@ class VendorController extends Controller
 
         $liveSheet->load('items.product');
 
-        $headers = "S.no,Vendor SKU,Barcode,Product Name,Product Description (Min 100 words),Product Specification,Hsn & Hts Code,Duty %,Product Length (Inches),Product Width (Inches),Product Height (Inches),Product Weight (Gram),Material Composition,Other Material,Color,Product Finish,Category,Sub Category,Qty In Inner Pack,Inner Carton Length (Inches),Inner Carton Width (Inches),Inner Carton Height (Inches),Inner Carton Weight (Kg),Qty In Master Pack,Master Carton Length (Inches),Master Carton Width (Inches),Master Carton Height (Inches),Master Carton Weight (Kg),No Of Master Carton,Qty Offered (Units/Sets),Vendor FOB({$currency})\n";
+        $headers = "S.no,Vendor SKU,Product Name,Product Description (Min 100 words),Product Specification,Hsn & Hts Code,Duty %,Product Length (Inches),Product Width (Inches),Product Height (Inches),Product Weight (Gram),Material Composition,Other Material,Color,Product Finish,Category,Sub Category,Qty In Inner Pack,Inner Carton Length (Inches),Inner Carton Width (Inches),Inner Carton Height (Inches),Inner Carton Weight (Kg),Qty In Master Pack,Master Carton Length (Inches),Master Carton Width (Inches),Master Carton Height (Inches),Master Carton Weight (Kg),No Of Master Carton,Qty Offered (Units/Sets),Vendor FOB({$currency})\n";
         $csv = "\xEF\xBB\xBF"; // UTF-8 BOM
         $csv .= $headers;
 
@@ -1296,7 +1296,7 @@ class VendorController extends Controller
             $row = [
                 $idx + 1,
                 '"' . str_replace('"', '""', $p->sku ?? '') . '"',
-                $p->barcode ?? $d['barcode'], // Barcode
+                //  $p->barcode ?? $d['barcode'], // Barcode
                 '"' . str_replace('"', '""', $p->name ?? '') . '"',
                 '"' . str_replace('"', '""', $d['description'] ?? '') . '"',                // Description
                 '"' . str_replace('"', '""', $d['specification'] ?? '') . '"', // Specification
@@ -1428,7 +1428,9 @@ class VendorController extends Controller
                 $errors[] = "Row " . ($idx + 1) . ": SKU '{$sku}' not found in this live sheet.";
                 continue;
             }
-
+            if (empty(trim($row['description']))) {
+                $errors[] = "Row " . ($idx + 1) . ": Description not found in this live sheet. Please add description.";
+            }
             // ── Barcode validation ──
             $barcode = trim($row['barcode'] ?? '');
             if (!empty($barcode)) {

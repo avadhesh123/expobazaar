@@ -54,14 +54,14 @@
                     <th style="min-width:80px;">SAP</th>
                     <th style="min-width:180px;">Product Name</th>
                     <th style="min-width:100px;">Vendor</th>
-                    <th style="min-width:70px;text-align:right;">FOB</th>
-                    <th style="min-width:70px;text-align:right;">WSP</th>
-                    <th style="min-width:70px;text-align:right;">Last Mile</th>
-                    <th style="min-width:80px;text-align:right;background:#f0fdf4;">Retail</th>
+                    <th style="min-width:70px;text-align:right;">FOB({{$activeCurrencySymbol}})</th>
+                    <th style="min-width:70px;text-align:right;">WSP({{$activeCurrencySymbol}})</th>
+                    <th style="min-width:70px;text-align:right;">Last Mile({{$activeCurrencySymbol}})</th>
+                    <th style="min-width:80px;text-align:right;background:#f0fdf4;">Retail({{$activeCurrencySymbol}})</th>
 
                     @foreach($channels as $ch)
                     <th style="min-width:110px;text-align:right;background:#fefce8;">
-                        {{ $ch->name }}
+                        {{ $ch->name }}({{$activeCurrencySymbol}})
                     </th>
                     @endforeach
                 </tr>
@@ -70,7 +70,19 @@
                 @forelse($pricings as $productId => $productGroup)
                 @php
                 $first = $productGroup->first();
-                $product = $first->product ?? null;
+                $product = $first->product ?? null;                
+                if ($activeCompany === '2100') {
+                    $weightUnit      = 'KG';
+                    $lwhUnit         = 'INCH';
+                    $weightConverter = 1;       // No conversion needed
+                    $lwhConverter    = 1;       // No conversion needed
+                } else {
+                    $weightUnit      = 'LBS';
+                    $lwhUnit         = 'CM';
+                    $weightConverter = 2.20462; // KG to LBS
+                    $lwhConverter    = 2.54;    // INCH to CM
+                }
+
                 @endphp
                 <tr>
                     <td style="text-align:center;color:#94a3b8;">{{ $pricings->firstItem() + $loop->index }}</td>

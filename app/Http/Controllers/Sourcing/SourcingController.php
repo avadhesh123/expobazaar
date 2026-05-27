@@ -481,7 +481,7 @@ class SourcingController extends Controller
                 $q->whereHas('consignment', function ($cq) use ($activeCompany) {
                     $cq->where('company_code', $activeCompany);
                 });
-            }) 
+            })
             ->latest()->paginate(20);
 
         $consignments = Consignment::with('vendor')
@@ -575,8 +575,8 @@ class SourcingController extends Controller
 
     public function pendingChargebacks()
     {
-         $chargebacks = \App\Models\Chargeback::where('company_code', session('active_company'))
-             ->pending()->with('order', 'vendor')->latest()->paginate(20);
+        $chargebacks = \App\Models\Chargeback::where('company_code', session('active_company'))
+            ->pending()->with('order', 'vendor')->latest()->paginate(20);
         return view('sourcing.chargebacks.index', compact('chargebacks'));
     }
 
@@ -586,5 +586,142 @@ class SourcingController extends Controller
         app(\App\Services\FinanceService::class)->confirmChargeback($chargeback, auth()->user(), $request->boolean('approved'), $request->remarks);
         $status = $request->boolean('approved') ? 'confirmed' : 'rejected';
         return back()->with('success', "Chargeback {$status}.");
+    }
+
+    /**
+     * Download Barcodes Template / Current Data
+     */
+    public function downloadBarcodes(LiveSheet $liveSheet)
+    {
+        $liveSheet->load('items.product');
+
+        $spreadsheet = new \PhpOffice\PhpSpreadsheet\Spreadsheet();
+        $sheet = $spreadsheet->getActiveSheet();
+        $sheet->setTitle('Barcodes');
+
+        // Headers
+        $sheet->setCellValue('A1', 'Vendor SKU');
+        $sheet->setCellValue('B1', 'Barcode');
+        $sheet->setCellValue('C1', 'Product Name');
+        $sheet->setCellValue('D1', 'Weight (Kg)');
+        $sheet->setCellValue('E1', 'HSN/HTS');
+
+        $row = 2;
+        foreach ($liveSheet->items as $item) {
+            $d = $item->product_details ?? [];
+            $sheet->setCellValue('A' . $row, $item->product->sku ?? '');
+            $sheet->setCellValue('B' . $row, $d['barcode'] ?? '');
+            $sheet->setCellValue('C' . $row, $item->product->name ?? '');
+            $sheet->setCellValue('D' . $row, $d['weight_grams'] ?? '');
+            $sheet->setCellValue('E' . $row, $d['hsn_hts_code'] ?? '');
+            $row++;
+        }
+
+        $writer = new \PhpOffice\PhpSpreadsheet\Writer\Xlsx($spreadsheet);
+        $filename = 'Barcodes_LiveSheet_' . $liveSheet->live_sheet_number . '_' . date('Ymd') . '.xlsx';
+
+        header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+        header('Content-Disposition: attachment;filename="' . $filename . '"');
+        $writer->save('php://output');
+        exit;
+    }
+
+    /**
+     * Upload and Update Barcodes
+     */
+    public function uploadBarcodes(Request $request, LiveSheet $liveSheet)
+    {
+        $request->validate([
+            'barcode_file' => 'required|file|mimes:csv,xlsx,xls|max:5120',
+        ]);
+
+
+        $file = $request->file('barcode_file');
+        $filePath = $file->getPathname();
+        $extension = strtolower($file->getClientOriginalExtension());
+
+
+        // Get current user name (safe filename format)
+        $userName = strtolower( str_replace(
+            [' ', '/', '\\', ':', '*', '?', '"', '<', '>', '|'],
+            '_',
+            auth()->user()->name ?? 'unknown_user'
+        ));    
+
+        // Store file in public/barcodes directory
+      //  $storedPath = $file->storeAs('barcodes', $filename, 'public');
+
+        $path = $file->store('barcodes/' . $userName, 'public');
+
+        try {
+            if ($extension === 'csv') {
+                $reader = \PhpOffice\PhpSpreadsheet\IOFactory::createReader('Csv');
+            } else {
+                $reader = \PhpOffice\PhpSpreadsheet\IOFactory::createReader('Xlsx');
+            }
+
+            $spreadsheet = $reader->load($filePath);
+            $sheet = $spreadsheet->getActiveSheet();
+            $data = $sheet->toArray();
+
+            $updated = 0;
+            $errors = [];
+
+            foreach ($data as $idx => $row) {
+
+                if ($idx === 0) {
+                    continue;
+                } // Skip header
+
+                $sku     = trim($row[0] ?? '');   // Column A - SKU
+                $barcode = trim($row[1] ?? '');   // Column B - Barcode
+
+                if (empty($sku)) {
+                    $errors[] = "Row " . ($idx) . ": SKU is empty in this live sheet.";
+                    continue;
+                }
+                if (empty($barcode)) {
+                    $errors[] = "Row " . ($idx) . ": BARCODE is empty in this live sheet.";
+                }
+
+                // Find matching live sheet item by SKU
+                $item = $liveSheet->items()->whereHas('product', fn($q) => $q->where('sku', $sku))->first();
+
+                if (!$item) {
+                    $errors[] = "Row " . ($idx) . ": SKU '{$sku}' not found in this live sheet.";
+                    continue;
+                }
+                // ── Barcode validation ──
+                if (!empty($barcode)) {
+                    // Check uniqueness against other products (exclude current product)
+                    $dupBarcode = \App\Models\Product::withoutGlobalScopes()->where('barcode', $barcode)
+                        ->where('id', '!=', $item->product_id)
+                        ->first();
+                    if ($dupBarcode) {
+                        $errors[] = "Row " . ($idx) . ": Barcode '{$barcode}' already assigned to SKU '{$dupBarcode->sku}'.";
+                        continue;
+                    }
+                }
+
+                if ($item) {
+                    $details = $item->product_details ?? [];
+                    $details['barcode'] = $barcode;
+
+                    $item->update(['product_details' => $details]);
+
+                    if ($item->product) {
+                        $item->product->update(['barcode' => $barcode]); 
+                    }
+                    $updated++;
+                }
+            }
+            $msg = "{$updated} item(s) updated from uploaded file.";
+            if (count($errors) > 0) {
+                $msg .=  'Error:' . implode(",", $errors);
+            }
+            return back()->with((count($errors) > 0) ? 'error' : 'success', $msg);
+        } catch (\Exception $e) {
+            return back()->with('error', 'Error processing file: ' . $e->getMessage());
+        }
     }
 }

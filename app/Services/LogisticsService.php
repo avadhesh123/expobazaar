@@ -19,15 +19,16 @@ class LogisticsService
             $totalItems = $consignments->sum('total_items');
             $totalValue = $consignments->sum('total_value');
             $country = $consignments->first()->destination_country;
+            //'planning','shipment','consolidated','locked','asn_generated','in_transit','arrived','grn_pending','grn_completed','cancelled'
 
             $capacity = $shipmentType === 'FCL' ? 65 : ($shipmentType === 'LCL' ? 30 : 10);
-
+            $status = $shipmentType === 'FCL' ? 'consolidated' : 'shipment';
             $shipment = Shipment::create([
                 'shipment_code' => Shipment::generateCode($companyCode, $shipmentType),
                 'company_code' => $companyCode,
                 'destination_country' => $country,
                 'shipment_type' => $shipmentType,
-                'status' => 'consolidated',
+                'status' => $status,
                 'total_cbm' => $totalCbm,
                 'capacity_cbm' => $capacity,
                 'total_items' => $totalItems,
@@ -60,24 +61,64 @@ class LogisticsService
             return $shipment;
         });
     }
+    /**
+     * Update sailing date and other logistics information
+     */
+    public function saveLogistics(Shipment $shipment, array $data, User $user): Shipment
+    {
+        return DB::transaction(function () use ($shipment, $data, $user) {
 
+        if( $data['sailing_date'] > )
+            $shipment->update([
+                'sailing_date' => $data['sailing_date'],
+                'eta_date' => $data['eta_date'] ?? null,
+                'delivery_date' => $data['delivery_date'] ?? null,
+                'shipping_line' => $data['shipping_line'] ?? null,
+                'vessel_name' => $data['vessel_name'] ?? null,
+                'voyage_number' => $data['voyage_number'] ?? null,
+                'bill_of_lading' => $data['bill_of_lading'] ?? null,
+                'shipping_bill_number' => $data['shipping_bill_number'] ?? null,
+                'shipping_bill_date' => $data['shipping_bill_date'] ?? null,
+                'booking_no' => $data['booking_no'] ?? null,
+                'forwarder_name' => $data['forwarder_name'] ?? null,
+
+                'pickup_date' => $data['pickup_date'] ?? null,
+                'arrival_date' => $data['arrival_date'] ?? null,
+                'carrier_name' => $data['carrier_name'] ?? null,
+                'tracking_number' => $data['tracking_number'] ?? null,                 
+                'status' => 'in_transit',               
+            ]);
+//'planning','shipment','consolidated','locked','asn_generated','in_transit','arrived','grn_pending','grn_completed','cancelled'
+            // Auto-generate ASN
+            // $asn = $this->generateAsn($shipment);
+
+            ActivityLog::log('logistics', 'shipment', $shipment, null, null, 'Shipment logistics info updated.');
+ 
+            // Notify vendors
+            foreach ($shipment->consignments as $consignment) {
+                $consignment->vendor->user->notify(new ShipmentNotification($shipment, 'sailing_date_updated'));
+            }
+
+            return $shipment;
+        });
+    }
     /**
      * Update sailing date and lock shipment
      */
     public function lockShipment(Shipment $shipment, array $data, User $user): Shipment
     {
         return DB::transaction(function () use ($shipment, $data, $user) {
-            $shipment->update([
-                'sailing_date' => $data['sailing_date'],
-                'eta_date' => $data['eta_date'] ?? null,
-                'shipping_line' => $data['shipping_line'] ?? null,
-                'vessel_name' => $data['vessel_name'] ?? null,
-                'voyage_number' => $data['voyage_number'] ?? null,
-                'bill_of_lading' => $data['bill_of_lading'] ?? null,
-                'status' => 'locked',
-                'locked_by' => $user->id,
-                'locked_at' => now(),
-            ]);
+            // $shipment->update([
+            //     'sailing_date' => $data['sailing_date'],
+            //     'eta_date' => $data['eta_date'] ?? null,
+            //     'shipping_line' => $data['shipping_line'] ?? null,
+            //     'vessel_name' => $data['vessel_name'] ?? null,
+            //     'voyage_number' => $data['voyage_number'] ?? null,
+            //     'bill_of_lading' => $data['bill_of_lading'] ?? null,
+            //     'status' => 'locked',
+            //     'locked_by' => $user->id,
+            //     'locked_at' => now(),
+            // ]);
 
             // Auto-generate ASN
             $asn = $this->generateAsn($shipment);

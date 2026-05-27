@@ -37,25 +37,25 @@ class LogisticsController extends Controller
             ->when($request->company_code, fn($q, $v) => $q->where('company_code', $v))
             ->whereDoesntHave('shipments')
             ->when($request->company_code, fn($q, $v) => $q->where('company_code', $v))
-            ->get(); 
+            ->get();
 
-        $consignments->each(function ($con)    {
+        $consignments->each(function ($con) {
             $items = $con->liveSheet?->items ?? collect();
             $con->stats = [
                 'total_skus'     => $items->unique('product_id')->count(),
                 'total_qty'      => $items->sum('quantity'),
-                'total_fob'      => $items->sum('total_price'), 
+                'total_fob'      => $items->sum('total_price'),
                 'total_net_wt' => $items->sum(fn($i) => (($i->product_details['weight_grams'] ?? 0)) * ($i->product_details['final_qty'] ?? 0)),
                 'total_gross_wt' => $items->sum(fn($i) => ($i->product_details['master_weight_kg'] ?? 0) * ($i->product_details['no_of_master_carton'] ?? 0)),
-                'total_master_cartons'=> $items->sum(fn($i) => ($i->product_details['no_of_master_carton'] ?? 0)),
-                'master_weight_kg'=> $items->sum(fn($i) => ($i->product_details['master_weight_kg'] ?? 0)),
-                 'total_cbm'      => floatval($con->total_cbm ?? $items->sum('total_cbm')),
+                'total_master_cartons' => $items->sum(fn($i) => ($i->product_details['no_of_master_carton'] ?? 0)),
+                'master_weight_kg' => $items->sum(fn($i) => ($i->product_details['master_weight_kg'] ?? 0)),
+                'total_cbm'      => floatval($con->total_cbm ?? $items->sum('total_cbm')),
             ];
         });
 
-    //  print '<pre>';
-    //  print_r($consignments->toArray());
-    //  print '</pre>';
+        //  print '<pre>';
+        //  print_r($consignments->toArray());
+        //  print '</pre>';
 
         $totalCbm = $consignments->sum('total_cbm');
 
@@ -132,13 +132,47 @@ class LogisticsController extends Controller
             return back()->with('error', 'Upload failed: ' . $e->getMessage())->withInput();
         }
     }
-    public function lockShipment(Request $request, Shipment $shipment)
+    public function saveLogistics(Request $request, Shipment $shipment)
     {
         $request->validate(['sailing_date' => 'required|date']);
+        $this->logisticsService->saveLogistics($shipment, $request->all(), auth()->user());
+        // return redirect()->route('logistics.shipments')->with('success', 'Logistic information of shipment is saved.');
+
+        return back()->with('success', 'Logistic information of shipment is saved.');
+    }
+    public function lockShipment(Request $request, Shipment $shipment)
+    {
+        // $request->validate(['sailing_date' => 'required|date']);
         $this->logisticsService->lockShipment($shipment, $request->all(), auth()->user());
         return redirect()->route('logistics.shipments')->with('success', 'Shipment locked. ASN generated.');
     }
 
+    public function updateShipmentStatus(Request $request, \App\Models\Shipment $shipment)
+    {
+        $request->validate([
+            'status' => 'required|in:created,in_transit,at_port,customs_clearance,delivered,delayed',
+        ]);
+
+        $shipment->update([
+            'status'    => $request->shipment_status,
+            'status_changed_at'  => now(),
+            'status_changed_by'  => auth()->id(),
+        ]);
+
+       // file_put_contents(storage_path('logs/shipment-status.log'), auth()->username()."\n", FILE_APPEND);
+
+
+        if ($request->ajax()) {
+            return response()->json([
+                'success' => true,
+                'status'  => $request->shipment_status,
+                'changed_at' => now()->format('d M Y H:i'),
+                'changed_by' => auth()->user()->name,
+            ]);
+        }
+
+        return back()->with('success', 'Shipment status updated.');
+    }
     // ─── GRN ─────────────────────────────────────────────────────
     public function grnList(Request $request)
     {
@@ -1138,7 +1172,7 @@ class LogisticsController extends Controller
         return back()->with('success', "Rate card updated for {$warehouse->name}.");
     }
 
-     public function downloadLiveSheet(\App\Models\Consignment $consignment)
+    public function downloadLiveSheet(\App\Models\Consignment $consignment)
     {
         $consignment->load('vendor', 'liveSheet.items.product');
 
@@ -1157,11 +1191,34 @@ class LogisticsController extends Controller
         $ws = $spreadsheet->getActiveSheet();
         $ws->setTitle('Live Sheet');
 
-        $headers = ['S.No','Vendor Name','Vendor SKU','SAP Code','Product Name','Barcode',
-            'Category','Material','Color','Length (cm)','Width (cm)','Height (cm)',
-            'Weight (g)','CBM/Unit','Qty','Unit Price','Total Price','Total CBM',
-            'Total Weight (kg)','Master Cartons','Net Weight','Gross Weight',
-            'Factory Location','Goods Ready Date','Consignment No','Live Sheet No'];
+        $headers = [
+            'S.No',
+            'Vendor Name',
+            'Vendor SKU',
+            'SAP Code',
+            'Product Name',
+            'Barcode',
+            'Category',
+            'Material',
+            'Color',
+            'Length (cm)',
+            'Width (cm)',
+            'Height (cm)',
+            'Weight (g)',
+            'CBM/Unit',
+            'Qty',
+            'Unit Price',
+            'Total Price',
+            'Total CBM',
+            'Total Weight (kg)',
+            'Master Cartons',
+            'Net Weight',
+            'Gross Weight',
+            'Factory Location',
+            'Goods Ready Date',
+            'Consignment No',
+            'Live Sheet No'
+        ];
 
         // Header styling
         $hdrFill = new \PhpOffice\PhpSpreadsheet\Style\Fill();
@@ -1239,9 +1296,34 @@ class LogisticsController extends Controller
         }
 
         // Column widths
-        $widths = ['A'=>5,'B'=>22,'C'=>16,'D'=>12,'E'=>35,'F'=>16,'G'=>14,'H'=>12,'I'=>10,
-            'J'=>8,'K'=>8,'L'=>8,'M'=>10,'N'=>10,'O'=>6,'P'=>10,'Q'=>12,'R'=>10,
-            'S'=>12,'T'=>10,'U'=>10,'V'=>10,'W'=>18,'X'=>14,'Y'=>16,'Z'=>16];
+        $widths = [
+            'A' => 5,
+            'B' => 22,
+            'C' => 16,
+            'D' => 12,
+            'E' => 35,
+            'F' => 16,
+            'G' => 14,
+            'H' => 12,
+            'I' => 10,
+            'J' => 8,
+            'K' => 8,
+            'L' => 8,
+            'M' => 10,
+            'N' => 10,
+            'O' => 6,
+            'P' => 10,
+            'Q' => 12,
+            'R' => 10,
+            'S' => 12,
+            'T' => 10,
+            'U' => 10,
+            'V' => 10,
+            'W' => 18,
+            'X' => 14,
+            'Y' => 16,
+            'Z' => 16
+        ];
         foreach ($widths as $col => $w) {
             $ws->getColumnDimension($col)->setWidth($w);
         }

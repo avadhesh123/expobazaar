@@ -68,41 +68,7 @@ $disabled = $liveSheet->is_locked ? 'disabled' : '';
     <span><i class="fas fa-info-circle" style="margin-right:.3rem;"></i> <strong><span id="lsSelectedCount">0</span></strong> of {{ $liveSheet->items->count() }} items selected. Only selected items will be moved to the consignment.</span>
     <span style="font-size:.72rem;color:#64748b;">Unchecked rows will be excluded from consignment creation.</span>
 </div>
-{{-- Barcode Upload and Download --}}
-<div class="card" style="margin-bottom:1rem;border-color:#fcd34d;">
-    <div class="card-header" style="background:#fffbeb;padding:.65rem 1rem;">
-        <h3 style="font-size:.82rem;color:#92400e;"><i class="fas fa-barcode" style="margin-right:.4rem;"></i> Barcode Upload and Download </h3>
-    </div>
-    <div class="card-body" style="padding:.75rem 1rem;display:flex;gap:.75rem;flex-wrap:wrap;align-items:flex-end;">
-         <div style="display:flex;gap:1.5rem;align-items:flex-start;flex-wrap:wrap;">
-            <div>            
-                
-                <!-- Download -->
-                <a href="{{ route('sourcing.live-sheets.barcode.download', $liveSheet) }}" 
-                   class="btn btn-outline btn-sm" style="margin-right:.5rem;">
-                    <i class="fas fa-download"></i> Download Barcodes
-                </a>
 
-                <!-- Upload -->
-                <form method="POST" action="{{ route('sourcing.live-sheets.barcode.upload', $liveSheet) }}" 
-                      enctype="multipart/form-data" style="display:inline;">
-                    @csrf
-                    <input type="file" name="barcode_file" accept=".csv,.xlsx" required 
-                             id="barcodeFile">
-                    <button type="submit" 
-                            class="btn btn-outline btn-sm">
-                        <i class="fas fa-upload"></i> Upload Barcodes
-                    </button>
-                </form>
-            </div>
-
-            <div style="font-size:.75rem;color:#64748b;">
-                <strong>Format:</strong>CSV/Excel with columns: 
-                <code>SKU</code>, <code>Barcode</code>, <code>Product Name</code>, <code>Weight(kg)</code>, <code>HSN</code></div>
-         </div>
-         
-     </div>
-</div>
 {{-- Bulk fill panel --}}
 @if(!$liveSheet->is_locked)
 <div class="card" style="margin-bottom:1rem;border-color:#fcd34d;">
@@ -124,13 +90,13 @@ $disabled = $liveSheet->is_locked ? 'disabled' : '';
                 <button type="button" onclick="bulkFill('wsp_factor','bulkWspFactor')" class="btn btn-outline btn-sm"><i class="fas fa-arrow-right"></i> Apply to All</button>
             </div>
         </div>
-        <!-- <div>
+        <div>
             <label style="font-size:.68rem;font-weight:700;color:#64748b;text-transform:uppercase;display:block;margin-bottom:.2rem;">Target FOB ($)</label>
             <div style="display:flex;gap:.3rem;">
                 <input type="number" id="bulkTargetFob" step="0.01" min="0" placeholder="0.00" style="width:90px;padding:.35rem .5rem;border:1px solid #d1d5db;border-radius:6px;font-size:.82rem;font-family:monospace;text-align:right;">
                 <button type="button" onclick="bulkFill('target_fob','bulkTargetFob')" class="btn btn-outline btn-sm"><i class="fas fa-arrow-right"></i> Apply to All</button>
             </div>
-        </div> -->
+        </div>
         <div style="margin-left:auto;align-self:center;font-size:.7rem;color:#64748b;"><i class="fas fa-info-circle"></i> Only applies to selected (checked) rows.</div>
     </div>
 </div>

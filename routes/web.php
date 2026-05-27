@@ -156,6 +156,9 @@ Route::middleware(['auth'])->group(function () {
         Route::post('live-sheets/{liveSheet}/update-sourcing', [SourcingController::class, 'updateSourcingFields'])->name('live-sheets.update-sourcing');
         Route::get('live-sheets/{liveSheet}/history', [SourcingController::class, 'liveSheetHistory'])->name('live-sheets.history');
 
+        Route::get('live-sheets/{liveSheet}/barcode/download', [SourcingController::class, 'downloadBarcodes'])->name('live-sheets.barcode.download');
+        Route::post('live-sheets/{liveSheet}/barcode/upload', [SourcingController::class, 'uploadBarcodes'])->name('live-sheets.barcode.upload');
+
         // Step 4: Create Consignment (from approved live sheet)
         Route::post('live-sheets/{liveSheet}/create-consignment', [SourcingController::class, 'createConsignment'])->name('live-sheets.create-consignment');
 
@@ -179,15 +182,17 @@ Route::middleware(['auth'])->group(function () {
         ->group(function () {
             Route::get('dashboard', [LogisticsController::class, 'dashboard'])->name('dashboard');
             Route::get('container-planning', [LogisticsController::class, 'containerPlanning'])->name('container-planning');
-            
+
             Route::get('container-planning/download-livesheet/{consignment}', [LogisticsController::class, 'downloadLiveSheet'])->name('container-planning.download-livesheet');
 
             Route::post('shipments/create', [LogisticsController::class, 'createShipment'])->name('shipments.create');
             Route::get('shipments', [LogisticsController::class, 'shipments'])->name('shipments');
             Route::get('shipments/{shipment}', [LogisticsController::class, 'showShipment'])->name('shipments.show');
             Route::post('shipments/{shipment}/lock', [LogisticsController::class, 'lockShipment'])->name('shipments.lock');
-
+            Route::post('shipments/{shipment}/logistics', [LogisticsController::class, 'saveLogistics'])->name('shipments.logistics');
             Route::post('shipments/{shipment}/entry-summary', [LogisticsController::class, 'uploadEntrySummary'])->name('shipments.entry-summary');
+            Route::post('shipments/{shipment}/update-status', [LogisticsController::class, 'updateShipmentStatus'])->name('shipments.update-status');
+
             // Route::get('grn', [LogisticsController::class, 'grnList'])->name('grn');
 
             Route::get('grn', [LogisticsController::class, 'grnList'])

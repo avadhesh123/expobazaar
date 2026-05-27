@@ -23,6 +23,7 @@ class Shipment extends Model
         'total_weight',
         'total_items',
         'total_value',
+
         'shipping_line',
         'vessel_name',
         'voyage_number',
@@ -30,6 +31,15 @@ class Shipment extends Model
         'sailing_date',
         'eta_date',
         'arrival_date',
+        'pickup_date',
+        'delivery_date',
+        'carrier_name',
+        'tracking_number',
+        'shipping_bill_number',
+        'shipping_bill_date',
+        'forwarder_name',
+        'booking_no',
+
         'port_of_loading',
         'port_of_discharge',
         'destination_warehouse_id',
@@ -46,8 +56,11 @@ class Shipment extends Model
 
     protected $casts = [
         'sailing_date' => 'date',
+        'pickup_date'       => 'date',
         'eta_date' => 'date',
         'arrival_date' => 'date',
+        'delivery_date'=> 'date',
+        'shipping_bill_date' => 'date',
         'locked_at' => 'datetime',
         'total_cbm' => 'decimal:4',
         'capacity_cbm' => 'decimal:2',
@@ -94,7 +107,7 @@ class Shipment extends Model
     {
         return $this->capacity_cbm > 0 ? round(($this->total_cbm / $this->capacity_cbm) * 100, 2) : 0;
     }
-
+public function statusChangedBy() { return $this->belongsTo(User::class, 'status_changed_by'); }
     public static function generateCode(string $companyCode, string $type): string
     {
         $prefix = 'SHP-' . $companyCode . '-' . $type . '-';

@@ -167,7 +167,7 @@ class DashboardService
 
         return [
             'kpis' => [
-                'containers_planned' => Shipment::where('status', 'planning')->when($activeCode, fn($q) => $q->byCompanyCode($activeCode))->count(),
+                'containers_planned' => Shipment::whereIn('status', ['planning','shipment'])->when($activeCode, fn($q) => $q->byCompanyCode($activeCode))->count(),
                 'in_transit' => Shipment::inTransit()->when($activeCode, fn($q) => $q->byCompanyCode($activeCode))->count(),
                 'grn_pending' => Shipment::where('status', 'grn_pending')->when($activeCode, fn($q) => $q->byCompanyCode($activeCode))->count(),
                 'received_this_month' => Grn::where('company_code', $activeCode)->whereMonth('receipt_date', now()->month)->count(),

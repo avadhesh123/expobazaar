@@ -438,11 +438,11 @@ class SalesController extends Controller
             'total_shipped'  => $orders->getCollection()->whereNotNull('tracking_id')->where('tracking_id', '!=', '')->count(),
             'critical'     => $orders->getCollection()->filter(fn($o) => $o->ageing_label === 'CRITICAL')->count(),
             'total'      => $orders->total(),
-            'in_transit'  => Order::whereNotNull('tracking_id')->where('tracking_id', '!=', '')
+            'in_transit'  => Order::where('company_code', $activeCompany)->whereNotNull('tracking_id')->where('tracking_id', '!=', '')
                 ->where(function ($q) {
                     $q->whereIn('current_status', ['in_transit', 'shipped'])->orWhereNull('current_status');
                 })->count(),
-            'delivered'   => Order::where('current_status', 'delivered')->count(),
+            'delivered'   => Order::where('company_code', $activeCompany)->where('current_status', 'delivered')->count(),
             'overdue'     => $orders->getCollection()->filter(fn($o) => in_array($o->ageing_label, ['OVERDUE', 'CRITICAL']))->count(),
         ];
 

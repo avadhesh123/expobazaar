@@ -7,6 +7,14 @@ use App\Models\{PlatformPricing, Product, SalesChannel};
 use App\Services\{DashboardService, CatalogueService};
 use Illuminate\Http\Request;
 
+use PhpOffice\PhpSpreadsheet\Spreadsheet;
+use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
+use PhpOffice\PhpSpreadsheet\Style\Alignment;
+use PhpOffice\PhpSpreadsheet\Style\Border;
+use PhpOffice\PhpSpreadsheet\Worksheet\Drawing;
+
+
+
 class CatalogueController extends Controller
 {
     public function __construct(
@@ -25,13 +33,13 @@ class CatalogueController extends Controller
     public function pricingSheets(Request $request)
     {
         $user = auth()->user();
-
-        $companyCode = session('active_company'); // For view to highlight selected code
+        $activeCompany = session('active_company') ?? '2100'; // fallback;
+        $currency = trim(config('app.active_currency_symbol')); // $, ₹, €
 
         $pricings = PlatformPricing::with('product.category', 'product.vendor', 'salesChannel', 'asn')
-            ->whereIn('status', ['approved', 'submitted'])
-            ->when(!$user->isAdmin() && !empty($companyCode), function ($q) use ($companyCode) {
-                return $q->where('company_code', $companyCode);
+            ->whereIn('status', ['approved'])
+            ->when(!$user->isAdmin() && !empty($activeCompany), function ($q) use ($activeCompany) {
+                return $q->where('company_code', $activeCompany);
             })
             ->when($request->channel_id, fn($q, $v) => $q->where('sales_channel_id', $v))
             ->when($request->asn_id, fn($q, $v) => $q->where('asn_id', $v))
@@ -44,17 +52,16 @@ class CatalogueController extends Controller
             $pricings->getCollection()->groupBy('product_id')
         );
 
-
-
         $channels = SalesChannel::active()
-            ->when(!$user->isAdmin() && !empty($companyCode), function ($q) use ($companyCode) {
-                return $q->whereJsonContains('company_codes', $companyCode);
+            ->when(!$user->isAdmin() && !empty($activeCompany), function ($q) use ($activeCompany) {
+                return $q->whereJsonContains('company_codes', $activeCompany);
             })
+            ->when($request->channel_id, fn($q, $v) => $q->where('id', $v))
             ->orderBy('name')->get();
 
         $asns = \App\Models\Asn::orderBy('asn_number', 'desc')
-            ->when(!$user->isAdmin() && !empty($companyCode), function ($q) use ($companyCode) {
-                return $q->where('company_code', $companyCode);
+            ->when(!$user->isAdmin() && !empty($activeCompany), function ($q) use ($activeCompany) {
+                return $q->where('company_code', $activeCompany);
             })
             // ->when($request->company_code, fn($q, $v) => $q->where('company_code', $v))
             ->limit(100)->get(['id', 'asn_number']);
@@ -128,7 +135,7 @@ class CatalogueController extends Controller
             foreach ($request->shopify_url as $productId => $url) {
                 $product = Product::find($productId);
                 if (!$product) continue;
-                $shopify_url = $url ? $url: $product->shopify_url ?? null;
+                $shopify_url = $url ? $url : $product->shopify_url ?? null;
                 $product->update(['shopify_url' => $shopify_url]);
                 file_put_contents(storage_path('logs/shopify_urls.log'), "Updated Product ID {$productId} {$product->name} with Shopify URL: {$shopify_url}\n", FILE_APPEND);
             }
@@ -141,11 +148,12 @@ class CatalogueController extends Controller
 
     public function skuDashboard(Request $request)
     {
-        $companyCode = $request->get('company_code', '2100');
+        // $companyCode = $request->get('company_code', '2100');
         $channelId   = $request->get('channel_id');
         $categoryId  = $request->get('category_id');
 
-        $channels   = SalesChannel::active()->orderBy('name')->get();
+        $companyCode = session('active_company');
+        $channels   = SalesChannel::active()->whereJsonContains('company_codes', $companyCode)->orderBy('name')->get();
         $categories = \App\Models\Category::orderBy('name')->get(['id', 'name']);
 
         $productQuery = Product::where('company_code', $companyCode)
@@ -216,121 +224,199 @@ class CatalogueController extends Controller
             'categoryId'
         ));
     }
-
     /**
-     * Download pricing sheet as CSV
+     * Download Pricing Sheet as Excel with Product Images
      */
     public function downloadPricingSheet(Request $request)
     {
+        $activeCompany = session('active_company') ?? '2100'; // fallback;
+
+        $currency = trim(config('app.active_currency_symbol')); // $, ₹, €
+
         $pricings = PlatformPricing::with('product.vendor', 'product.category', 'salesChannel', 'asn')
             ->where('status', 'approved')
-            ->when($request->company_code, fn($q, $v) => $q->where('company_code', $v))
+            ->where('company_code', $activeCompany)
             ->when($request->channel_id, fn($q, $v) => $q->where('sales_channel_id', $v))
             ->when($request->asn_id, fn($q, $v) => $q->where('asn_id', $v))
-            ->orderBy('product_id')->get();
+            ->orderBy('product_id')
+            ->get();
 
-        $channels = SalesChannel::active()->orderBy('name')->get();
+        $channels = SalesChannel::active()
+            ->whereJsonContains('company_codes', $activeCompany)
+            ->when($request->channel_id, fn($q, $v) => $q->where('id', $v))
+            ->orderBy('name')
+            ->get();
 
-        // Header row matching Excel
-        $headers = [
-            'S.no',
-            'Vendor SKU',
-            'SAP Code',
-            'Barcode',
-            'Product Name',
-            'Description',
-            'Picture',
-            'HSN/HTS',
-            'L (in)',
-            'W (in)',
-            'H (in)',
-            'Wt (lbs)',
-            'Material',
-            'Other Mat.',
-            'Color',
-            'Finish',
-            'Category',
-            'Sub Cat.',
-            'Inner Qty',
-            'Inner L',
-            'Inner W',
-            'Inner H',
-            'Inner Wt (Lbs)',
-            'Master Qty',
-            'Master L',
-            'Master W',
-            'Master H',
-            'Master Wt (Lbs)',
-            'Final Qty *',
-            'Final FOB *',
-            'WSP ($)'
-        ];
-        foreach ($channels as $ch) {
-            $headers[] = $ch->name;
+        if ($activeCompany === '2100') {
+            $weightUnit      = 'LBS';
+            $lwhUnit         = 'INCH';
+            $weightConverter = 2.20462; // KG to LBS
+            $lwhConverter    = 1;       // INCH
+        } else {
+            $weightUnit      = 'LBS';
+            $lwhUnit         = 'CM';
+            $weightConverter = 1000; // KG to GRAMS
+            $lwhConverter    = 2.54;    // INCH to CM
         }
 
-        $csv = implode(',', $headers) . "\n";
+        $spreadsheet = new Spreadsheet();
+        $sheet = $spreadsheet->getActiveSheet();
+        $sheet->setTitle('Pricing Sheet');
 
-        $sno = 0;
+        // ==================== HEADERS ====================
+        $headers = [
+            'A' => 'S.no',
+            'B' => 'Vendor SKU',
+            'C' => 'SAP Code',
+            'D' => 'Barcode',
+            'E' => 'Product Name',
+            'F' => 'Description',
+            'G' => 'Specification',
+            'H' => 'Picture',
+            'I' => 'HSN/HTS',
+            'J' => "Length ({$lwhUnit})",
+            'K' => "Width ({$lwhUnit})",
+            'L' => "Height ({$lwhUnit})",
+            'M' => "Weight ({$weightUnit})",
+            'N' => 'Material',
+            'O' => 'Other Material',
+            'P' => 'Color',
+            'Q' => 'Finish',
+            'R' => 'Category',
+            'S' => 'Sub Category',
+            'T' => 'Qty in Inner Carton',
+            'U' => "Inner Carton Length ({$lwhUnit})",
+            'V' => "Inner Carton Width ({$lwhUnit})",
+            'W' => "Inner Carton Height ({$lwhUnit})",
+            'X' => "Inner Carton Weight ({$weightUnit})",
+            'Y' => 'Qty in Master Carton',
+            'Z' => "Master Carton Length ({$lwhUnit})",
+            'AA' => "Master Carton Width ({$lwhUnit})",
+            'AB' => "Master Carton Height ({$lwhUnit})",
+            'AC' => "Master Carton Weight ({$weightUnit})",
+            'AD' => 'Final Qty',
+            'AE' => "Final FOB ({$currency})",
+            'AF' => "WSP({$currency})",
+        ];
+
+        // Add dynamic channel columns
+        $col = 'AG';
+        foreach ($channels as $ch) {
+            $headers[$col] = $ch->name . '(' . $currency . ')';
+            $col++;
+        }
+
+        // Write Headers
+        foreach ($headers as $col => $header) {
+            $sheet->setCellValue($col . '1', $header);
+        }
+
+        // Style Header Row
+        $sheet->getStyle('A1:' . $sheet->getHighestColumn() . '1')->applyFromArray([
+            'font' => ['bold' => true],
+            'alignment' => ['horizontal' => Alignment::HORIZONTAL_CENTER],
+            'fill' => [
+                'fillType' => \PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID,
+                'startColor' => ['rgb' => 'E2E8F0']
+            ],
+        ]);
+
+        $row = 2;
         $seen = [];
+
         foreach ($pricings as $p) {
-            if (!$p->product) continue;
-            // One row per product (not per channel)
-            if (isset($seen[$p->product_id])) continue;
+            if (!$p->product || isset($seen[$p->product_id])) continue;
+
             $seen[$p->product_id] = true;
-            $sno++;
 
             $lsItem = \App\Models\LiveSheetItem::where('product_id', $p->product_id)->latest()->first();
             $d = $lsItem ? ($lsItem->product_details ?? []) : [];
 
-            $row = [
-                $sno,
-                '"' . ($p->product->sku ?? '') . '"',
-                '"' . ($p->product->sap_code ?? '') . '"',
-                '"' . ($d['barcode'] ?? '') . '"',
-                '"' . str_replace('"', '""', $p->product->name ?? '') . '"',
-                '"' . str_replace('"', '""', $d['description'] ?? $d['product_description'] ?? '') . '"',
-                '', // Picture
-                '"' . ($d['hsn_code'] ?? $d['hts_code'] ?? '') . '"',
-                $d['product_length'] ?? $d['length'] ?? '',
-                $d['product_width'] ?? $d['width'] ?? '',
-                $d['product_height'] ?? $d['height'] ?? '',
-                $d['product_weight'] ?? $d['weight_per_unit'] ?? '',
-                '"' . ($d['material'] ?? '') . '"',
-                '"' . ($d['other_material'] ?? '') . '"',
-                '"' . ($d['color'] ?? '') . '"',
-                '"' . ($d['finish'] ?? '') . '"',
-                '"' . ($p->product->category->name ?? $d['category'] ?? '') . '"',
-                '"' . ($d['sub_category'] ?? '') . '"',
-                $d['qty_inner_pack'] ?? '',
-                $d['inner_length'] ?? '',
-                $d['inner_width'] ?? '',
-                $d['inner_height'] ?? '',
-                $d['inner_weight'] ?? '',
-                $d['qty_master_pack'] ?? '',
-                $d['master_length'] ?? '',
-                $d['master_width'] ?? '',
-                $d['master_height'] ?? '',
-                $d['master_weight'] ?? '',
-                $d['final_qty'] ?? $lsItem->quantity ?? '',
-                $d['final_fob'] ?? $lsItem->unit_price ?? '',
-                '$' . number_format(floatval($d['wsp'] ?? $p->wsp_price ?? 0), 2),
-            ];
+            // Basic Data
+            $sheet->setCellValue('A' . $row, $row - 1);
+            $sheet->setCellValue('B' . $row, $p->product->sku ?? '');
+            $sheet->setCellValue('C' . $row, $p->product->sap_code ?? '');
+            $sheet->setCellValue('D' . $row, $d['barcode'] ?? '');
+            $sheet->setCellValue('E' . $row, $p->product->name ?? '');
+            $sheet->setCellValue('F' . $row, $d['description'] ?? $d['product_description'] ?? '');
+            $sheet->setCellValue('G' . $row, $d['specification'] ?? '');
 
-            // Channel prices
-            $productPricings = $pricings->where('product_id', $p->product_id);
-            foreach ($channels as $ch) {
-                $chPricing = $productPricings->where('sales_channel_id', $ch->id)->first();
-                $row[] = $chPricing ? '$' . number_format(floatval($chPricing->channel_price ?? $chPricing->selling_price ?? 0), 2) : '';
+            // **Product Image**
+            if (!empty($p->product->thumbnail)) {
+                $imagePath = public_path('storage/' . $p->product->thumbnail);
+                if (file_exists($imagePath)) {
+                    $drawing = new Drawing();
+                    $drawing->setName('Product Image');
+                    $drawing->setPath($imagePath);
+                    $drawing->setHeight(60);
+                    $drawing->setCoordinates('H' . $row);
+                    $drawing->setWorksheet($sheet);
+                }
             }
 
-            $csv .= implode(',', $row) . "\n";
+            $sheet->setCellValue('I' . $row, $d['hsn_code'] ?? $d['hts_code'] ?? '');
+
+            // Dimensions
+            $sheet->setCellValue('J' . $row, $d['product_length'] * $lwhConverter ?? $d['length'] * $lwhConverter ?? '');
+            $sheet->setCellValue('K' . $row, $d['product_width'] * $lwhConverter ?? $d['width'] * $lwhConverter ?? '');
+            $sheet->setCellValue('L' . $row, $d['product_height'] * $lwhConverter ?? $d['height'] * $lwhConverter ?? '');
+            $sheet->setCellValue('M' . $row, $d['product_weight'] ?? $d['weight_per_unit'] * $weightConverter ?? '');
+
+            $sheet->setCellValue('N' . $row, $d['material'] ?? '');
+            $sheet->setCellValue('O' . $row, $d['other_material'] ?? '');
+            $sheet->setCellValue('P' . $row, $d['color'] ?? '');
+            $sheet->setCellValue('Q' . $row, $d['finish'] ?? '');
+            $sheet->setCellValue('R' . $row, $p->product->category->name ?? $d['category'] ?? '');
+            $sheet->setCellValue('S' . $row, $d['sub_category'] ?? '');
+
+            // Carton Info
+            $sheet->setCellValue('T' . $row, $d['qty_inner_pack'] ?? '');
+            $sheet->setCellValue('U' . $row, $d['inner_length'] * $lwhConverter ?? '');
+            $sheet->setCellValue('V' . $row, $d['inner_width'] * $lwhConverter ?? '');
+            $sheet->setCellValue('W' . $row, $d['inner_height'] * $lwhConverter ?? '');
+            $sheet->setCellValue('X' . $row, $d['inner_weight'] * $weightConverter ?? '');
+            $sheet->setCellValue('Y' . $row, $d['qty_master_pack'] ?? '');
+
+            $sheet->setCellValue('Z' . $row, $d['master_length'] * $lwhConverter ?? '');
+            $sheet->setCellValue('AA' . $row, $d['master_width'] * $lwhConverter ?? '');
+            $sheet->setCellValue('AB' . $row, $d['master_height'] * $lwhConverter ?? '');
+            $sheet->setCellValue('AC' . $row, $d['master_weight'] * $weightConverter ?? '');
+
+            $sheet->setCellValue('AD' . $row, $d['final_qty'] ?? $lsItem->quantity ?? '');
+            $sheet->setCellValue('AE' . $row, $d['final_fob'] ?? $lsItem->unit_price ?? '');
+            $sheet->setCellValue('AF' . $row, $d['wsp'] ?? $p->wsp_price ?? 0);
+
+            // Channel Prices
+            $productPricings = $pricings->where('product_id', $p->product_id);
+            $col = 'AG';
+            foreach ($channels as $ch) {
+                $chPricing = $productPricings->where('sales_channel_id', $ch->id)->first();
+                $price = $chPricing ? ($chPricing->platform_price ?? $chPricing->selling_price ?? 0) : 0;
+                $sheet->setCellValue($col . $row, $price);
+                $col++;
+            }
+
+            $row++;
         }
 
-        $filename = 'Cataloging-' . ($request->company_code ?? 'all') . '-' . date('Y-m-d') . '.csv';
-        return response($csv, 200, [
-            'Content-Type' => 'text/csv',
-            'Content-Disposition' => "attachment; filename=\"{$filename}\"",
-        ]);
+        // Auto-size columns
+
+        $highestColumn = $sheet->getHighestColumn();
+        for ($col = 'A'; $col !== $highestColumn; $col++) {
+            $sheet->getColumnDimension($col)->setAutoSize(true);
+        }
+        $sheet->getColumnDimension($highestColumn)->setAutoSize(true); // Last column
+
+
+        // Download
+        $writer = new Xlsx($spreadsheet);
+        $filename = 'Pricing_Sheet_' . $activeCompany . '_' . date('Y-m-d_His') . '.xlsx';
+
+        header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+        header('Content-Disposition: attachment; filename="' . $filename . '"');
+        header('Cache-Control: max-age=0');
+
+        $writer->save('php://output');
+        exit;
     }
 }
