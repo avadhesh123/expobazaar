@@ -93,7 +93,7 @@ class SalesService
                 'shipping_method'   => $shipMethod ?? null,
                 'warehouse_id'      => $orderData['warehouse_id'] ?? null,
                 'payment_status'    => $orderData['payment_status'] ?? 'unpaid',
-                'status'            => 'pending',
+                'status'            => 'open',
                 'uploaded_by'       => auth()->id(),
             ]);
 

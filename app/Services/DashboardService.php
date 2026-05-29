@@ -18,7 +18,7 @@ class DashboardService
         if ($companyCode) {
             $vendorQuery->byCompanyCode($companyCode);
             $productQuery->byCompanyCode($companyCode);
-         //   $orderQuery->byCompanyCode($companyCode);
+            //   $orderQuery->byCompanyCode($companyCode);
             $shipmentQuery->byCompanyCode($companyCode);
         }
 
@@ -167,7 +167,7 @@ class DashboardService
 
         return [
             'kpis' => [
-                'containers_planned' => Shipment::whereIn('status', ['planning','shipment'])->when($activeCode, fn($q) => $q->byCompanyCode($activeCode))->count(),
+                'containers_planned' => Shipment::whereIn('status', ['planning', 'shipment'])->when($activeCode, fn($q) => $q->byCompanyCode($activeCode))->count(),
                 'in_transit' => Shipment::inTransit()->when($activeCode, fn($q) => $q->byCompanyCode($activeCode))->count(),
                 'grn_pending' => Shipment::where('status', 'grn_pending')->when($activeCode, fn($q) => $q->byCompanyCode($activeCode))->count(),
                 'received_this_month' => Grn::where('company_code', $activeCode)->whereMonth('receipt_date', now()->month)->count(),
@@ -188,28 +188,78 @@ class DashboardService
     // ─── CATALOGUING DASHBOARD ────────────────────────────────────
     public function getCataloguingDashboard(?string $companyCode = null): array
     {
-        $channels = SalesChannel::active()->get();
-        $listingsByPlatform = [];
+        $companyCode = $companyCode ?? session('active_company');
+        $channels = SalesChannel::active()
+            ->when($companyCode, fn($q) => $q->whereJsonContains('company_codes', $companyCode))
+            ->orderBy('name')->get();
 
+        $totalSkus = Product::when($companyCode, fn($q) => $q->where('company_code', $companyCode))->count();
+
+        $listingsByPlatform = [];
         foreach ($channels as $channel) {
+            $baseQ = ProductCatalogue::where('sales_channel_id', $channel->id)
+                ->when($companyCode, fn($q) => $q->where('company_code', $companyCode));
+
+            $listed = (clone $baseQ)->where('listing_status', 'listed')->count();
+            $pending = (clone $baseQ)->where('listing_status', 'pending')->count();
+            $unlisted = (clone $baseQ)->where('listing_status', 'unlisted')->count();
+
             $listingsByPlatform[$channel->slug] = [
-                'name' => $channel->name,
-                'listed' => ProductCatalogue::where('sales_channel_id', $channel->id)
-                    ->when($companyCode, fn($q) => $q->where('company_code', $companyCode))
-                    ->listed()->count(),
-                'pending' => ProductCatalogue::where('sales_channel_id', $channel->id)
-                    ->when($companyCode, fn($q) => $q->where('company_code', $companyCode))
-                    ->pending()->count(),
+                'id'        => $channel->id,
+                'name'      => $channel->name,
+                'type'      => $channel->type,
+                'listed'    => $listed,
+                'pending'   => $pending,
+                'unlisted'  => $unlisted,
+                'not_listed' => max(0, $totalSkus - $listed - $pending - $unlisted),
+                'coverage'  => $totalSkus > 0 ? round(($listed / $totalSkus) * 100, 1) : 0,
             ];
         }
 
+        $totalListed = ProductCatalogue::when($companyCode, fn($q) => $q->where('company_code', $companyCode))
+            ->where('listing_status', 'listed')->count();
+        $totalPending = ProductCatalogue::when($companyCode, fn($q) => $q->where('company_code', $companyCode))
+            ->where('listing_status', 'pending')->count();
+
+        // SKUs not listed on any channel
+        $notListedAnywhere = Product::when($companyCode, fn($q) => $q->where('company_code', $companyCode))
+            ->whereDoesntHave('catalogues', fn($q) => $q->where('listing_status', 'listed'))
+            ->count();
+
+        // Recently listed (last 7 days)
+        $recentlyListed = ProductCatalogue::when($companyCode, fn($q) => $q->where('company_code', $companyCode))
+            ->where('listing_status', 'listed')
+            ->where('listed_at', '>=', now()->subDays(7))
+            ->count();
+
+        // Top vendors by listed count
+        $topVendors = Product::select('vendor_id', \DB::raw('COUNT(*) as total_products'))
+            ->when($companyCode, fn($q) => $q->where('company_code', $companyCode))
+            ->whereHas('catalogues', fn($q) => $q->where('listing_status', 'listed'))
+            ->groupBy('vendor_id')
+            ->orderByDesc('total_products')
+            ->limit(5)
+            ->with('vendor:id,company_name')
+            ->get()
+            ->map(fn($p) => [
+                'vendor_name' => $p->vendor->company_name ?? '—',
+                'count'       => $p->total_products,
+            ]);
+
         return [
             'kpis' => [
-                'total_skus' => Product::when($companyCode, fn($q) => $q->byCompanyCode($companyCode))->count(),
-                'listed' => ProductCatalogue::when($companyCode, fn($q) => $q->where('company_code', $companyCode))->listed()->count(),
-                'pending' => ProductCatalogue::when($companyCode, fn($q) => $q->where('company_code', $companyCode))->pending()->count(),
+                'total_skus'        => $totalSkus,
+                'listed'            => $totalListed,
+                'pending'           => $totalPending,
+                'not_listed'        => $notListedAnywhere,
+                'recently_listed'   => $recentlyListed,
+                'overall_coverage' => ($totalSkus > 0 && $channels->count() > 0)
+                    ? round(($totalListed / ($totalSkus * $channels->count())) * 100, 1)
+                    : 0,
             ],
-            'by_platform' => $listingsByPlatform,
+            'by_platform'  => $listingsByPlatform,
+            'top_vendors'  => $topVendors,
+            'channel_count' => $channels->count(),
         ];
     }
 

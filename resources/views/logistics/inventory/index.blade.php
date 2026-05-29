@@ -6,12 +6,12 @@
 {{-- Stats --}}
 <div class="grid-kpi" style="grid-template-columns:repeat(4,1fr);">
     <div class="kpi-card">
-        <div class="kpi-label">Total SKUs</div>
-        <div class="kpi-value">{{ number_format($stats['total_skus']) }}</div>
+        <div class="kpi-label">Total SKUs :<span class="kpi-value">{{ number_format($stats['total_skus']) }}</span></div>
+        <div class="kpi-label">Total Units:<span class="kpi-value">{{ number_format($stats['total_units']) }}</span></div>
     </div>
     <div class="kpi-card">
-        <div class="kpi-label">Total Units</div>
-        <div class="kpi-value">{{ number_format($stats['total_units']) }}</div>
+        <div class="kpi-label">Total Units Sold</div>
+        <div class="kpi-value">{{ number_format($stats['total_sales']) }}</div>
     </div>
     <div class="kpi-card">
         <div class="kpi-label" style="color:#166534;">Available</div>
@@ -34,10 +34,17 @@
                     <option value="2100" {{ request('company_code')==='2100'?'selected':'' }}>2100</option>
                     <option value="2200" {{ request('company_code')==='2200'?'selected':'' }}>2200</option>
                 </select></div> -->
-
+            <!-- 
             <div style="min-width:140px;"><label style="font-size:.7rem;font-weight:600;color:#64748b;display:block;margin-bottom:.25rem;">Warehouse</label><select name="warehouse_id" style="width:100%;padding:.4rem .5rem;border:1px solid #d1d5db;border-radius:8px;font-size:.82rem;font-family:inherit;">
                     <option value="">All</option>@foreach($warehouses as $wh)<option value="{{ $wh->id }}" {{ request('warehouse_id')==(string)$wh->id?'selected':'' }}>{{$wh->company_code}} - {{$wh->name}}</option>@endforeach
-                </select></div>
+                </select></div> -->
+            <div style="min-width:140px;"><label style="font-size:.7rem;font-weight:600;color:#64748b;display:block;margin-bottom:.25rem;">Inventory Type</label>
+                <select name="inventory_type" style="width:100%;padding:.4rem .5rem;border:1px solid #d1d5db;border-radius:8px;font-size:.82rem;font-family:inherit;">
+                    <option value="">All</option>
+                    <option value="consignment_inventory" {{ request('inventory_type') === 'consignment_inventory' ? 'selected' : '' }}>Consignment Inventory</option>
+                    <option value="dropship_inventory" {{ request('inventory_type') === 'dropship_inventory' ? 'selected' : '' }}>Dropship Inventory</option>
+                </select>
+            </div>
             <div style="min-width:120px;"><label style="font-size:.7rem;font-weight:600;color:#64748b;display:block;margin-bottom:.25rem;">Vendor</label><select name="vendor_id" style="width:100%;padding:.4rem .5rem;border:1px solid #d1d5db;border-radius:8px;font-size:.82rem;font-family:inherit;">
                     <option value="">All</option>@foreach($vendors as $v)<option value="{{ $v->id }}" {{ request('vendor_id')==(string)$v->id?'selected':'' }}>{{ $v->company_name }}</option>@endforeach
                 </select></div>

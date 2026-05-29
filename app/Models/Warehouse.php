@@ -15,7 +15,7 @@ class Warehouse extends Model
         'address', 'city', 'state', 'country', 'pincode',
         'contact_person', 'contact_phone', 'contact_email',
         'inward_rate_per_cbm', 'storage_rate_per_cbm_month', 'pick_pack_rate',
-        'consumable_rate', 'last_mile_rate', 'rate_card', 'is_active',
+        'consumable_rate', 'last_mile_rate', 'rate_card', 'is_active','no_of_pallets',
     ];
 
     protected $casts = [

@@ -3,7 +3,7 @@
 namespace App\Http\Controllers\Logistics;
 
 use App\Http\Controllers\Controller;
-use App\Models\{Shipment, Consignment, Vendor, Grn, GrnItem, Inventory, InventoryMovement, WarehouseCharge, Warehouse, LiveSheet};
+use App\Models\{OrderItem, Shipment, Consignment, Vendor, Grn, GrnItem, Inventory, InventoryMovement, WarehouseCharge, Warehouse, LiveSheet};
 use App\Services\{DashboardService, LogisticsService};
 use Illuminate\Http\Request;
 use App\Models\ActivityLog;
@@ -153,11 +153,16 @@ class LogisticsController extends Controller
             'status' => 'required|in:planning,shipment,consolidated,locked,asn_generated,in_transit,arrived,grn_pending,grn_completed,cancelled,delivered',
         ]);
 
+        $oldStatus = $shipment->shipment_status;
+
         $shipment->update([
             'status'             => $request->status,
             'status_changed_at'  => now(),
             'status_changed_by'  => auth()->id(),
         ]);
+
+
+        \App\Models\ShipmentLog::record($shipment->id, 'shipment_status', $oldStatus, $request->shipment_status);
 
         // Optional: Log the change
         // \Log::info("Shipment {$shipment->shipment_code} status changed to {$request->status} by " . auth()->user()->name);
@@ -337,7 +342,14 @@ class LogisticsController extends Controller
             ->whereHas('warehouse', function ($wq) use ($activeCode) {
                 $wq->where('company_code', $activeCode);
             })
-            ->where('grn_id', '!=', null)
+            // ->where('grn_id', '!=', null)
+            ->when($request->inventory_type, function ($q, $v) {
+                if ($v === 'consignment_inventory') {
+                    $q->whereNotNull('consignment_id');
+                } elseif ($v === 'dropship_inventory') {
+                    $q->whereNull('consignment_id');
+                }
+            })
             ->when($request->company_code, fn($q, $v) => $q->where('company_code', $v))
             ->when($request->warehouse_id, fn($q, $v) => $q->where('warehouse_id', $v))
             ->when($request->vendor_id, fn($q, $v) => $q->whereHas('product', fn($pq) => $pq->where('vendor_id', $v)))
@@ -359,6 +371,26 @@ class LogisticsController extends Controller
                 return $q->where('company_code', $activeCode);
             })->orderBy('company_name')->get();
 
+        $baseQuery = Inventory::when($activeCode, fn($q) => $q->where('inventory.company_code', $activeCode))
+            ->when($request->inventory_type, function ($q, $v) {
+                if ($v === 'grn_inventory') {
+                    $q->whereNotNull('grn_id');
+                } elseif ($v === 'dropship_inventory') {
+                    $q->whereNull('grn_id');
+                }
+            });
+
+        $stats = [
+            'total_skus'  => (clone $baseQuery)->count(),
+            'total_units' => (clone $baseQuery)->sum('quantity'),
+            'available'   => (clone $baseQuery)->sum('available_quantity'),
+            'reserved'    => (clone $baseQuery)->sum('reserved_quantity'),
+            'total_sales' => OrderItem::whereHas('order', function ($q) use ($activeCode) {
+                $q->when($activeCode, fn($q2) => $q2->where('orders.company_code', $activeCode))
+                    ->whereNotIn('status', ['cancelled']);
+            })->sum(\DB::raw('quantity')),
+        ];
+        /*
         $stats = [
             'total_skus'  => Inventory::when($request->company_code, fn($q, $v) => $q->where('company_code', $v))
                 ->when(!$user->isAdmin() && !empty($activeCode), function ($q) use ($activeCode) {
@@ -370,7 +402,6 @@ class LogisticsController extends Controller
                 ->when(!$user->isAdmin() && !empty($activeCode), function ($q) use ($activeCode) {
                     return $q->where('company_code', $activeCode);
                 })
-                ->where('grn_id', '!=', null)
                 ->whereHas('product', fn($pq) => $pq->where('company_code', $activeCode))
                 ->sum('quantity'),
             'available'   => Inventory::when($request->company_code, fn($q, $v) => $q->where('company_code', $v))
@@ -388,7 +419,7 @@ class LogisticsController extends Controller
                 ->whereHas('product', fn($pq) => $pq->where('company_code', $activeCode))
                 ->sum('reserved_quantity'),
         ];
-
+*/
         return view('logistics.inventory.index', compact('inventory', 'warehouses', 'vendors', 'stats'));
     }
 
@@ -1339,5 +1370,125 @@ class LogisticsController extends Controller
         return response()->download($outputPath, $filename, [
             'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
         ])->deleteFileAfterSend(true);
+    }
+    public function updatePallets(Request $request, \App\Models\Shipment $shipment)
+    {
+        $request->validate([
+            'no_of_pallets' => 'nullable|integer|min:0|max:9999',
+        ]);
+
+        $oldValue = $shipment->no_of_pallets;
+        $newValue = $request->no_of_pallets;
+        //  $shipment->update(['no_of_pallets' => $newValue]);
+
+        if ($oldValue != $newValue) {
+            $shipment->update(['no_of_pallets' => $newValue]);
+
+            \App\Models\ShipmentLog::record($shipment->id, 'no_of_pallets', $oldValue, $newValue);
+        }
+
+
+        return response()->json(['success' => true, 'value' => $newValue]);
+        //        return back()->with('success', 'Pallets updated.');
+    }
+
+
+    // ─── WAREHOUSE PALLET DETAILS ─────────────────────────────────
+
+    public function warehousePallets(Request $request)
+    {
+        $activeCode = session('active_company');
+
+        // AJAX lookup for existing entry
+        if ($request->has('lookup') && $request->ajax()) {
+            $existing = \App\Models\WarehousePalletLog::where('warehouse_id', $request->warehouse_id)
+                ->where('entry_date', $request->entry_date)
+                ->first();
+            return response()->json([
+                'found'         => (bool) $existing,
+                'no_of_pallets' => $existing?->no_of_pallets,
+                'remarks'       => $existing?->remarks,
+            ]);
+        }
+
+        $warehouses = \App\Models\Warehouse::when($activeCode, fn($q) => $q->where('company_code', $activeCode))
+            ->orderBy('name')->get();
+
+        $logs = \App\Models\WarehousePalletLog::with('warehouse', 'creator')
+            ->when($activeCode, fn($q) => $q->where('company_code', $activeCode))
+            ->when($request->warehouse_id, fn($q, $v) => $q->where('warehouse_id', $v))
+            ->when($request->date_from, fn($q, $v) => $q->where('entry_date', '>=', $v))
+            ->when($request->date_to, fn($q, $v) => $q->where('entry_date', '<=', $v))
+            ->latest('entry_date')
+            ->paginate(30)
+            ->withQueryString();
+
+        // Today's entries
+        $todayEntries = \App\Models\WarehousePalletLog::where('entry_date', today())
+            ->when($activeCode, fn($q) => $q->where('company_code', $activeCode))
+            ->with('warehouse')
+            ->get()
+            ->keyBy('warehouse_id');
+
+        // Stats
+        $stats = [
+            'total_entries'    => \App\Models\WarehousePalletLog::when($activeCode, fn($q) => $q->where('company_code', $activeCode))->count(),
+            'today_entries'    => $todayEntries->count(),
+            'today_pallets'    => $todayEntries->sum('no_of_pallets'),
+            'warehouses_count' => $warehouses->count(),
+        ];
+
+        return view('logistics.warehouse-pallets', compact('warehouses', 'logs', 'todayEntries', 'stats'));
+    }
+
+    public function storeWarehousePallet(Request $request)
+    {
+        $request->validate([
+            'warehouse_id'  => 'required|exists:warehouses,id',
+            'no_of_pallets' => 'required|integer|min:0|max:99999',
+            'entry_date'    => 'required|date',
+            'remarks'       => 'nullable|string|max:500',
+        ]);
+
+        $activeCode = session('active_company');
+        $warehouse = \App\Models\Warehouse::findOrFail($request->warehouse_id);
+
+        // Upsert — update if same warehouse+date, create if new
+        $existing = \App\Models\WarehousePalletLog::where('warehouse_id', $request->warehouse_id)
+            ->where('entry_date', $request->entry_date)
+            ->first();
+
+        $oldValue = $existing?->no_of_pallets;
+
+        $log = \App\Models\WarehousePalletLog::updateOrCreate(
+            ['warehouse_id' => $request->warehouse_id, 'entry_date' => $request->entry_date],
+            [
+                'company_code'  => $activeCode ?? $warehouse->company_code,
+                'no_of_pallets' => $request->no_of_pallets,
+                'remarks'       => $request->remarks,
+                'created_by'    => auth()->id(),
+            ]
+        );
+
+        \App\Models\ActivityLog::log($existing ? 'updated' : 'created', 'warehouse_pallet', $log, null, [
+            'warehouse'  => $warehouse->name,
+            'old_value'  => $oldValue,
+            'new_value'  => $request->no_of_pallets,
+            'entry_date' => $request->entry_date,
+        ], "Pallets for {$warehouse->name} on {$request->entry_date}: " . ($existing ? "{$oldValue} → {$request->no_of_pallets}" : $request->no_of_pallets));
+
+        if ($request->ajax()) {
+            return response()->json([
+                'success'    => true,
+                'is_update'  => (bool) $existing,
+                'old_value'  => $oldValue,
+                'new_value'  => $request->no_of_pallets,
+            ]);
+        }
+
+        return back()->with(
+            'success',
+            ($existing ? 'Updated' : 'Recorded') . ": {$warehouse->name} — {$request->no_of_pallets} pallets on {$request->entry_date}."
+        );
     }
 }

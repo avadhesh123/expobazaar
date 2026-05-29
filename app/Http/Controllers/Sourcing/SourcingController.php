@@ -36,7 +36,9 @@ class SourcingController extends Controller
             'company_name'   => 'required|string|max:255',
             'contact_person' => 'required|string|max:255',
             'email'          => 'required|email|unique:users,email',
-            'company_code'   => 'required|in:2000,2100,2200',
+            'company_code'   => 'required|in:2000,2100,2200,2400',
+        ], [
+            'email.unique' => 'This email is already registered in the system. Please use a different email address.',
         ]);
         $this->vendorService->createVendorRequest($request->all(), auth()->user());
         return redirect()->route('sourcing.dashboard')->with('success', 'Vendor request submitted to admin.');
@@ -642,14 +644,14 @@ class SourcingController extends Controller
 
 
         // Get current user name (safe filename format)
-        $userName = strtolower( str_replace(
+        $userName = strtolower(str_replace(
             [' ', '/', '\\', ':', '*', '?', '"', '<', '>', '|'],
             '_',
             auth()->user()->name ?? 'unknown_user'
-        ));    
+        ));
 
         // Store file in public/barcodes directory
-      //  $storedPath = $file->storeAs('barcodes', $filename, 'public');
+        //  $storedPath = $file->storeAs('barcodes', $filename, 'public');
 
         $path = $file->store('barcodes/' . $userName, 'public');
 
@@ -710,7 +712,7 @@ class SourcingController extends Controller
                     $item->update(['product_details' => $details]);
 
                     if ($item->product) {
-                        $item->product->update(['barcode' => $barcode]); 
+                        $item->product->update(['barcode' => $barcode]);
                     }
                     $updated++;
                 }

@@ -77,9 +77,9 @@
                     $weightConverter = 1;       // No conversion needed
                     $lwhConverter    = 1;       // No conversion needed
                 } else {
-                    $weightUnit      = 'LBS';
+                    $weightUnit      = 'GRAMS';
                     $lwhUnit         = 'CM';
-                    $weightConverter = 2.20462; // KG to LBS
+                    $weightConverter = 1000; // KG to GRAMS
                     $lwhConverter    = 2.54;    // INCH to CM
                 }
 

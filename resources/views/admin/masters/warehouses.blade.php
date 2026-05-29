@@ -19,7 +19,7 @@
                     <div class="form-group"><label>Warehouse Name <span style="color:#dc2626;">*</span></label><input type="text" name="name" required placeholder="USA Main Warehouse"></div>
                     <div class="form-group"><label>Code <span style="color:#dc2626;">*</span></label><input type="text" name="code" required placeholder="WH-US-001">@error('code')<span style="font-size:.72rem;color:#dc2626;">{{ $message }}</span>@enderror</div>
                     <div class="form-group"><label>Company Code <span style="color:#dc2626;">*</span></label>
-                        <select name="company_code" required><option value="">Select...</option><option value="2000">2000 – India</option><option value="2100">2100 – USA</option><option value="2200">2200 – Netherlands</option></select>
+                        <select name="company_code" required><option value="">Select...</option><option value="2400">2400 – UK</option><option value="2100">2100 – USA</option><option value="2200">2200 – EU</option></select>
                     </div>
                 </div>
                 <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:.75rem;">
@@ -60,7 +60,7 @@
                         <div style="font-size:.7rem;color:#94a3b8;font-family:monospace;">{{ $wh->code }}</div>
                     </td>
                     <td>
-                        @php $cc = ['2000'=>['🇮🇳','#dcfce7'],'2100'=>['🇺🇸','#dbeafe'],'2200'=>['🇳🇱','#fef3c7']]; @endphp
+                        @php $cc = ['2400'=>['uk','#dcfce7'],'2100'=>['🇺🇸','#dbeafe'],'2200'=>['eu','#fef3c7']]; @endphp
                         <span style="padding:.2rem .45rem;background:{{ $cc[$wh->company_code][1]??'#f1f5f9' }};border-radius:5px;font-size:.78rem;font-weight:600;">
                             {{ $cc[$wh->company_code][0]??'' }} {{ $wh->company_code }}
                         </span>

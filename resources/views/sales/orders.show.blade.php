@@ -82,7 +82,7 @@ $currency = match ($order->company_code) {
     {{-- Tracking --}}
     <div class="card">
         <div class="card-header">
-            <h3><i class="fas fa-truck" style="margin-right:.5rem;color:#e8a838;"></i> Shipment Tracking</h3>
+            <h3><i class="fas fa-truck" style="margin-right:.5rem;color:#e8a838;"></i>RRRRR Shipment Tracking</h3>
         </div>
         <div class="card-body">
             @if($order->tracking_id)

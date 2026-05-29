@@ -68,31 +68,39 @@ class LogisticsService
     {
         return DB::transaction(function () use ($shipment, $data, $user) {
 
-        if( $data['sailing_date']   )
-            $shipment->update([
-                'sailing_date' => $data['sailing_date'],
-                'eta_date' => $data['eta_date'] ?? null,
-                'delivery_date' => $data['delivery_date'] ?? null,
-                'shipping_line' => $data['shipping_line'] ?? null,
-                'vessel_name' => $data['vessel_name'] ?? null,
-                'voyage_number' => $data['voyage_number'] ?? null,
-                'bill_of_lading' => $data['bill_of_lading'] ?? null,
-                'shipping_bill_number' => $data['shipping_bill_number'] ?? null,
-                'shipping_bill_date' => $data['shipping_bill_date'] ?? null,
-                'booking_no' => $data['booking_no'] ?? null,
-                'forwarder_name' => $data['forwarder_name'] ?? null,
+            if ($data['sailing_date'])
+                $shipment->update([
+                    'sailing_date' => $data['sailing_date'],
+                    'eta_date' => $data['eta_date'] ?? null,
+                    'delivery_date' => $data['delivery_date'] ?? null,
+                    'shipping_line' => $data['shipping_line'] ?? null,
+                    'vessel_name' => $data['vessel_name'] ?? null,
+                    'voyage_number' => $data['voyage_number'] ?? null,
+                    'bill_of_lading' => $data['bill_of_lading'] ?? null,
+                    'shipping_bill_number' => $data['shipping_bill_number'] ?? null,
+                    'shipping_bill_date' => $data['shipping_bill_date'] ?? null,
+                    'booking_no' => $data['booking_no'] ?? null,
+                    'forwarder_name' => $data['forwarder_name'] ?? null,
 
-                'pickup_date' => $data['pickup_date'] ?? null,
-                'arrival_date' => $data['arrival_date'] ?? null,
-                'carrier_name' => $data['carrier_name'] ?? null,
-                'tracking_number' => $data['tracking_number'] ?? null,  
-            ]);
-//'planning','shipment','consolidated','locked','asn_generated','in_transit','arrived','grn_pending','grn_completed','cancelled'
+                    'pickup_date' => $data['pickup_date'] ?? null,
+                    'arrival_date' => $data['arrival_date'] ?? null,
+                    'carrier_name' => $data['carrier_name'] ?? null,
+                    'tracking_number' => $data['tracking_number'] ?? null,
+
+                    'origin_charges' => $data['origin_charges'] ?? null,
+                    'ocean_freight' => $data['ocean_freight'] ?? null,
+                    'destination_charges' => $data['destination_charges'] ?? null,
+                    'drayage_cost' => $data['drayage_cost'] ?? null,
+                    'duty_amount' => $data['duty_amount'] ?? null,
+
+
+                ]);
+            //'planning','shipment','consolidated','locked','asn_generated','in_transit','arrived','grn_pending','grn_completed','cancelled'
             // Auto-generate ASN
             // $asn = $this->generateAsn($shipment);
 
             ActivityLog::log('logistics', 'shipment', $shipment, null, null, 'Shipment logistics info updated.');
- 
+
             // Notify vendors
             foreach ($shipment->consignments as $consignment) {
                 $consignment->vendor->user->notify(new ShipmentNotification($shipment, 'sailing_date_updated'));
@@ -121,7 +129,7 @@ class LogisticsService
 
             // Auto-generate ASN
             $asn = $this->generateAsn($shipment);
-
+            $shipment->update(['status' => 'asn_generated', 'locked_by' => $user->id, 'locked_at' => now(),]);
             ActivityLog::log('locked', 'shipment', $shipment, null, null, 'Shipment locked and ASN generated');
 
             // Notify HOD for pricing

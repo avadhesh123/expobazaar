@@ -55,6 +55,10 @@ class Order extends Model
         'delivery_date',
         'material_cost',
         'order_processing_charges',
+        'updated_by',
+        'cancellation_reason',
+        'cancelled_at',
+        'cancelled_by',
     ];
 
     protected $casts = [
@@ -63,6 +67,7 @@ class Order extends Model
         'delivered_date' => 'date',
         'ship_date' => 'date',
         'delivery_date' => 'date',
+        'cancelled_at'=> 'datetime'
     ];
 
     public function salesChannel()
@@ -114,6 +119,10 @@ class Order extends Model
     public static function findByOrderNumber(string $orderNumber)
     {
         return self::where('order_number', $orderNumber)->first();
+    }
+    public function trackings()
+    {
+        return $this->hasMany(OrderTracking::class)->latest();
     }
     public static function generateOrderNumber(string $companyCode): string
     {

@@ -383,8 +383,24 @@ class AdminController extends Controller
         $vendor->load('user', 'documents', 'creator');
         return view('admin.vendors.show', compact('vendor'));
     }
-    public function approveVendor(Vendor $vendor)
+    public function approveVendor(Request $request, Vendor $vendor)
     {
+        if ($request->has('_reject') || $request->_reject) {
+            $request->validate(['reason' => 'required|string|max:500']);
+
+            $vendor->update([
+                'status' => 'rejected',
+                'rejection_reason' => $request->reason,
+            ]);
+
+            // Also update user status if exists
+            if ($vendor->user) {
+                $vendor->user->update(['is_active' => false]);
+            }
+
+            return back()->with('success', "Vendor '{$vendor->company_name}' rejected.");
+        }
+
         $this->vendorService->approveVendorCreation($vendor, auth()->user());
         return back()->with('success', 'Vendor approved successfully.');
     }

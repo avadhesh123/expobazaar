@@ -24,8 +24,8 @@ default => 'USD',
             </div>
             <div style="display:flex;gap:.5rem;">
                 <span class="badge badge-info" style="font-size:.82rem;padding:.3rem .7rem;">{{ $order->salesChannel->name ?? '—' }}</span>
-                @php $ssc = ['pending'=>'badge-danger','shipped'=>'badge-warning','delivered'=>'badge-success','returned'=>'badge-gray']; @endphp
-                <span class="badge {{ $ssc[$order->shipment_status ?? 'pending'] ?? 'badge-gray' }}" style="font-size:.82rem;padding:.3rem .7rem;">{{ ucfirst($order->shipment_status ?? 'pending') }}</span>
+                @php $ssc = ['pending'=>'badge-danger','cancelled'=>'badge-danger','shipped'=>'badge-warning','delivered'=>'badge-success','returned'=>'badge-gray']; @endphp
+                <span class="badge {{ $ssc[$order->status ?? 'pending'] ?? 'badge-gray' }}" style="font-size:.82rem;padding:.3rem .7rem;">{{ ucfirst($order->status ?? 'pending') }}</span>
             </div>
         </div>
 
@@ -78,38 +78,54 @@ default => 'USD',
     </div>
 
     {{-- Tracking --}}
-    <div class="card">
-        <div class="card-header">
-            <h3><i class="fas fa-truck" style="margin-right:.5rem;color:#e8a838;"></i> Shipment Tracking</h3>
-        </div>
-        <div class="card-body">
-            @if($order->tracking_id)
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:.75rem;margin-bottom:.75rem;">
-                <div style="padding:.6rem;background:#dcfce7;border-radius:8px;">
-                    <div style="font-size:.65rem;color:#166534;font-weight:600;">Tracking ID</div>
-                    <div style="font-weight:700;font-family:monospace;">{{ $order->tracking_id }}</div>
+    {{-- Tracking Section - Multiple Trackings --}}
+<div class="card">
+    <div class="card-header">
+        <h3><i class="fas fa-truck" style="margin-right:.5rem;color:#e8a838;"></i> Shipment Tracking 
+            <span style="font-size:.75rem;font-weight:500;">({{ $order->trackings->count() ?? 0 }})</span>
+        </h3>
+    </div>
+    <div class="card-body">
+
+        @if($order->trackings->count() > 0)
+            <div style="margin-bottom:1.25rem;">
+                @foreach($order->trackings as $tracking)
+                <div style="padding:.75rem;background:#f8fafc;border-radius:8px;margin-bottom:.75rem;border-left:4px solid #3b82f6;">
+                    <div style="display:flex;justify-content:space-between;align-items:start;">
+                        <div>
+                            <strong style="font-family:monospace;">{{ $tracking->tracking_id }}</strong><br>
+                            <span style="color:#64748b;font-size:.82rem;">{{ $tracking->shipping_provider }}</span>
+                        </div>
+                        @if($tracking->tracking_url)
+                            <a href="{{ $tracking->tracking_url }}" target="_blank" class="btn btn-outline btn-sm">
+                                <i class="fas fa-external-link-alt"></i> Track
+                            </a>
+                        @endif
+                    </div>
+                    @if($tracking->shipped_date)
+                        <small style="color:#166534;">Shipped: {{ $tracking->shipped_date->format('d M Y') }}</small>
+                    @endif
                 </div>
-                <div style="padding:.6rem;background:#f8fafc;border-radius:8px;">
-                    <div style="font-size:.65rem;color:#64748b;font-weight:600;">Provider</div>
-                    <div style="font-weight:600;">{{ $order->shipping_provider ?? '—' }}</div>
-                </div>
+                @endforeach
             </div>
-            @if($order->tracking_url)
-            <a href="{{ $order->tracking_url }}" target="_blank" class="btn btn-outline btn-sm"><i class="fas fa-external-link-alt"></i> Track Shipment</a>
-            @endif
-            @if($order->shipped_date)<div style="margin-top:.5rem;font-size:.78rem;color:#64748b;"><i class="fas fa-calendar"></i> Shipped: {{ $order->shipped_date->format('d M Y') }}</div>@endif
-            @if($order->delivered_date)<div style="font-size:.78rem;color:#166534;"><i class="fas fa-check-double"></i> Delivered: {{ $order->delivered_date->format('d M Y') }}</div>@endif
-            @else
-            <div style="margin-bottom:.75rem;padding:.75rem;background:#fef2f2;border-radius:8px;text-align:center;">
-                <i class="fas fa-exclamation-circle" style="color:#dc2626;font-size:1.2rem;display:block;margin-bottom:.3rem;"></i>
-                <div style="font-size:.85rem;font-weight:600;color:#dc2626;">No tracking information</div>
+        @else
+            <div style="text-align:center;padding:2rem;color:#94a3b8;">
+                <i class="fas fa-truck" style="font-size:2.5rem;opacity:0.3;margin-bottom:.5rem;"></i>
+                <div>No tracking information added yet.</div>
             </div>
-            <form method="POST" action="{{ route('sales.orders.tracking', $order) }}">
-                @csrf
-                <div class="form-group"><label>Tracking ID *</label><input type="text" name="tracking_id" required placeholder="e.g. 1Z999AA10123456784"></div>
-                <div class="grid-2">
-                    <div class="form-group"><label>Provider</label><select name="shipping_provider">
-                            <option value="">Select...</option>
+        @endif
+
+        {{-- Add New Tracking Form --}}
+        <form method="POST" action="{{ route('sales.orders.tracking.store', $order) }}">
+            @csrf
+            <div style="background:#f8fafc;padding:1rem;border-radius:8px;">
+                <h4 style="margin-bottom:.75rem;font-size:.9rem;color:#1e3a5f;">Add New Tracking</h4>
+                
+                <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:.75rem;">
+                    <div class="form-group">
+                        <label>Shipping Provider</label>
+                        <select name="shipping_provider" class="form-control" required>
+                            <option value="">Select Provider</option>
                             <option value="UPS">UPS</option>
                             <option value="FedEx">FedEx</option>
                             <option value="USPS">USPS</option>
@@ -118,14 +134,33 @@ default => 'USD',
                             <option value="BlueDart">BlueDart</option>
                             <option value="PostNL">PostNL</option>
                             <option value="Other">Other</option>
-                        </select></div>
-                    <div class="form-group"><label>Tracking URL</label><input type="url" name="tracking_url" placeholder="https://..."></div>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label>Tracking Number *</label>
+                        <input type="text" name="tracking_id" class="form-control" placeholder="e.g. 1Z999AA10123456784" required>
+                    </div>
+
+                    <div class="form-group">
+                        <label>Tracking URL (Optional)</label>
+                        <input type="url" name="tracking_url" class="form-control" placeholder="https://...">
+                    </div>
+
+                    <div class="form-group">
+                        <label>Shipped Date</label>
+                        <input type="date" name="shipped_date" class="form-control" value="{{ now()->format('Y-m-d') }}">
+                    </div>
                 </div>
-                <button type="submit" class="btn btn-primary btn-sm"><i class="fas fa-truck"></i> Save Tracking</button>
-            </form>
-            @endif
-        </div>
+
+                <button type="submit" class="btn btn-primary btn-sm" style="margin-top:1rem;">
+                    <i class="fas fa-plus"></i> Add Tracking
+                </button>
+            </div>
+        </form>
+
     </div>
+</div>
 </div>
 
 {{-- Order Items --}}

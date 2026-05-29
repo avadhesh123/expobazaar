@@ -3,7 +3,7 @@
 namespace App\Http\Controllers\Sales;
 
 use App\Http\Controllers\Controller;
-use App\Models\{Order, SalesChannel};
+use App\Models\{Order, SalesChannel, OrderTracking};
 use App\Services\{SalesService, DashboardService};
 use Illuminate\Http\Request;
 
@@ -79,7 +79,7 @@ class SalesController extends Controller
             ->latest('order_date')
             ->get();
 
-        $csv = "Order Number,PO Number,Invoice Number,Order Date,Sales Channel,SKU,SAP Code,Product Name,Vendor Name,Vendor Type,Qty,Unit Price,Order Amount,Vendor Payout Price,Payout Total,Warehouse,Shipping Method,Shipped Qty,Shipped Amount,Tracking ID,Carrier,Shipping Cost,Ship Date,Current Status,Delivery Date,Customer Type,Customer Name,Company Name,Email,Phone,Address,City,State,Zip,Country,Currency,Status\n";
+        $csv = "Order Number,PO Number,Invoice Number,Order Date,Sales Channel,SKU,SAP Code,Product Name,Vendor Name,Vendor Type,Warehouse id number,Qty,Unit Price,Order Amount,Vendor Payout Price,Payout Total,Warehouse,Shipping Method,Shipped Qty,Shipped Amount,Tracking ID,Carrier,Shipping Cost,Ship Date,Current Status,Delivery Date,Customer Type,Customer Name,Company Name,Email,Phone,Address,City,State,Zip,Country,Currency,Status\n";
 
         foreach ($orders as $o) {
             $firstItem = $o->items->first();
@@ -101,6 +101,7 @@ class SalesController extends Controller
                 '"' . str_replace('"', '""', $product?->name ?? '') . '"',
                 '"' . str_replace('"', '""', $vendor?->company_name ?? '') . '"',
                 '"' . ($vendor?->vendor_type ?? '') . '"',
+                '"' . ($o->warehouse_id_number ?? '') . '"',
                 $qty,
                 number_format(floatval($firstItem?->unit_price ?? 0), 2, '.', ''),
                 number_format(floatval($o->total_amount ?? 0), 2, '.', ''),
@@ -126,7 +127,7 @@ class SalesController extends Controller
                 '"' . ($o->shipping_state ?? '') . '"',
                 '"' . ($o->shipping_pincode ?? '') . '"',
                 '"' . ($o->shipping_country ?? '') . '"',
-                $o->currency ?? 'USD',
+                $o->currency ?? 'NA',
                 '"' . ($o->status ?? '') . '"',
             ]) . "\n";
         }
@@ -165,8 +166,8 @@ class SalesController extends Controller
 
     public function downloadTemplate()
     {
-        $csv = "Order Date,PO Number / Order ID,Invoice Number,Sales Channel,Vendor Name,Vendor Type,SAP code,Style Code,Per Unit Sales Price,Order Qty,Order Amount,Warehouse Name,Shipping Method,Customer Type,Customer Name,Company Name,Shipping Address,City,State,Zip Code,Country,Phone Number,Email\n";
-        $csv .= "2026-05-10,70981308,,Amazon,,,,SKU1234,2.40,1,,,,CFL,John Doe,My Company,123 Main St,New York,NY,10001,US,1234567890,john@example.com\n";
+        $csv = "Order Date,PO Number / Order ID,Invoice Number,Sales Channel,Vendor Name,Vendor Type,SAP code,Style Code,Per Unit Sales Price,Order Qty,Order Amount,Warehouse ID Number,Warehouse Name,Shipping Method,Customer Type,Customer Name,Company Name,Shipping Address,City,State,Zip Code,Country,Phone Number,Email\n";
+        $csv .= "2026-05-10,70981308,,Amazon,,,,,SKU1234,2.40,1,,,,CFL,John Doe,My Company,123 Main St,New York,NY,10001,US,1234567890,john@example.com\n";
 
         return response($csv, 200, [
             'Content-Type' => 'text/csv',
@@ -479,5 +480,401 @@ class SalesController extends Controller
         $request->validate(['tracking_id' => 'required|string']);
         $this->salesService->updateTracking($order, $request->tracking_id, $request->tracking_url, $request->shipping_provider);
         return back()->with('success', 'Tracking updated.');
+    }
+    public function storeTracking(Request $request, Order $order)
+    {
+        $request->validate([
+            'shipping_provider' => 'required|string|max:100',
+            'tracking_id'       => 'required|string|max:100',
+            'tracking_url'      => 'nullable|url|max:500',
+            'shipped_date'      => 'nullable|date',
+        ]);
+
+        $tracking = OrderTracking::create([
+            'order_id'          => $order->id,
+            'tracking_id'       => $request->tracking_id,
+            'shipping_provider' => $request->shipping_provider,
+            'tracking_url'      => $request->tracking_url,
+            'shipped_date'      => $request->shipped_date,
+            'added_by'          => auth()->id(),
+            'notes'             => $request->notes,
+        ]);
+
+        return back()->with('success', 'Tracking information added successfully.');
+    }
+
+    /**
+     * Cancel an Order
+     */
+    public function cancelOrder(Request $request, Order $order)
+    {
+        $request->validate([
+            'reason' => 'required|string|min:5|max:500',
+        ]);
+
+        // Only allow cancellation for specific statuses
+        if (!in_array($order->status, ['pending', 'open', 'label_created', 'processing'])) {
+            return response()->json([
+                'success' => false,
+                'message' => 'This order cannot be cancelled at its current status.'
+            ], 422);
+        }
+//         echo '<pre>';
+// print_r($order->items);
+// exit;
+        $oldStatus = $order->status;
+
+        \DB::beginTransaction();
+        try {
+            foreach ($order->items as $item) {
+                $qty = $item->shipped_qty;
+                $inventory = \App\Models\Inventory::where('product_id', $item->product_id)
+                    ->where('warehouse_id', $order->warehouse_id)
+                    ->where('company_code', $order->company_code)
+                    ->first();
+
+file_put_contents(storage_path('logs/cancel-orders.log'), print_r($inventory,true). "\n", FILE_APPEND);
+
+                if ($inventory) {
+                    $inventory->increment('quantity', $qty);
+                    $inventory->increment('available_quantity', $qty);
+
+                    \App\Models\InventoryLog::record($inventory, 'order_canceled_restock', $qty, [ 
+                        'description'    => "Restocked {$qty} units of {$item->sku} from canceled order {$order->order_number}",
+                        'reference_type' => 'order_canceled_restock',
+                        'reference_id'   => $order->id,
+                        'reference_code' => $order->order_number,
+                    ]);
+
+file_put_contents(storage_path('logs/cancel-orders.log'), "Restocked {$qty} units of {$item->sku} from canceled order {$order->order_number}". "\n", FILE_APPEND);
+
+                    \App\Models\Product::where('id', $item->product_id)->increment('stock_quantity', $qty);
+                }
+
+                // $item->update(['restock' => true, 'restocked_qty' => $qty]);                
+            }
+
+            // $order->update([
+            //     'status'           => 'cancelled',
+            //     'cancellation_reason' => $request->reason,
+            //     'cancelled_at'     => now(),
+            //     'cancelled_by'     => auth()->id(),
+            // ]);
+
+            \App\Models\ActivityLog::log('order_cancellation', 'order', $order ?? auth()->user(), [$oldStatus], [
+                'status' => 'cancelled',
+                'reason' => $request->reason,
+                'user_id' => auth()->id()
+            ], "Order #{$order->order_number} cancelled by user");
+
+
+            \DB::commit();
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Order cancelled successfully.'
+            ]);
+        } catch (\Exception $e) {
+            \DB::rollBack();
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to cancel order: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    public function updateOrderStatus(Request $request, Order $order)
+    {
+        $request->validate([
+            'status'  => 'required|in:open,pending,label_created,processing,confirmed,shipped,returned,exception,lost_in_transit',
+            'reason' => 'nullable|string|max:500',
+        ]);
+        //'open','pending','label_created','processing','shipped','delivered','cancelled','returned','exception','lost_in_transit'
+        $oldStatus = $order->status;
+
+        $order->update([
+            'status'          => $request->status,
+            'remarks'  => $request->remarks,
+            'updated_at' => now(),
+            'updated_by' => auth()->id(),
+        ]);
+
+        // Activity Log
+        \App\Models\ActivityLog::log(
+            'status_updated',
+            'order',
+            $order,
+            ['status' => $oldStatus],
+            [
+                'status' => $request->status,
+                'remarks' => $request->remarks,
+                'user_id' => auth()->id()
+            ],
+            "Order status changed from {$oldStatus} to {$request->status}"
+        );
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Order status updated successfully.'
+        ]);
+    }
+    // ═══ ORDER RETURNS ═══
+
+    public function returns(Request $request)
+    {
+        $activeCode = session('active_company');
+
+        $returns = \App\Models\OrderReturn::with('order.salesChannel', 'vendor', 'items.product', 'creator')
+            ->when($activeCode, fn($q) => $q->where('company_code', $activeCode))
+            ->when($request->status, fn($q, $v) => $q->where('status', $v))
+            ->when($request->reason, fn($q, $v) => $q->where('reason', $v))
+            ->when($request->search, fn($q, $v) => $q->where(function ($q2) use ($v) {
+                $q2->where('return_number', 'LIKE', "%{$v}%")
+                    ->orWhereHas('order', fn($oq) => $oq->where('order_number', 'LIKE', "%{$v}%")->orWhere('platform_order_id', 'LIKE', "%{$v}%"));
+            }))
+            ->latest('return_date')
+            ->paginate(30)->withQueryString();
+
+        $stats = [
+            'total'     => \App\Models\OrderReturn::when($activeCode, fn($q) => $q->where('company_code', $activeCode))->count(),
+            'initiated' => \App\Models\OrderReturn::when($activeCode, fn($q) => $q->where('company_code', $activeCode))->where('status', 'initiated')->count(),
+            'received'  => \App\Models\OrderReturn::when($activeCode, fn($q) => $q->where('company_code', $activeCode))->where('status', 'received')->count(),
+            'refunded'  => \App\Models\OrderReturn::when($activeCode, fn($q) => $q->where('company_code', $activeCode))->where('status', 'refunded')->sum('refund_amount'),
+        ];
+
+        return view('sales.returns.index', compact('returns', 'stats'));
+    }
+
+    public function createReturn(Request $request)
+    {
+        // AJAX order lookup
+        if ($request->has('lookup_order') && $request->ajax()) {
+            $orderNum = trim($request->lookup_order);
+            $order = Order::where('order_number', $orderNum)
+                ->orWhere('platform_order_id', $orderNum)
+                ->with(['items.product', 'salesChannel'])
+                ->first();
+
+            if (!$order) return response()->json(['found' => false]);
+
+            return response()->json([
+                'found'        => true,
+                'order_id'     => $order->id,
+                'order_number' => $order->order_number,
+                'channel'      => $order->salesChannel->name ?? '—',
+                'date'         => $order->order_date?->format('d M Y'),
+                'total'        => floatval($order->total_amount),
+                'customer'     => $order->customer_name ?? '—',
+                'status'       => $order->status,
+                'items'        => $order->items->map(fn($i) => [
+                    'id'         => $i->id,
+                    'product_id' => $i->product_id,
+                    'sku'        => $i->sku ?? $i->product->sku ?? '—',
+                    'name'       => $i->product->name ?? '—',
+                    'quantity'   => intval($i->quantity),
+                    'shipped_qty' => intval($i->shipped_qty ?? $i->quantity),
+                    'unit_price' => floatval($i->unit_price),
+                ]),
+            ]);
+        }
+
+        $warehouses = \App\Models\Warehouse::when(session('active_company'), fn($q) => $q->where('company_code', session('active_company')))
+            ->orderBy('name')->get();
+
+        return view('sales.returns.create', compact('warehouses'));
+    }
+
+    public function storeReturn(Request $request)
+    {
+        $request->validate([
+            'order_id'              => 'required|exists:orders,id',
+            'reason'                => 'required|in:damaged,wrong_item,missing_item,quality_issue,customer_request,short_shipment,other',
+            'reason_detail'         => 'nullable|string|max:1000',
+            'warehouse_id'          => 'nullable|exists:warehouses,id',
+            'tracking_id'           => 'nullable|string|max:100',
+            'carrier'               => 'nullable|string|max:50',
+            'items'                 => 'required|array|min:1',
+            'items.*.product_id'    => 'required|exists:products,id',
+            'items.*.return_qty'    => 'required|integer|min:1',
+            'items.*.condition_status' => 'nullable|in:good,damaged,defective,unsellable',
+        ]);
+
+        $order = Order::with('items')->findOrFail($request->order_id);
+        $activeCode = session('active_company') ?? $order->company_code;
+
+        try {
+            \DB::beginTransaction();
+
+            $totalReturnAmount = 0;
+            $vendorId = null;
+
+            // Validate quantities
+            foreach ($request->items as $itemData) {
+                $orderItem = $order->items->firstWhere('product_id', $itemData['product_id']);
+                if (!$orderItem) continue;
+                $maxReturn = $orderItem->shipped_qty ?? $orderItem->quantity;
+                if ($itemData['return_qty'] > $maxReturn) {
+                    return back()->with('error', "Return qty for SKU {$orderItem->sku} exceeds shipped qty ({$maxReturn}).")->withInput();
+                }
+                if (!$vendorId) $vendorId = $orderItem->vendor_id;
+            }
+
+            $orderReturn = \App\Models\OrderReturn::create([
+                'return_number'      => \App\Models\OrderReturn::generateNumber($activeCode),
+                'order_id'           => $order->id,
+                'company_code'       => $activeCode,
+                'vendor_id'          => $vendorId,
+                'return_date'        => now()->toDateString(),
+                'reason'             => $request->reason,
+                'reason_detail'      => $request->reason_detail,
+                'status'             => 'initiated',
+                'warehouse_id'       => $request->warehouse_id,
+                'tracking_id'        => $request->tracking_id,
+                'carrier'            => $request->carrier,
+                'created_by'         => auth()->id(),
+            ]);
+
+            foreach ($request->items as $itemData) {
+                $orderItem = $order->items->firstWhere('product_id', $itemData['product_id']);
+                if (!$orderItem) continue;
+
+                $returnQty = intval($itemData['return_qty']);
+                $unitPrice = floatval($orderItem->unit_price);
+                $returnAmount = round($unitPrice * $returnQty, 2);
+                $totalReturnAmount += $returnAmount;
+
+                \App\Models\OrderReturnItem::create([
+                    'order_return_id' => $orderReturn->id,
+                    'order_item_id'   => $orderItem->id,
+                    'product_id'      => $itemData['product_id'],
+                    'sku'             => $orderItem->sku ?? $orderItem->product->sku ?? '',
+                    'return_qty'      => $returnQty,
+                    'unit_price'      => $unitPrice,
+                    'return_amount'   => $returnAmount,
+                    'condition_status' => $itemData['condition_status'] ?? 'good',
+                ]);
+            }
+
+            $orderReturn->update(['total_return_amount' => $totalReturnAmount]);
+
+            \App\Models\ActivityLog::log('created', 'order_return', $orderReturn, null, [
+                'order_number' => $order->order_number,
+                'items_count'  => count($request->items),
+                'total_amount' => $totalReturnAmount,
+            ], "Return {$orderReturn->return_number} initiated for order {$order->order_number}");
+
+            \DB::commit();
+
+            return redirect()->route('sales.returns.show', $orderReturn)
+                ->with('success', "Return {$orderReturn->return_number} created. Amount: " . config('app.active_currency_symbol', '$') . number_format($totalReturnAmount, 2));
+        } catch (\Exception $e) {
+            \DB::rollBack();
+            \Log::error('Return creation failed: ' . $e->getMessage());
+            return back()->with('error', 'Failed: ' . $e->getMessage())->withInput();
+        }
+    }
+
+    public function showReturn(\App\Models\OrderReturn $orderReturn)
+    {
+        // $orderReturn->load('order.salesChannel', 'vendor', 'items.product', 'creator', 'approver', 'inspector', 'warehouse');
+
+        $orderReturn->load([
+            'order',
+            'order.salesChannel',
+            'vendor',
+            'creator',
+            'approver',
+            'inspector',
+            'warehouse',
+            'items.product'    // Load product relation
+        ]);
+
+
+
+        return view('sales.returns.show', compact('orderReturn'));
+    }
+
+    public function updateReturnStatus(Request $request, \App\Models\OrderReturn $orderReturn)
+    {
+        $request->validate([
+            'status'           => 'required|in:received,inspected,approved,rejected,refunded',
+            'inspection_notes' => 'nullable|string|max:1000',
+            'refund_amount'    => 'nullable|numeric|min:0',
+        ]);
+
+        $oldStatus = $orderReturn->status;
+        $updateData = ['status' => $request->status];
+
+        if ($request->status === 'received') {
+            $updateData['received_date'] = now()->toDateString();
+        } elseif ($request->status === 'inspected') {
+            $updateData['inspected_by'] = auth()->id();
+            $updateData['inspected_at'] = now();
+            $updateData['inspection_notes'] = $request->inspection_notes;
+        } elseif ($request->status === 'approved') {
+            $updateData['approved_by'] = auth()->id();
+            $updateData['approved_at'] = now();
+        } elseif ($request->status === 'refunded') {
+            $updateData['refund_amount'] = $request->refund_amount ?? $orderReturn->total_return_amount;
+            $updateData['refund_status'] = 'completed';
+        }
+
+        $orderReturn->update($updateData);
+
+        \App\Models\ActivityLog::log('updated', 'order_return', $orderReturn, [$oldStatus], [
+            'old_status' => $oldStatus,
+            'new_status' => $request->status,
+        ], "Return {$orderReturn->return_number} status: {$oldStatus} → {$request->status}");
+
+        return back()->with('success', "Return status updated to " . ucfirst(str_replace('_', ' ', $request->status)) . ".");
+    }
+
+    public function restockReturn(Request $request, \App\Models\OrderReturn $orderReturn)
+    {
+        if (!in_array($orderReturn->status, ['approved', 'inspected'])) {
+            return back()->with('error', 'Return must be approved or inspected before restocking.');
+        }
+
+        $restocked = 0;
+
+        \DB::beginTransaction();
+        try {
+            foreach ($orderReturn->items as $returnItem) {
+                if ($returnItem->restock || $returnItem->condition_status === 'unsellable') continue;
+                if ($returnItem->condition_status !== 'good') continue;
+
+                $qty = $returnItem->return_qty;
+                $inventory = \App\Models\Inventory::where('product_id', $returnItem->product_id)
+                    ->where('warehouse_id', $orderReturn->warehouse_id)
+                    ->where('company_code', $orderReturn->company_code)
+                    ->first();
+
+                if ($inventory) {
+                    $inventory->increment('quantity', $qty);
+                    $inventory->increment('available_quantity', $qty);
+
+                    \App\Models\InventoryLog::record($inventory, 'return_restock', $qty, [
+                        'description'    => "Restocked {$qty} units of {$returnItem->sku} from return {$orderReturn->return_number}",
+                        'reference_type' => 'order_return',
+                        'reference_id'   => $orderReturn->id,
+                        'reference_code' => $orderReturn->return_number,
+                    ]);
+
+                    \App\Models\Product::where('id', $returnItem->product_id)->increment('stock_quantity', $qty);
+                }
+
+                $returnItem->update(['restock' => true, 'restocked_qty' => $qty]);
+                $restocked++;
+            }
+
+            $orderReturn->update(['status' => 'restocked']);
+            \DB::commit();
+
+            return back()->with('success', "{$restocked} item(s) restocked to inventory.");
+        } catch (\Exception $e) {
+            \DB::rollBack();
+            return back()->with('error', 'Restock failed: ' . $e->getMessage());
+        }
     }
 }

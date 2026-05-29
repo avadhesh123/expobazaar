@@ -23,7 +23,6 @@ class Shipment extends Model
         'total_weight',
         'total_items',
         'total_value',
-
         'shipping_line',
         'vessel_name',
         'voyage_number',
@@ -39,7 +38,7 @@ class Shipment extends Model
         'shipping_bill_date',
         'forwarder_name',
         'booking_no',
-
+        'no_of_pallets',
         'port_of_loading',
         'port_of_discharge',
         'destination_warehouse_id',
@@ -54,6 +53,11 @@ class Shipment extends Model
         'entry_summary_upload_date',
         'status_changed_at',
         'status_changed_by',
+        'origin_charges',
+        'ocean_freight',
+        'destination_charges',
+        'drayage_cost',
+        'duty_amount',
     ];
 
     protected $casts = [
@@ -61,14 +65,14 @@ class Shipment extends Model
         'pickup_date'       => 'date',
         'eta_date' => 'date',
         'arrival_date' => 'date',
-        'delivery_date'=> 'date',
+        'delivery_date' => 'date',
         'shipping_bill_date' => 'date',
         'locked_at' => 'datetime',
         'total_cbm' => 'decimal:4',
         'capacity_cbm' => 'decimal:2',
         'entry_summary_date' => 'date',
         'entry_summary_upload_date' => 'date',
-        'status_changed_at'=>'datetime',
+        'status_changed_at' => 'datetime',
     ];
 
     public function consignments()
@@ -91,7 +95,10 @@ class Shipment extends Model
     {
         return $this->belongsTo(User::class, 'created_by');
     }
-
+    public function logs()
+    {
+        return $this->hasMany(ShipmentLog::class)->latest('changed_at');
+    }
     public function scopeByCompanyCode($query, $code)
     {
         return $query->where('company_code', $code);
@@ -110,7 +117,10 @@ class Shipment extends Model
     {
         return $this->capacity_cbm > 0 ? round(($this->total_cbm / $this->capacity_cbm) * 100, 2) : 0;
     }
-public function statusChangedBy() { return $this->belongsTo(User::class, 'status_changed_by'); }
+    public function statusChangedBy()
+    {
+        return $this->belongsTo(User::class, 'status_changed_by');
+    }
     public static function generateCode(string $companyCode, string $type): string
     {
         $prefix = 'SHP-' . $companyCode . '-' . $type . '-';

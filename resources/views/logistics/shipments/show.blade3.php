@@ -59,7 +59,7 @@
 
         {{-- Info Grid --}}
         <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(155px,1fr));gap:.75rem;">
-            @php $flags = ['US'=>'🇺🇸','NL'=>'🇳🇱','IN'=>'🇮🇳','EU'=>'eu']; $ccBg = ['2000'=>'#dcfce7','2100'=>'#dbeafe','2200'=>'#fef3c7']; @endphp
+            @php $flags = ['US'=>'🇺🇸','NL'=>'🇳🇱','IN'=>'🇮🇳']; $ccBg = ['2000'=>'#dcfce7','2100'=>'#dbeafe','2200'=>'#fef3c7']; @endphp
             <div style="padding:.65rem;background:#f8fafc;border-radius:8px;">
                 <div style="font-size:.62rem;color:#64748b;text-transform:uppercase;font-weight:600;">Company</div>
                 <div style="font-weight:700;"><span style="padding:.1rem .3rem;background:{{ $ccBg[$shipment->company_code] ?? '#f1f5f9' }};border-radius:4px;font-size:.82rem;">{{ $shipment->company_code }}</span></div>
@@ -236,8 +236,8 @@
                     <td style="font-size:.78rem;color:#64748b;">{{ $con->vendor->company_name ?? '—' }}</td>
                     <td style="font-size:.75rem;font-family:monospace;">{{ $con->consignment_number }}</td>
                     <td style="text-align:center;font-weight:600;">{{ $item->quantity }}</td>
-                    <td style="font-family:monospace;">{{$activeCurrencySymbol}}{{ number_format($item->unit_price, 2) }}</td>
-                    <td style="font-family:monospace;font-weight:600;">{{$activeCurrencySymbol}}{{ number_format($item->total_price, 2) }}</td>
+                    <td style="font-family:monospace;">${{ number_format($item->unit_price, 2) }}</td>
+                    <td style="font-family:monospace;font-weight:600;">${{ number_format($item->total_price, 2) }}</td>
                     <td style="font-family:monospace;">{{ number_format($item->total_cbm, 2) }}</td>
                 </tr>
                 @endforeach
@@ -247,7 +247,7 @@
                     <td colspan="4" style="text-align:right;">TOTAL</td>
                     <td style="text-align:center;">{{ $shipment->total_items }}</td>
                     <td></td>
-                    <td style="font-family:monospace;">{{$activeCurrencySymbol}}{{ number_format($grandTotal, 2) }}</td>
+                    <td style="font-family:monospace;">${{ number_format($grandTotal, 2) }}</td>
                     <td style="font-family:monospace;">{{ number_format($grandCbm, 2) }}</td>
                 </tr>
             </tbody>
@@ -383,54 +383,30 @@
                     <input type="text" name="forwarder_name" value="{{ $shipment->forwarder_name }}">
                 </div>
 
-               <div class="form-group">
-                    <label>Origin Charges ({{$activeCurrencySymbol}})</label>
-                    <input type="number" step="0.01" id="origin_charges" name="origin_charges" 
-                           value="{{ $shipment->origin_charges }}" class="freight-input">
+                 <div class="form-group"><label>Origin Charges</label>
+                    <input type="text" name="origin_charges" value="{{ $shipment->origin_charges }}">
                 </div>
 
-                <div class="form-group">
-                    <label>Ocean Freight ({{$activeCurrencySymbol}})</label>
-                    <input type="number" step="0.01" id="ocean_freight" name="ocean_freight" 
-                           value="{{ $shipment->ocean_freight }}" class="freight-input">
+                 <div class="form-group"><label>Ocean Freight</label>
+                    <input type="text" name="ocean_freight" value="{{ $shipment->ocean_freight }}">
                 </div>
 
-                <div class="form-group">
-                    <label>Destination Charges ({{$activeCurrencySymbol}})</label>
-                    <input type="number" step="0.01" id="destination_charges" name="destination_charges" 
-                           value="{{ $shipment->destination_charges }}" class="freight-input">
+                 <div class="form-group"><label>Destination Charges</label>
+                    <input type="text" name="destination_charges" value="{{ $shipment->destination_charges }}">
                 </div>
 
-                <div class="form-group">
-                    <label>Drayage Cost ({{$activeCurrencySymbol}})</label>
-                    <input type="number" step="0.01" id="drayage_cost" name="drayage_cost" 
-                           value="{{ $shipment->drayage_cost }}" class="freight-input">
+                 <div class="form-group"><label>Drayage Cost</label>
+                    <input type="text" name="drayage_cost" value="{{ $shipment->drayage_cost }}">
                 </div>
-
                  <div class="form-group"><label>Duty amount</label>
-                    <input type="text" id="duty_amount" name="duty_amount" value="{{ $shipment->duty_amount }}">
+                    <input type="text" name="duty_amount" value="{{ $shipment->duty_amount }}">
                 </div>
 
-                <div class="form-group">
-                    <label>Total FOB Value ({{$activeCurrencySymbol}})</label>
-                    <input type="number" step="0.01" id="total_fob" name="total_value" 
-                           value="{{ $grandTotal }}"  readonly  style="background:#f8fafc;">
+                 <div class="form-group"><label>Frieght Factor</label>
+                    <input type="text" name="frieght_factor" value="{{ $shipment->frieght_factor }}">
                 </div>
-            </div>
 
-            {{-- Live Freight Factor Display --}}
-        <div style="background:#fef3c7;padding:1rem;border-radius:8px;margin-bottom:1.25rem;border:1px solid #fcd34d;">
-            <div style="display:flex;justify-content:space-between;align-items:center;">
-                <div style="font-weight:600;color:#92400e;font-size:1rem;">
-                    Freight Factor: 
-                    <strong id="freightFactorDisplay" style="font-size:1.25rem;">0.00%</strong>
-                </div>
-                <div id="freightFactorBreakdown" style="font-size:.78rem;color:#92400e;text-align:right;">
-                    (0.00 / 0.00)
-                </div>
             </div>
-            <small style="color:#92400e;">(Ocean Freight + Destination + Drayage + Origin Charges) / Total FOB</small>
-        </div>
 
             <div style="margin-top:1.25rem;">
                 <button type="submit" class="btn btn-primary">
@@ -441,7 +417,75 @@
 
     </div>
 </div>
- 
+<div class="card" style="margin-top:1.25rem;border-color:#e8a838;">
+    <div class="card-header" style="background:#fffbeb;">
+        <h3><i class="fas fa-lock" style="margin-right:.5rem;color:#e8a838;"></i> Milestone & Freight Details</h3>
+    </div>
+    <div class="card-body">
+        {{-- Status Dropdown --}}
+        <div style="display:flex;gap:1rem;align-items:flex-end;margin-bottom:1rem;padding:.75rem;background:#f8fafc;border-radius:8px;border:1px solid #ccc;">
+            <div>
+                <label style="font-size:.65rem;font-weight:600;color:#64748b;display:block;margin-bottom:.2rem;">Shipment Status</label>
+                <select id="shipmentStatus" onchange="updateShipmentStatus(this.value)" style="padding:.4rem .6rem;border:1px solid #d1d5db;border-radius:8px;font-size:.82rem;font-weight:600;min-width:180px;">
+                    @php $currentStatus = $shipment->status ?? 'planning'; @endphp
+                    <option value="planning" {{ $currentStatus === 'planning' ? 'selected' : '' }}>Planning</option>
+                    <option value="in_transit" {{ $currentStatus === 'in_transit' ? 'selected' : '' }}>In Transit</option>
+                    <option value="consolidated" {{ $currentStatus === 'consolidated' ? 'selected' : '' }}>Consolidated</option>
+                    <option value="asn_generated" {{ $currentStatus === 'asn_generated' ? 'selected' : '' }}>Asn Ggenerated</option>
+                    <option value="arrived" {{ $currentStatus === 'arrived' ? 'selected' : '' }}>Arrived</option>
+                    <option value="grn_pending" {{ $currentStatus === 'grn_pending' ? 'selected' : '' }}>Grn Pending</option>
+                    <option value="grn_completed" {{ $currentStatus === 'consolidated' ? 'selected' : '' }}>Grn Completed</option>
+                    <option value="delivered" {{ $currentStatus === 'delivered' ? 'selected' : '' }}>Delivered</option>
+                    <option value="cancelled" {{ $currentStatus === 'Cancelled' ? 'selected' : '' }}>Cancelled</option>
+                </select>
+            </div>
+            <div id="statusInfo" style="font-size:.72rem;color:#64748b;">
+                @if($shipment->status_changed_at)
+                Changed {{ $shipment->status_changed_at->format('d M Y H:i') }} by {{ $shipment->statusChangedBy->name ?? '—' }}
+                @endif
+            </div>
+            <div id="statusSaving" style="font-size:.72rem;display:none;color:#e8a838;"><i class="fas fa-spinner fa-spin"></i> Saving...</div>
+        </div>
+        @if($shipment->shipment_type !== 'AIR')
+        <form method="POST" action="{{ route('logistics.shipments.logistics', $shipment) }}">
+            @csrf
+            <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:.75rem;">
+                <div class="form-group"><label>Sailing Date <span style="color:#dc2626;">*</span></label><input type="date" value="{{ $shipment->sailing_date?->format('Y-m-d') }}" name="sailing_date" required></div>
+                <div class="form-group"><label>ETA Date</label><input type="date" value="{{ $shipment->eta_date?->format('Y-m-d') }}" name="eta_date"></div>
+                <div class="form-group"><label>Delivery Date</label><input type="date" value="{{ $shipment->delivery_date?->format('Y-m-d') }}" name="delivery_date"></div>
+                <div class="form-group"><label>Shipping Line</label><input type="text" value="{{ $shipment->shipping_line }}" name="shipping_line" placeholder="e.g. Maersk"></div>
+                <div class="form-group"><label>Vessel Name</label><input type="text" value="{{ $shipment->vessel_name }}" name="vessel_name" placeholder="Vessel name"></div>
+                <div class="form-group"><label>Voyage Number</label><input type="text" value="{{ $shipment->voyage_number }}" name="voyage_number" placeholder="Voyage #"></div>
+                <div class="form-group"><label>Bill of Lading</label><input type="text" value="{{ $shipment->bill_of_lading }}" name="bill_of_lading" placeholder="B/L number"></div>
+                <div class="form-group"><label>Shipping Bill Number</label><input type="text" value="{{ $shipment->shipping_bill_number }}" name="shipping_bill_number" placeholder="Shipping Bill No"></div>
+                <div class="form-group"><label>Shipping Bill Date</label><input type="date" value="{{ $shipment->shipping_bill_date?->format('Y-m-d') }}" name="shipping_bill_date"></div>
+                <div class="form-group"><label>Booking No</label><input type="text" value="{{ $shipment->booking_no }}" name="booking_no"></div>
+                <div class="form-group"><label>Forwarder Name</label><input type="text" value="{{ $shipment->forwarder_name }}" name="forwarder_name"></div>
+            </div>
+            <button type="submit" class="btn btn-primary"><i class="fas fa-lock" style="margin-right:.3rem;"></i> Save Info</button>
+        </form>
+        @endif
+        @if($shipment->shipment_type === 'AIR')
+        <form method="POST" action="{{ route('logistics.shipments.logistics', $shipment) }}">
+            @csrf
+            <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:.75rem;">
+                <div class="form-group"><label>Pick Up Date</label><input type="date" name="pickup_date" value="{{ $shipment->pickup_date?->format('Y-m-d') }}"></div>
+                <div class="form-group"><label>Departure Date <span style="color:#dc2626;">*</span></label><input type="date" name="sailing_date" required value="{{ $shipment->sailing_date?->format('Y-m-d') }}"></div>
+                <div class="form-group"><label>Arrival Date</label><input type="date" name="arrival_date" value="{{ $shipment->arrival_date?->format('Y-m-d') }}"></div>
+                <div class="form-group"><label>Delivery Date</label><input type="date" name="delivery_date" value="{{ $shipment->delivery_date?->format('Y-m-d') }}"></div>
+                <div class="form-group"><label>Carrier Name</label><input type="text" name="carrier_name" placeholder="e.g. FedEx" value="{{ $shipment->carrier_name }}"></div>
+                <div class="form-group"><label>Tracking Number</label><input type="text" name="tracking_number" placeholder="Tracking name" value="{{ $shipment->tracking_number }}"></div>
+                <div class="form-group"><label>Airway Bill of Lading</label><input type="text" name="bill_of_lading" placeholder="B/L number" value="{{ $shipment->bill_of_lading }}"></div>
+                <div class="form-group"><label>Shipping Bill Number</label><input type="text" name="shipping_bill_number" placeholder="Shipping Bill No" value="{{ $shipment->shipping_bill_number }}"></div>
+                <div class="form-group"><label>Shipping Bill Date</label><input type="date" name="shipping_bill_date" value="{{ $shipment->shipping_bill_date?->format('Y-m-d') }}"></div>
+            </div>
+            <button type="submit" class="btn btn-primary"><i class="fas fa-save" style="margin-right:.3rem;"></i> Save Info</button>
+        </form>
+        @endif
+        
+    </div>
+</div>
+
 
 <script>
     function updateShipmentStatus(status) {
@@ -479,31 +523,5 @@
                     '<span style="color:#dc2626;"><i class="fas fa-times-circle"></i> Error saving</span>';
             });
     }
-
- $(document).ready(function() {
-
-    function calculateFreightFactor() {
-        let origin = parseFloat($('#origin_charges').val()) || 0;
-        let ocean = parseFloat($('#ocean_freight').val()) || 0;
-        let destination = parseFloat($('#destination_charges').val()) || 0;
-        let drayage = parseFloat($('#drayage_cost').val()) || 0;
-        let totalFob = parseFloat($('#total_fob').val()) || 0;
-
-        let totalCost = origin + ocean + destination + drayage;
-        let factor = (totalFob > 0) ? (totalCost / totalFob) * 100 : 0;
-
-        $('#freightFactorDisplay').text(factor.toFixed(2) + '%');
-        $('#freightFactorBreakdown').text('(' + totalCost.toFixed(2) + ' / ' + totalFob.toFixed(2) + ')');
-    }
-
-    // Calculate on page load
-    calculateFreightFactor();
-
-    // Calculate live when user types
-    $('.freight-input').on('input keyup', function() {
-        calculateFreightFactor();
-    });
-
-});
 </script>
 @endsection

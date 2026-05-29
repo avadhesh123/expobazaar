@@ -12,7 +12,7 @@
                 <select name="status" style="width:100%;padding:.4rem .5rem;border:1px solid #d1d5db;border-radius:8px;font-size:.82rem;font-family:inherit;">
                     <option value="">All</option>
                     @foreach(['planning','consolidated','locked','asn_generated','in_transit','arrived','grn_pending','grn_completed','cancelled'] as $s)
-                        <option value="{{ $s }}" {{ request('status')===$s?'selected':'' }}>{{ ucfirst(str_replace('_',' ',$s)) }}</option>
+                    <option value="{{ $s }}" {{ request('status')===$s?'selected':'' }}>{{ ucfirst(str_replace('_',' ',$s)) }}</option>
                     @endforeach
                 </select>
             </div>
@@ -43,16 +43,31 @@
 
 {{-- Shipments Table --}}
 <div class="card">
-    <div class="card-header"><h3><i class="fas fa-ship" style="margin-right:.5rem;color:#1e3a5f;"></i> All Shipments</h3><span style="font-size:.78rem;color:#64748b;">{{ $shipments->total() }} total</span></div>
+    <div class="card-header">
+        <h3><i class="fas fa-ship" style="margin-right:.5rem;color:#1e3a5f;"></i> All Shipments</h3><span style="font-size:.78rem;color:#64748b;">{{ $shipments->total() }} total</span>
+    </div>
     <div class="card-body" style="padding:0;overflow-x:auto;">
         <table class="data-table">
             <thead>
-                <tr><th>Shipment Code</th><th>Type</th><th>Company / Country</th><th>Vendors</th><th>CBM</th><th>Utilization</th><th>Sailing Date</th><th>ETA</th><th>Status</th><th style="width:140px;">Actions</th></tr>
+                <tr>
+                    <th>Shipment Code</th>
+                    <th>Type</th>
+                    <th>Company / Country</th>
+                    <th>Vendors</th>
+                    <th>CBM</th>
+                    <th style="text-align:center;min-width:90px;">No. of Pallets</th>
+
+                    <th>Utilization</th>
+                    <th>Sailing Date</th>
+                    <th>ETA</th>
+                    <th>Status</th>
+                    <th style="width:140px;">Actions</th>
+                </tr>
             </thead>
             <tbody>
                 @forelse($shipments as $sh)
                 @php
-                    $utilPct = $sh->capacity_cbm > 0 ? round(($sh->total_cbm / $sh->capacity_cbm) * 100) : 0;
+                $utilPct = $sh->capacity_cbm > 0 ? round(($sh->total_cbm / $sh->capacity_cbm) * 100) : 0;
                 @endphp
                 <tr>
                     <td>
@@ -72,6 +87,15 @@
                     </td>
                     <td style="font-size:.78rem;max-width:180px;">{{ $sh->consignments->pluck('vendor.company_name')->unique()->implode(', ') }}</td>
                     <td style="font-family:monospace;font-weight:700;">{{ number_format($sh->total_cbm, 2) }}</td>
+                    <td style="text-align:center;">
+                        <input type="number" min="0" max="9999"
+                            value="{{ $sh->no_of_pallets ?? '' }}"
+                            placeholder="—"
+                            class="pallet-input"
+                            data-shipment-id="{{ $sh->id }}"
+                            style="width:70px;padding:.25rem .3rem;border:1px solid #d1d5db;border-radius:6px;font-size:.78rem;font-family:monospace;text-align:center;">
+                        <div class="pallet-status-{{ $sh->id }}" style="font-size:.5rem;height:.7rem;margin-top:.1rem;"></div>
+                    </td>
                     <td>
                         <div style="display:flex;align-items:center;gap:.4rem;">
                             <div style="flex:1;height:8px;background:#e2e8f0;border-radius:4px;min-width:60px;">
@@ -82,27 +106,27 @@
                     </td>
                     <td>
                         @if($sh->sailing_date)
-                            <div style="font-size:.82rem;font-weight:600;">{{ $sh->sailing_date->format('d M Y') }}</div>
+                        <div style="font-size:.82rem;font-weight:600;">{{ $sh->sailing_date->format('d M Y') }}</div>
                         @else
-                            <span style="font-size:.75rem;color:#e8a838;font-weight:600;">Not set</span>
+                        <span style="font-size:.75rem;color:#e8a838;font-weight:600;">Not set</span>
                         @endif
                     </td>
                     <td>
                         @if($sh->eta_date)
-                            <div style="font-size:.82rem;">{{ $sh->eta_date->format('d M Y') }}</div>
+                        <div style="font-size:.82rem;">{{ $sh->eta_date->format('d M Y') }}</div>
                         @else
-                            <span style="color:#94a3b8;font-size:.75rem;">—</span>
+                        <span style="color:#94a3b8;font-size:.75rem;">—</span>
                         @endif
                     </td>
                     <td>
                         @php
-                            $sc = [
-                                'planning'=>['badge-gray','fa-drafting-compass'],'consolidated'=>['badge-info','fa-boxes'],
-                                'locked'=>['badge-info','fa-lock'],'asn_generated'=>['badge-warning','fa-file-alt'],
-                                'in_transit'=>['badge-warning','fa-ship'],'arrived'=>['badge-success','fa-check-circle'],
-                                'grn_pending'=>['badge-warning','fa-clipboard-check'],'grn_completed'=>['badge-success','fa-check-double'],
-                                'cancelled'=>['badge-danger','fa-times-circle'],
-                            ];
+                        $sc = [
+                        'planning'=>['badge-gray','fa-drafting-compass'],'consolidated'=>['badge-info','fa-boxes'],
+                        'locked'=>['badge-info','fa-lock'],'asn_generated'=>['badge-warning','fa-file-alt'],
+                        'in_transit'=>['badge-warning','fa-ship'],'arrived'=>['badge-success','fa-check-circle'],
+                        'grn_pending'=>['badge-warning','fa-clipboard-check'],'grn_completed'=>['badge-success','fa-check-double'],
+                        'cancelled'=>['badge-danger','fa-times-circle'],
+                        ];
                         @endphp
                         <span class="badge {{ $sc[$sh->status][0] ?? 'badge-gray' }}">
                             <i class="fas {{ $sc[$sh->status][1] ?? 'fa-circle' }}" style="margin-right:.2rem;font-size:.55rem;"></i>
@@ -113,12 +137,12 @@
                         <div style="display:flex;gap:.25rem;flex-wrap:wrap;">
                             <a href="{{ route('logistics.shipments.show', $sh) }}" class="btn btn-outline btn-sm" title="View Details"><i class="fas fa-eye"></i></a>
                             @if($sh->status === 'consolidated')
-                                <button type="button" class="btn btn-primary btn-sm" title="Set Sailing Date & Lock" onclick="document.getElementById('lockPanel{{ $sh->id }}').style.display=document.getElementById('lockPanel{{ $sh->id }}').style.display==='none'?'table-row':'none'">
-                                    <i class="fas fa-lock"></i>
-                                </button>
+                            <button type="button" class="btn btn-primary btn-sm" title="Set Sailing Date & Lock" onclick="document.getElementById('lockPanel{{ $sh->id }}').style.display=document.getElementById('lockPanel{{ $sh->id }}').style.display==='none'?'table-row':'none'">
+                                <i class="fas fa-lock"></i>
+                            </button>
                             @endif
                             @if(in_array($sh->status, ['asn_generated','locked']) && $sh->asn)
-                                <a href="{{ route('logistics.asn.download', $sh->asn) }}" class="btn btn-outline btn-sm" title="Download ASN"><i class="fas fa-download"></i></a>
+                            <a href="{{ route('logistics.asn.download', $sh->asn) }}" class="btn btn-outline btn-sm" title="Download ASN"><i class="fas fa-download"></i></a>
                             @endif
                         </div>
                     </td>
@@ -142,11 +166,66 @@
                 </tr>
                 @endif
                 @empty
-                <tr><td colspan="10" style="text-align:center;padding:3rem;color:#94a3b8;"><i class="fas fa-ship" style="font-size:2.5rem;display:block;margin-bottom:.5rem;"></i>No shipments found.<br><a href="{{ route('logistics.container-planning') }}" style="color:#1e3a5f;">Create your first shipment →</a></td></tr>
+                <tr>
+                    <td colspan="10" style="text-align:center;padding:3rem;color:#94a3b8;"><i class="fas fa-ship" style="font-size:2.5rem;display:block;margin-bottom:.5rem;"></i>No shipments found.<br><a href="{{ route('logistics.container-planning') }}" style="color:#1e3a5f;">Create your first shipment →</a></td>
+                </tr>
                 @endforelse
             </tbody>
         </table>
     </div>
     @if($shipments->hasPages())<div style="padding:1rem 1.4rem;border-top:1px solid #e8ecf1;">{{ $shipments->links('pagination::tailwind') }}</div>@endif
 </div>
+<script>
+let palletTimers = {};
+document.querySelectorAll('.pallet-input').forEach(input => {
+    input.addEventListener('input', function() { debounceSavePallets(this); });
+    input.addEventListener('blur', function() { savePallets(this); });
+});
+
+function debounceSavePallets(el) {
+    const id = el.dataset.shipmentId;
+    clearTimeout(palletTimers[id]);
+    palletTimers[id] = setTimeout(() => savePallets(el), 600);
+}
+
+function savePallets(el) {
+    const id = el.dataset.shipmentId;
+    const val = el.value.trim();
+    const statusEl = document.querySelector('.pallet-status-' + id);
+
+    if (val !== '' && (isNaN(val) || parseInt(val) < 0)) {
+        if (statusEl) statusEl.innerHTML = '<span style="color:#dc2626;">Invalid</span>';
+        return;
+    }
+
+    if (statusEl) statusEl.innerHTML = '<span style="color:#e8a838;"><i class="fas fa-spinner fa-spin"></i></span>';
+
+    fetch('/logistics/shipments/' + id + '/update-pallets', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRF-TOKEN': '{{ csrf_token() }}',
+            'Accept': 'application/json',
+        },
+        body: JSON.stringify({ no_of_pallets: val === '' ? null : parseInt(val) })
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (statusEl) {
+            if (data.success) {
+                statusEl.innerHTML = '<span style="color:#16a34a;">✓ Saved</span>';
+            } else {
+                statusEl.innerHTML = '<span style="color:#dc2626;">✗ Error</span>';
+            }
+            setTimeout(() => { statusEl.innerHTML = ''; }, 3000);
+        }
+    })
+    .catch(() => {
+        if (statusEl) {
+            statusEl.innerHTML = '<span style="color:#dc2626;">✗ Failed</span>';
+            setTimeout(() => { statusEl.innerHTML = ''; }, 3000);
+        }
+    });
+}
+</script>
 @endsection

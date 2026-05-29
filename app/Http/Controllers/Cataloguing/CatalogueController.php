@@ -3,7 +3,7 @@
 namespace App\Http\Controllers\Cataloguing;
 
 use App\Http\Controllers\Controller;
-use App\Models\{PlatformPricing, Product, SalesChannel};
+use App\Models\{PlatformPricing, Product, SalesChannel, ProductCatalogue};
 use App\Services\{DashboardService, CatalogueService};
 use Illuminate\Http\Request;
 
@@ -83,13 +83,13 @@ class CatalogueController extends Controller
             })
             ->paginate(30)->withQueryString();
 
-        $channels = SalesChannel::active()->orderBy('name')->get();
+        $channels = SalesChannel::active()->whereJsonContains('company_codes', $activeCompany)->orderBy('name')->get();
         $categories = \App\Models\Category::orderBy('name')->get(['id', 'name']);
 
         return view('cataloguing.listing-panel', compact('products', 'channels', 'categories'));
     }
 
-    public function updateListings(Request $request)
+    public function updateListings1(Request $request)
     {
         $request->validate([
             'listings' => 'required|array|min:1',
@@ -146,6 +146,260 @@ class CatalogueController extends Controller
         }
     }
 
+    public function downloadListingTemplate()
+    {
+        $activeCompany = session('active_company');
+        $channels = SalesChannel::active()
+            ->when($activeCompany, fn($q) => $q->whereJsonContains('company_codes', $activeCompany))
+            ->orderBy('name')->get();
+
+        $products = Product::with('catalogues')
+            ->when($activeCompany, fn($q) => $q->where('company_code', $activeCompany))
+           // ->whereIn('status', ['approved', 'live', 'dropship', 'active'])
+            ->orderBy('sku')
+            ->get(); 
+
+        $spreadsheet = new \PhpOffice\PhpSpreadsheet\Spreadsheet();
+        $ws = $spreadsheet->getActiveSheet();
+        $ws->setTitle('Listing Template');
+
+        // ── Instructions Sheet ──
+        $instrSheet = $spreadsheet->createSheet();
+        $instrSheet->setTitle('Instructions');
+        $instructions = [
+            ['Bulk Listing Update — Instructions'],
+            [''],
+            ['Column A: Vendor SKU — Do NOT modify this column.'],
+            ['Columns B onwards: Sales Channel names.'],
+            [''],
+            ['Values:'],
+            ['  Yes  — Mark SKU as listed on this channel (creates listing if not exists)'],
+            ['  No   — Remove/unlist SKU from this channel'],
+            ['  Blank — No change, keeps current status'],
+            [''],
+            ['Values are case-insensitive (Yes, YES, yes all work)'],
+            ['Do not rename column headers.'],
+        ];
+        foreach ($instructions as $r => $row) {
+            $instrSheet->setCellValue('A' . ($r + 1), $row[0] ?? '');
+        }
+        $instrSheet->getStyle('A1')->getFont()->setBold(true)->setSize(14);
+        $instrSheet->getColumnDimension('A')->setWidth(60);
+
+        // ── Back to main sheet ──
+        $spreadsheet->setActiveSheetIndex(0);
+
+        // Headers
+        $headers = ['Vendor SKU'];
+        foreach ($channels as $ch) {
+            $headers[] = $ch->name;
+        }
+
+        $hdrStyle = [
+            'font' => ['bold' => true, 'color' => ['rgb' => 'FFFFFF'], 'size' => 10, 'name' => 'Arial'],
+            'fill' => ['fillType' => \PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID, 'startColor' => ['rgb' => '1E3A5F']],
+            'alignment' => ['horizontal' => \PhpOffice\PhpSpreadsheet\Style\Alignment::HORIZONTAL_CENTER],
+            'borders' => ['allBorders' => ['borderStyle' => \PhpOffice\PhpSpreadsheet\Style\Border::BORDER_THIN]],
+        ];
+
+        foreach ($headers as $col => $header) {
+            $cell = $ws->getCell([$col + 1, 1]);
+            $cell->setValue($header);
+        }
+        $ws->getStyle('A1:' . \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex(count($headers)) . '1')->applyFromArray($hdrStyle);
+
+        // Data rows
+        $row = 2;
+        foreach ($products as $product) {
+            $ws->getCell([1, $row])->setValue($product->sku);
+            $ws->getCell([1, $row])->getStyle()->getFont()->setName('Arial')->setSize(9);
+            $ws->getCell([1, $row])->getStyle()->getFont()->setBold(true);
+
+            foreach ($channels as $cIdx => $ch) {
+                $catalogue = $product->catalogues->firstWhere('sales_channel_id', $ch->id);
+                $val = '';
+                if ($catalogue) {
+                    $val = $catalogue->listing_status === 'listed' ? 'Yes' : 'No';
+                }
+                $cell = $ws->getCell([$cIdx + 2, $row]);
+                $cell->setValue($val);
+                $cell->getStyle()->getFont()->setName('Arial')->setSize(9);
+                $cell->getStyle()->getAlignment()->setHorizontal(\PhpOffice\PhpSpreadsheet\Style\Alignment::HORIZONTAL_CENTER);
+
+                // Color code
+                if (strtolower($val) === 'yes') {
+                    $cell->getStyle()->getFont()->setColor(new \PhpOffice\PhpSpreadsheet\Style\Color('16A34A'));
+                    $cell->getStyle()->getFont()->setBold(true);
+                } elseif (strtolower($val) === 'no') {
+                    $cell->getStyle()->getFont()->setColor(new \PhpOffice\PhpSpreadsheet\Style\Color('DC2626'));
+                }
+            }
+
+            // Alternating row color
+            if ($row % 2 === 0) {
+                $ws->getStyle('A' . $row . ':' . \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex(count($headers)) . $row)
+                    ->getFill()->setFillType(\PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID)->getStartColor()->setRGB('F8FAFC');
+            }
+
+            // Borders
+            $ws->getStyle('A' . $row . ':' . \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex(count($headers)) . $row)
+                ->getBorders()->getAllBorders()->setBorderStyle(\PhpOffice\PhpSpreadsheet\Style\Border::BORDER_THIN)->getColor()->setRGB('D1D5DB');
+
+            $row++;
+        }
+
+        // Column widths
+        $ws->getColumnDimension('A')->setWidth(18);
+        foreach ($channels as $cIdx => $ch) {
+            $ws->getColumnDimension(\PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($cIdx + 2))->setWidth(15);
+        }
+
+        $ws->setAutoFilter('A1:' . \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex(count($headers)) . '1');
+        $ws->freezePane('B2');
+
+        $filename = 'Listing-Template-' . now()->format('Y-m-d') . '.xlsx';
+        $outputPath = storage_path("app/temp/{$filename}");
+        @mkdir(storage_path('app/temp'), 0755, true);
+
+        $writer = new \PhpOffice\PhpSpreadsheet\Writer\Xlsx($spreadsheet);
+        $writer->save($outputPath);
+        $spreadsheet->disconnectWorksheets();
+
+        return response()->download($outputPath, $filename, [
+            'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        ])->deleteFileAfterSend(true);
+    }
+
+    public function uploadListings(Request $request)
+    {
+        $request->validate([
+            'listing_file' => 'required|file|max:10240|mimes:xlsx,xls,csv,txt',
+        ]);
+
+        $file = $request->file('listing_file');
+        $ext = strtolower($file->getClientOriginalExtension());
+        $fullPath = $file->getRealPath();
+
+        try {
+            // Read file
+            if (in_array($ext, ['xlsx', 'xls'])) {
+                $reader = new \PhpOffice\PhpSpreadsheet\Reader\Xlsx();
+                $reader->setReadDataOnly(false);
+                $spreadsheet = $reader->load($fullPath);
+                $rows = $spreadsheet->getActiveSheet()->toArray(null, true, true, false);
+            } else {
+                $rows = [];
+                if (($handle = fopen($fullPath, 'r')) !== false) {
+                    while (($row = fgetcsv($handle)) !== false) $rows[] = $row;
+                    fclose($handle);
+                }
+            }
+
+            if (count($rows) < 2) {
+                return back()->with('error', 'File is empty.');
+            }
+
+            // Parse header — first col is SKU, rest are channel names
+            $header = array_map(fn($h) => trim($h ?? ''), $rows[0]);
+            $skuCol = 0; // First column is always SKU
+
+            // Map channel names to IDs
+            $channelMap = [];
+            $invalidChannels = [];
+            for ($c = 1; $c < count($header); $c++) {
+                $chName = $header[$c];
+                if (empty($chName)) continue;
+                $channel = SalesChannel::where('name', $chName)->first();
+                if ($channel) {
+                    $channelMap[$c] = $channel;
+                } else {
+                    $invalidChannels[] = $chName;
+                }
+            }
+
+            if (empty($channelMap)) {
+                return back()->with('error', 'No valid channel names found in header. Invalid: ' . implode(', ', $invalidChannels));
+            }
+
+            $activeCompany = session('active_company');
+            $listed = 0;
+            $unlisted = 0;
+            $skipped = 0;
+            $errors = [];
+
+            for ($i = 1; $i < count($rows); $i++) {
+                $row = $rows[$i];
+                $rowNum = $i + 1;
+                $sku = trim($row[$skuCol] ?? '');
+                if (empty($sku)) continue;
+
+                $product = Product::withoutGlobalScopes()->where('sku', $sku)->first();
+                if (!$product) {
+                    $errors[] = "Row {$rowNum}: SKU '{$sku}' not found.";
+                    continue;
+                }
+
+                foreach ($channelMap as $colIdx => $channel) {
+                    $val = strtolower(trim($row[$colIdx] ?? ''));
+
+                    if ($val === '') {
+                        $skipped++;
+                        continue; // Blank = no change
+                    }
+
+                    if (!in_array($val, ['yes', 'no'])) {
+                        $errors[] = "Row {$rowNum}, {$channel->name}: Invalid value '{$row[$colIdx]}'. Use Yes or No.";
+                        continue;
+                    }
+
+                    if ($val === 'yes') {
+                        // Create or update listing
+                        ProductCatalogue::updateOrCreate(
+                            ['product_id' => $product->id, 'sales_channel_id' => $channel->id],
+                            [
+                                'company_code'   => $activeCompany ?? $product->company_code,
+                                'listing_status'  => 'listed',
+                                'listing_sku'     => $product->sku,
+                                'listed_by'       => auth()->id(),
+                                'listed_at'       => now(),
+                            ]
+                        );
+                        $listed++;
+                    } elseif ($val === 'no') {
+                        // Unlist
+                        $catalogue = ProductCatalogue::where('product_id', $product->id)
+                            ->where('sales_channel_id', $channel->id)
+                            ->first();
+                        if ($catalogue) {
+                            $catalogue->update(['listing_status' => 'unlisted']);
+                            $unlisted++;
+                        }
+                    }
+                }
+            }
+
+            $msg = "{$listed} listed, {$unlisted} unlisted, {$skipped} unchanged.";
+            if (!empty($invalidChannels)) {
+                $msg .= ' Unrecognized channels: ' . implode(', ', $invalidChannels) . '.';
+            }
+            if (!empty($errors)) {
+                $msg .= ' ' . count($errors) . ' error(s).';
+            }
+
+            return back()
+                ->with($listed + $unlisted > 0 ? 'success' : 'error', $msg)
+                ->with('listing_errors', $errors);
+        } catch (\Exception $e) {
+            \Log::error('Listing upload failed: ' . $e->getMessage());
+            return back()->with('error', 'Upload failed: ' . $e->getMessage());
+        }
+    }
+    public function updateListings(Request $request)
+    {
+        $request->validate(['listings' => 'required|array|min:1']);
+        $this->catalogueService->updateListingStatus($request->listings, auth()->user());
+        return back()->with('success', 'Listing status updated.');
+    }
     public function skuDashboard(Request $request)
     {
         // $companyCode = $request->get('company_code', '2100');
@@ -253,7 +507,7 @@ class CatalogueController extends Controller
             $weightConverter = 2.20462; // KG to LBS
             $lwhConverter    = 1;       // INCH
         } else {
-            $weightUnit      = 'LBS';
+            $weightUnit      = 'GRAMS';
             $lwhUnit         = 'CM';
             $weightConverter = 1000; // KG to GRAMS
             $lwhConverter    = 2.54;    // INCH to CM

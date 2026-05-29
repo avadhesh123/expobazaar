@@ -29,7 +29,7 @@
 <div class="card">
     <div class="card-header"><h3><i class="fas fa-shopping-cart" style="margin-right:.5rem;color:#1e3a5f;"></i> Orders</h3><span style="font-size:.78rem;color:#64748b;">{{ $orders->total() }} orders</span></div>
     <div class="card-body" style="padding:0;overflow-x:auto;">
-        <table class="data-table">
+        <table class="data-table">ffffffffffff
             <thead><tr><th>Order #</th><th>Date</th><th>Customer</th><th>Channel</th><th>Items</th><th>Amount</th><th>Status</th><th>Payment</th><th>Action</th></tr></thead>
             <tbody>
                 @forelse($orders as $o)

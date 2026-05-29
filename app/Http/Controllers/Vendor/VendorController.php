@@ -2235,13 +2235,21 @@ class VendorController extends Controller
      */
     public function downloadContract()
     {
-        $path = public_path('downloads/Consignment_Contract_ExpoBazaar.pdf');
+        // $path = public_path('downloads/Consignment_Contract_ExpoBazaar.pdf');
+
+        $activeCompany = session('active_company');
+        $contractFile = 'EU_Contract.docx';
+        if ($activeCompany === '2100') {
+            $contractFile = 'US_Contract.docx';
+        }
+
+        $path = storage_path('app/public/downloads/' . $contractFile);
 
         if (!file_exists($path)) {
             return back()->with('error', 'Contract file not found. Please contact support.');
         }
 
-        return response()->download($path, 'Consignment_Contract_ExpoBazaar.pdf');
+        return response()->download($path, $activeCompany.'_'.$contractFile);
     }
 
     /**

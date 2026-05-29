@@ -46,7 +46,7 @@
                 <div class="form-group">
                     <label>Company Codes</label>
                     <div style="display:flex;gap:1rem;">
-                        @foreach(['2000'=>'India','2100'=>'USA','2200'=>'NL'] as $code=>$name)
+                        @foreach(['2100'=>'USA','2200'=>'NL','2400'=>'EU'] as $code=>$name)
                         <label style="display:flex;align-items:center;gap:.3rem;font-size:.82rem;cursor:pointer;">
                             <input type="checkbox" name="company_codes[]" value="{{ $code }}" checked style="accent-color:#1e3a5f;">{{ $code }} {{ $name }}
                         </label>
@@ -129,7 +129,7 @@
                                 <div>
                                     <label style="font-size:.6rem;font-weight:600;color:#64748b;display:block;">Companies</label>
                                     <div style="display:flex;gap:.4rem;">
-                                        @foreach(['2000','2100','2200'] as $code)
+                                        @foreach(['2100','2200','2400'] as $code)
                                         <label style="display:flex;align-items:center;gap:.15rem;font-size:.72rem;cursor:pointer;">
                                             <input type="checkbox" name="company_codes[]" value="{{ $code }}" {{ in_array($code, $ch->company_codes ?? []) ? 'checked' : '' }} style="accent-color:#1e3a5f;">{{ $code }}
                                         </label>

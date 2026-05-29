@@ -192,12 +192,14 @@ Route::middleware(['auth'])->group(function () {
             Route::post('shipments/{shipment}/logistics', [LogisticsController::class, 'saveLogistics'])->name('shipments.logistics');
             Route::post('shipments/{shipment}/entry-summary', [LogisticsController::class, 'uploadEntrySummary'])->name('shipments.entry-summary');
             Route::post('shipments/{shipment}/update-status', [LogisticsController::class, 'updateShipmentStatus'])->name('shipments.update-status');
+            Route::post('shipments/{shipment}/update-pallets', [LogisticsController::class, 'updatePallets'])->name('shipments.update-pallets');
+
+            Route::get('warehouse-pallets', [LogisticsController::class, 'warehousePallets'])->name('warehouse-pallets');
+            Route::post('warehouse-pallets', [LogisticsController::class, 'storeWarehousePallet'])->name('warehouse-pallets.store');
 
             // Route::get('grn', [LogisticsController::class, 'grnList'])->name('grn');
 
-            Route::get('grn', [LogisticsController::class, 'grnList'])
-                ->middleware('permission:logistics.grn.view')
-                ->name('grn');
+            Route::get('grn', [LogisticsController::class, 'grnList'])->middleware('permission:logistics.grn.view')->name('grn');
 
             Route::get('grn/{grn}/show', [LogisticsController::class, 'showGrn'])->name('grn.show');
             Route::get('grn/{shipment}/upload', [LogisticsController::class, 'uploadGrn'])->name('grn.upload');
@@ -246,7 +248,10 @@ Route::middleware(['auth'])->group(function () {
         Route::get('pricing-sheets/download', [CatalogueController::class, 'downloadPricingSheet'])->name('pricing-sheets.download');
         Route::post('catalogue/upload', [CatalogueController::class, 'uploadCatalogue'])->name('catalogue.upload');
         Route::get('listing-panel', [CatalogueController::class, 'listingPanel'])->name('listing-panel');
+        Route::get('listing-panel/download-template', [CatalogueController::class, 'downloadListingTemplate'])->name('listing-panel.download-template');
+        Route::post('listing-panel/upload', [CatalogueController::class, 'uploadListings'])->name('listing-panel.upload');
         Route::post('listings/update', [CatalogueController::class, 'updateListings'])->name('listings.update');
+
         Route::get('sku-dashboard', [CatalogueController::class, 'skuDashboard'])->name('sku-dashboard');
     });
 
@@ -266,13 +271,23 @@ Route::middleware(['auth'])->group(function () {
         Route::post('to-be-shipped/{order}/update', [SalesController::class, 'updateShipping'])->name('to-be-shipped.update');
         Route::get('order-management', [SalesController::class, 'orderManagement'])->name('order-management');
         Route::post('order-management/{order}/update-costs', [SalesController::class, 'updateCosts'])->name('order-management.update-costs');
-
         Route::get('order-management', [SalesController::class, 'orderManagement'])->name('order-management');
         Route::post('order-management/{order}/update', [SalesController::class, 'updateOrderManagement'])->name('order-management.update');
+        Route::post('orders/{order}/tracking', [SalesController::class, 'storeTracking'])->name('orders.tracking.store');
+        Route::post('orders/{order}/cancel', [SalesController::class, 'cancelOrder'])->name('orders.cancel');
+        Route::post('orders/{order}/status', [SalesController::class, 'updateOrderStatus'])->name('orders.status.update');
 
         Route::get('download-template', [SalesController::class, 'downloadTemplate'])->name('download-template');
-        Route::post('orders/{order}/tracking', [SalesController::class, 'updateTracking'])->name('orders.tracking');
+        Route::post('orders/{order}/update-tracking', [SalesController::class, 'updateTracking'])->name('orders.update-tracking');
         Route::post('orders/bulk-tracking', [SalesController::class, 'bulkUpdateTracking'])->name('orders.bulk-tracking');
+
+        // Order Returns
+        Route::get('returns', [SalesController::class, 'returns'])->name('returns');
+        Route::get('returns/create', [SalesController::class, 'createReturn'])->name('returns.create');
+        Route::post('returns', [SalesController::class, 'storeReturn'])->name('returns.store');
+        Route::get('returns/{orderReturn}', [SalesController::class, 'showReturn'])->name('returns.show');
+        Route::post('returns/{orderReturn}/update-status', [SalesController::class, 'updateReturnStatus'])->name('returns.update-status');
+        Route::post('returns/{orderReturn}/restock', [SalesController::class, 'restockReturn'])->name('returns.restock');
     });
 
 

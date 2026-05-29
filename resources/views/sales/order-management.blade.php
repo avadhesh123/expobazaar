@@ -6,7 +6,7 @@
 {{-- KPIs --}}
 <div style="display:flex;gap:1rem;margin-bottom:1.25rem;">
     <div class="kpi-card" style="flex:1;border-left:3px solid #1e40af;">
-        <div class="kpi-label">Total Shipped</div>
+        <div class="kpi-label">Total Label Created</div>
         <div class="kpi-value" style="color:#1e40af;">{{ $stats['total_shipped'] }}</div>
     </div>
     <div class="kpi-card" style="flex:1;border-left:3px solid #e8a838;">
@@ -38,12 +38,17 @@
                 </select></div>
             <div style="min-width:120px;"><label style="font-size:.7rem;font-weight:600;color:#64748b;display:block;margin-bottom:.25rem;">Status</label><select name="status" style="width:100%;padding:.4rem .5rem;border:1px solid #d1d5db;border-radius:8px;font-size:.82rem;">
                     <option value="">All</option>
-                    <option value="in_transit" {{ request('status')==='in_transit'?'selected':'' }}>In Transit</option>
-                    <option value="out_for_delivery" {{ request('status')==='out_for_delivery'?'selected':'' }}>Out for Delivery</option>
+                    <option value="open" {{ request('status')==='open'?'selected':'' }}>In Open</option>
+                    <option value="label_created" {{ request('status')==='label_created'?'selected':'' }}>Label Created</option>
+                    <option value="cancelled" {{ request('status')==='cancelled'?'selected':'' }}>Cancelled</option>
+                    <option value="shipped" {{ request('status')==='shipped'?'selected':'' }}>Shipped</option>
                     <option value="delivered" {{ request('status')==='delivered'?'selected':'' }}>Delivered</option>
+                    <!-- <option value="out_for_delivery" {{ request('status')==='out_for_delivery'?'selected':'' }}>Out for Delivery</option> -->
                     <option value="returned" {{ request('status')==='returned'?'selected':'' }}>Returned</option>
                     <option value="exception" {{ request('status')==='exception'?'selected':'' }}>Exception</option>
-                </select></div>
+                    <option value="lost_in_transit" {{ request('status')==='lost_in_transit'?'selected':'' }}>Lost in transit</option>
+
+                 </select></div>
             <div style="flex:1;min-width:150px;"><label style="font-size:.7rem;font-weight:600;color:#64748b;display:block;margin-bottom:.25rem;">Search</label><input type="text" name="search" value="{{ request('search') }}" placeholder="PO, Tracking, Invoice..." style="width:100%;padding:.4rem .5rem;border:1px solid #d1d5db;border-radius:8px;font-size:.82rem;"></div>
             <button type="submit" class="btn btn-primary btn-sm"><i class="fas fa-filter"></i></button>
             <a href="{{ route('sales.order-management') }}" class="btn btn-outline btn-sm"><i class="fas fa-times"></i></a>
@@ -81,7 +86,8 @@
                     <th style="background:#eef2ff;min-width:90px;">Delivery Date</th>
                     <th style="background:#eef2ff;text-align:center;">Ageing</th>
                     <th style="background:#eef2ff;min-width:70px;">Material Cost</th>
-                    <th style="background:#eef2ff;min-width:70px;">Processing</th>
+                    <th style="background:#eef2ff;min-width:70px;">Processing Cost</th>
+                                        <th style="background:#eef2ff;min-width:70px;">Shipping Cost</th>
                     <th style="background:#eef2ff;min-width:80px;">Remarks</th>
                     <th>Save</th>
                 </tr>
@@ -154,6 +160,9 @@
                         <td style="background:#eef2ff;">
                             <input type="number" step="0.01" name="order_processing_charges" value="{{ $o->order_processing_charges }}" placeholder="0.00"
                                 style="width:60px;padding:.2rem .25rem;border:1px solid #c7d2fe;border-radius:4px;font-size:.72rem;font-family:monospace;text-align:right;">
+                        </td> <td style="background:#eef2ff;">
+                            <input type="number" step="0.01" name="shipping_cost" value="{{ $o->shipping_cost }}" placeholder="0.00"
+                                style="width:60px;padding:.2rem .25rem;border:1px solid #c7d2fe;border-radius:4px;font-size:.72rem;font-family:monospace;text-align:right;">
                         </td>
                         <td style="background:#eef2ff;">
                             <input type="text" name="remarks" value="{{ $o->remarks }}" placeholder="..."
@@ -166,7 +175,7 @@
                 </form>
                 @empty
                 <tr>
-                    <td colspan="22" style="text-align:center;padding:3rem;color:#94a3b8;"><i class="fas fa-box-open" style="font-size:2rem;display:block;margin-bottom:.5rem;"></i>No shipped orders found. Ship orders from the <a href="{{ route('sales.to-be-shipped') }}">To Be Shipped</a> tab first.</td>
+                    <td colspan="23" style="text-align:center;padding:3rem;color:#94a3b8;"><i class="fas fa-box-open" style="font-size:2rem;display:block;margin-bottom:.5rem;"></i>No shipped orders found. Ship orders from the <a href="{{ route('sales.to-be-shipped') }}">To Be Shipped</a> tab first.</td>
                 </tr>
                 @endforelse
             </tbody>

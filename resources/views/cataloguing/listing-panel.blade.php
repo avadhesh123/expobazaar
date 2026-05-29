@@ -3,20 +3,81 @@
 @section('page-title', 'Platform Listing Panel')
 
 @section('content')
+
+
+{{-- Bulk Listing Upload/Download Section --}}
+{{-- Add this at the top of cataloguing/listing-panel.blade.php, after the filters --}}
+
+<div class="card" style="margin-bottom:1.25rem;">
+    <div class="card-header">
+        <h3><i class="fas fa-file-excel" style="margin-right:.5rem;color:#16a34a;"></i> Bulk Listing Update</h3>
+        <a href="{{ route('cataloguing.listing-panel.download-template') }}" class="btn btn-outline btn-sm" style="border-color:#16a34a;color:#16a34a;">
+            <i class="fas fa-download"></i> Download Template & Status Report
+        </a>
+    </div>
+    <div class="card-body">
+        <div style="display:flex;gap:1.5rem;align-items:flex-start;">
+            {{-- Instructions --}}
+            <div style="flex:1;font-size:.75rem;color:#64748b;line-height:1.6;">
+                <div style="font-weight:700;color:#0d1b2a;margin-bottom:.3rem;">How it works:</div>
+                <div><span style="display:inline-block;padding:.1rem .4rem;background:#f0fdf4;border-radius:3px;color:#16a34a;font-weight:700;font-size:.68rem;">Yes</span> — List SKU on the channel (creates if not exists)</div>
+                <div><span style="display:inline-block;padding:.1rem .4rem;background:#fef2f2;border-radius:3px;color:#dc2626;font-weight:700;font-size:.68rem;">No</span> — Unlist SKU from the channel</div>
+                <div><span style="display:inline-block;padding:.1rem .4rem;background:#f1f5f9;border-radius:3px;color:#94a3b8;font-weight:700;font-size:.68rem;">Blank</span> — No change</div>
+            </div>
+
+            {{-- Upload Form --}}
+            <form method="POST" action="{{ route('cataloguing.listing-panel.upload') }}" enctype="multipart/form-data" style="display:flex;gap:.5rem;align-items:flex-end;">
+                @csrf
+                <div>
+                    <label style="font-size:.68rem;font-weight:600;color:#64748b;display:block;margin-bottom:.2rem;">Upload Completed Template</label>
+                    <input type="file" name="listing_file" required accept=".xlsx,.xls,.csv" style="font-size:.78rem;">
+                </div>
+                <button type="submit" class="btn btn-primary btn-sm" onclick="return confirm('Upload and update listings?')">
+                    <i class="fas fa-upload"></i> Upload
+                </button>
+            </form>
+        </div>
+    </div>
+</div>
+
+{{-- Upload Results --}}
+@if(session('listing_errors') && count(session('listing_errors')) > 0)
+<div class="card" style="margin-bottom:1.25rem;">
+    <div class="card-header">
+        <h3 style="color:#dc2626;">Upload Errors</h3>
+    </div>
+    <div class="card-body" style="padding:.5rem 1rem;">
+        <div style="max-height:150px;overflow-y:auto;font-size:.72rem;">
+            @foreach(session('listing_errors') as $err)
+            <div style="padding:.15rem 0;border-bottom:1px solid #fecaca;color:#dc2626;">{{ $err }}</div>
+            @endforeach
+        </div>
+    </div>
+</div>
+@endif
+
 {{-- Filters --}}
 <div class="card" style="margin-bottom:1.25rem;">
     <div class="card-body" style="padding:.85rem 1.4rem;">
         <form method="GET" action="{{ route('cataloguing.listing-panel') }}" style="display:flex;flex-wrap:wrap;gap:.6rem;align-items:flex-end;">
             <div style="flex:1;min-width:180px;"><label style="font-size:.7rem;font-weight:600;color:#64748b;display:block;margin-bottom:.25rem;">Search</label><input type="text" name="search" value="{{ request('search') }}" placeholder="SKU or product name..." style="width:100%;padding:.4rem .65rem;border:1px solid #d1d5db;border-radius:8px;font-size:.82rem;font-family:inherit;"></div>
             <!-- <div style="min-width:110px;"><label style="font-size:.7rem;font-weight:600;color:#64748b;display:block;margin-bottom:.25rem;">Company</label><select name="company_code" style="width:100%;padding:.4rem .5rem;border:1px solid #d1d5db;border-radius:8px;font-size:.82rem;font-family:inherit;"><option value="">All</option><option value="2000" {{ request('company_code')==='2000'?'selected':'' }}>2000</option><option value="2100" {{ request('company_code')==='2100'?'selected':'' }}>2100</option><option value="2200" {{ request('company_code')==='2200'?'selected':'' }}>2200</option></select></div> -->
-            <div style="min-width:130px;"><label style="font-size:.7rem;font-weight:600;color:#64748b;display:block;margin-bottom:.25rem;">Category</label><select name="category_id" style="width:100%;padding:.4rem .5rem;border:1px solid #d1d5db;border-radius:8px;font-size:.82rem;font-family:inherit;"><option value="">All</option>@foreach($categories as $cat)<option value="{{ $cat->id }}" {{ request('category_id')==(string)$cat->id?'selected':'' }}>{{ $cat->name }}</option>@endforeach</select></div>
-            <div style="min-width:130px;"><label style="font-size:.7rem;font-weight:600;color:#64748b;display:block;margin-bottom:.25rem;">Listing</label><select name="listing_filter" style="width:100%;padding:.4rem .5rem;border:1px solid #d1d5db;border-radius:8px;font-size:.82rem;font-family:inherit;"><option value="">All</option><option value="fully_listed" {{ request('listing_filter')==='fully_listed'?'selected':'' }}>Fully Listed</option><option value="partially_listed" {{ request('listing_filter')==='partially_listed'?'selected':'' }}>Partially Listed</option><option value="not_listed" {{ request('listing_filter')==='not_listed'?'selected':'' }}>Not Listed</option></select></div>
+            <div style="min-width:130px;"><label style="font-size:.7rem;font-weight:600;color:#64748b;display:block;margin-bottom:.25rem;">Category</label><select name="category_id" style="width:100%;padding:.4rem .5rem;border:1px solid #d1d5db;border-radius:8px;font-size:.82rem;font-family:inherit;">
+                    <option value="">All</option>@foreach($categories as $cat)<option value="{{ $cat->id }}" {{ request('category_id')==(string)$cat->id?'selected':'' }}>{{ $cat->name }}</option>@endforeach
+                </select></div>
+            <div style="min-width:130px;">
+                <label style="font-size:.7rem;font-weight:600;color:#64748b;display:block;margin-bottom:.25rem;">Listing</label>
+                <select name="listing_status" style="width:100%;padding:.4rem .5rem;border:1px solid #d1d5db;border-radius:8px;font-size:.82rem;font-family:inherit;">
+                    <option value="">All Status</option>
+                    <option value="listed" {{ request('listing_status') === 'listed' ? 'selected' : '' }}>Listed</option>
+                    <option value="unlisted" {{ request('listing_status') === 'unlisted' ? 'selected' : '' }}>Not Listed</option>
+                </select>
+            </div>
             <button type="submit" class="btn btn-primary btn-sm"><i class="fas fa-filter"></i></button>
             <a href="{{ route('cataloguing.listing-panel') }}" class="btn btn-outline btn-sm"><i class="fas fa-times"></i></a>
         </form>
     </div>
 </div>
-
 {{-- Info --}}
 <div style="padding:.6rem 1rem;background:#eff6ff;border-radius:8px;border:1px solid #bfdbfe;margin-bottom:1rem;font-size:.78rem;color:#1e40af;display:flex;align-items:center;gap:.4rem;">
     <i class="fas fa-info-circle"></i> Check the platforms where each SKU is listed. Update listing status, listing URL, and Shopify store URL, then click "Save All Changes".
@@ -51,54 +112,25 @@
                     </tr>
                 </thead>
                 <tbody>
-                    @php $listIdx = 0; @endphp
-                    @forelse($products as $product)
+                    @foreach($products as $p)
                     <tr>
-                        <td style="font-family:monospace;font-weight:600;font-size:.82rem;">{{ $product->sku }}</td>
-                        <td>
-                            <div style="font-size:.82rem;font-weight:500;">{{ Str::limit($product->name, 35) }}</div>
-                            <div style="font-size:.65rem;color:#94a3b8;">{{ $product->category->name ?? '' }}</div>
-                        </td>
-                        <td style="font-size:.78rem;color:#64748b;">{{ $product->vendor->company_name ?? '—' }}</td>
-                       
+                        <td style="font-family:monospace;font-weight:700;">{{ $p->sku }}</td>
+                        <td>{{ Str::limit($p->name, 30) }}</td>
+                        <td style="font-size:.72rem;">{{ $p->vendor->company_name ?? '—' }}</td>
                         @foreach($channels as $ch)
-                        @php
-                            $productId = $product->id;
-                            $catalogue = $product->catalogues->where('sales_channel_id', $ch->id)->first();
-                            // $isListed = $catalogue && $catalogue->listing_status === 'listed';
-                            $skuListing = is_string($product->platform_listing_status ?? null)
-                            ? json_decode($product->platform_listing_status,true)
-                            : ($product->platform_listing_status ?? []);
-                            
-                            $isListed = $skuListing && isset($skuListing[$ch->id]) && $skuListing[$ch->id] === 'listed';
-                        @endphp
+                        @php $cat = $p->catalogues->firstWhere('sales_channel_id', $ch->id); @endphp
                         <td style="text-align:center;">
-                            <input type="hidden" name="listings[{{ $listIdx }}][product_id]" value="{{ $product->id }}">
-                            <input type="hidden" name="listings[{{ $listIdx }}][sales_channel_id]" value="{{ $ch->id }}">
-                            <input type="hidden" name="listings[{{ $listIdx }}][company_code]" value="{{ $product->company_code }}">
-                            <label style="display:flex;flex-direction:column;align-items:center;gap:.15rem;cursor:pointer;">
-                                <input type="hidden" name="listings[{{ $listIdx }}][listing_status]" value="not_listed">
-                                <input type="checkbox" name="listings[{{ $listIdx }}][listing_status]" value="listed"
-                                    {{ $isListed ? 'checked' : '' }}
-                                    style="width:18px;height:18px;accent-color:#16a34a;"
-                                    onchange="this.previousElementSibling.disabled=this.checked;">
-                                @if($catalogue && $catalogue->listing_url)
-                                    <a href="{{ $catalogue->listing_url }}" target="_blank" style="font-size:.55rem;color:#1e40af;">view</a>
-                                @endif
-                            </label>
-                        </td>
-                        @php $listIdx++; @endphp
-                        @endforeach
-                        <td>                          
-                            <input type="text" name="shopify_url[{{ $productId }}]" value="{{ $product->shopify_url ?? '' }}" placeholder="Shopify URL..." style="width:140px;padding:.25rem .4rem;border:1px solid #e2e8f0;border-radius:5px;font-size:.72rem;">
-                            @if($product->shopify_url)
-                                <a href="{{ $product->shopify_url }}" target="_blank" style="font-size:.55rem;color:#1e40af;">view</a>
+                            @if($cat && $cat->listing_status === 'listed')
+                            <span style="color:#16a34a;font-weight:700;" title="Listed on {{ $ch->name }}"><i class="fas fa-check-circle"></i></span>
+                            @elseif($cat && $cat->listing_status === 'unlisted')
+                            <span style="color:#dc2626;" title="Unlisted from {{ $ch->name }}"><i class="fas fa-times-circle"></i></span>
+                            @else
+                            <span style="color:#d1d5db;" title="Not configured"><i class="fas fa-minus-circle"></i></span>
                             @endif
                         </td>
+                        @endforeach
                     </tr>
-                    @empty
-                    <tr><td colspan="{{ 3 + $channels->count() + 1 }}" style="text-align:center;padding:3rem;color:#94a3b8;"><i class="fas fa-list" style="font-size:2rem;display:block;margin-bottom:.5rem;"></i>No products found.</td></tr>
-                    @endforelse
+                    @endforeach
                 </tbody>
             </table>
         </div>
