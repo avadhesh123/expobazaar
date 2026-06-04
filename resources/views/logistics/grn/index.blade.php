@@ -132,7 +132,10 @@
                         </span>
                     </td>
                     <td><span class="badge {{ $grn->status==='completed'?'badge-success':($grn->status==='verified'?'badge-info':'badge-warning') }}">{{ ucfirst($grn->status) }}</span></td>
-                    <td><a href="{{ route('logistics.grn.show', $grn) }}" class="btn btn-outline btn-sm"><i class="fas fa-eye"></i> View</a></td>
+                    <td style="white-space:nowrap;">
+                        <a href="{{ route('logistics.grn.show', $grn) }}" class="btn btn-outline btn-sm" title="View"><i class="fas fa-eye"></i></a>
+                        <a href="{{ route('logistics.grn.download', $grn) }}" class="btn btn-outline btn-sm" title="Download"><i class="fas fa-download" style="color:#16a34a;"></i></a>
+                    </td>
                 </tr>
                 @empty
                 <tr>

@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\{FinanceReceivable, Chargeback, VendorPayout, Vendor, Order, SalesChannel, LiveSheet};
 use App\Services\{DashboardService, FinanceService, VendorService};
 use Illuminate\Http\Request;
+use App\Services\VendorPayoutService;
 
 use function PHPUnit\Framework\isArray;
 
@@ -65,11 +66,11 @@ class FinanceController extends Controller
 
     // ─── RECEIVABLES ─────────────────────────────────────────────
     public function receivables(Request $request)
-    {        
+    {
         $activeCode = session('active_company');
 
         $receivables = FinanceReceivable::with('order.salesChannel', 'order.chargebacks')
-            ->where('company_code', $activeCode)             
+            ->where('company_code', $activeCode)
             ->when($request->status, fn($q, $v) => $q->where('payment_status', $v))
             ->when($request->channel, fn($q, $v) => $q->where('sales_channel_id', $v))
             ->when($request->payment_status, fn($q, $v) => $q->where('payment_status', $v))
@@ -78,22 +79,9 @@ class FinanceController extends Controller
             ->latest()
             ->paginate(30);
 
-        // $sql = $receivables->toSql();
-        // $bindings = $receivables->getBindings();
-
-        // foreach ($bindings as $binding) {
-        //     $value = is_numeric($binding) ? $binding : "'".addslashes($binding)."'";
-        //     $sql = preg_replace('/\?/', $value, $sql, 1);
-        // }
-
-        // dd("Final SQL Query:", $sql);
-
-        //  //print $receivables->appends($request->query()); 
-        //   exit;
-        //        $channels = SalesChannel::where('is_active', true)->get();
 
         $channels = SalesChannel::where('is_active', true)
-            ->whereJsonContains('company_codes', $activeCode) 
+            ->whereJsonContains('company_codes', $activeCode)
             ->orderBy('name')
             ->get();
 
@@ -286,12 +274,11 @@ class FinanceController extends Controller
 
     // ─── VENDOR PAYOUTS ──────────────────────────────────────────
     public function payouts(Request $request)
-    { 
+    {
         $activeCode = session('active_company');
 
         $payouts = VendorPayout::with('vendor')
-            ->where('company_code', $activeCode) 
-            //  ->when($request->company_code, fn($q, $v) => $q->where('company_code', $v))
+            ->where('company_code', $activeCode)
             ->when($request->vendor_id, fn($q, $v) => $q->where('vendor_id', $v))
             ->when($request->status, fn($q, $v) => $q->where('status', $v))
             ->when($request->month, fn($q, $v) => $q->where('payout_month', $v))
@@ -299,15 +286,15 @@ class FinanceController extends Controller
             ->latest()
             ->paginate(20);
 
-        // Vendors list - also filtered by user company
         $vendors = Vendor::active()->orderBy('company_name')
-            ->where('company_code', [$activeCode]) 
+            ->where(function ($q) use ($activeCode) {
+                $q->where('company_code', $activeCode)
+                    ->orWhereHas('user', fn($uq) => $uq->whereJsonContains('company_codes', $activeCode));
+            })
             ->get();
 
-        // KPI summary for the header cards
         try {
-            $summaryQuery = VendorPayout::query()
-                 ->where('company_code', [$activeCode]) ;
+            $summaryQuery = VendorPayout::where('company_code', $activeCode);
 
             $summary = [
                 'total_payouts' => (float) (clone $summaryQuery)
@@ -324,226 +311,136 @@ class FinanceController extends Controller
                     ->where('status', 'paid')
                     ->whereNull('vendor_invoice_file')
                     ->count(),
+
+                'total_shipped_qty' => (int) (clone $summaryQuery)
+                    ->whereIn('status', ['calculated', 'approved', 'payment_pending'])
+                    ->sum('total_shipped_qty'),
             ];
         } catch (\Exception $e) {
-            \Log::warning('Payout summary calculation failed: ' . $e->getMessage());
-            $summary = [
-                'total_payouts'    => 0,
-                'paid_this_month'  => 0,
-                'pending_invoices' => 0,
-            ];
+            \Log::warning('Payout summary failed: ' . $e->getMessage());
+            $summary = ['total_payouts' => 0, 'paid_this_month' => 0, 'pending_invoices' => 0, 'total_shipped_qty' => 0];
         }
 
         return view('finance.payouts.index', compact('payouts', 'vendors', 'summary'));
     }
 
+    // ─── SHOW PAYOUT DETAIL ──────────────────────────────────────
+
     public function showPayout(VendorPayout $payout)
     {
-        if ($payout->company_code !== session('active_company')) {
+        $activeCompany = session('active_company');
+        if ($activeCompany && $payout->company_code !== $activeCompany) {
             return redirect()->route('finance.payouts')
                 ->with('error', 'This payout does not belong to your active company.');
-            exist;
         }
 
         $payout->load('vendor');
 
-        // Get orders for this vendor in this payout period
-        $orders = Order::whereHas('items', fn($q) => $q->where('vendor_id', $payout->vendor_id))
+        // Use saved snapshot if available, otherwise recalculate
+        $snapshot = $payout->calculation_snapshot;
+
+        if (!empty($snapshot) && !request('recalculate')) {
+            // ── Read from saved snapshot ──
+            $lineItems = collect($snapshot['line_items'] ?? [])->map(fn($i) => (object) $i);
+
+            $payoutSummary = $snapshot['summary'] ?? [
+                'total_qty' => $lineItems->sum('qty'),
+                'total_sales' => $lineItems->sum('sale_amount'),
+                'total_commission' => $lineItems->sum('commission'),
+                'total_payout' => $lineItems->sum('net_payout'),
+                'total_warehouse_charges' => $payout->total_warehouse_charges ?? 0,
+                'total_chargebacks' => $payout->total_chargebacks ?? 0,
+                'net_payout' => $payout->net_payout ?? 0,
+            ];
+
+            // Load warehouse charges and chargebacks (live data for display)
+            $warehouseCharges = \App\Models\VendorMonthlyCharge::withoutGlobalScopes()
+                ->where('vendor_id', $payout->vendor_id)
+                ->where('company_code', $payout->company_code)
+                ->where('charge_month', $payout->payout_month)
+                ->where('charge_year', $payout->payout_year)
+                ->with('warehouse')
+                ->get();
+                echo '<pre>';
+print_r( $warehouseCharges->toArray());exit;
+            $chargebacks = Chargeback::withoutGlobalScopes()
+                ->where('vendor_id', $payout->vendor_id)
+                ->whereHas('order', fn($q) => $q->withoutGlobalScopes()->where('company_code', $payout->company_code))
+                ->where('status', 'confirmed')
+                ->whereMonth('confirmed_at', $payout->payout_month)
+                ->whereYear('confirmed_at', $payout->payout_year)
+                ->with(['order' => fn($q) => $q->withoutGlobalScopes()])
+                ->get();
+
+            $calculatedAt = $snapshot['calculated_at'] ?? null;
+        } else {
+            // ── Recalculate live ──
+            $service = new \App\Services\VendorPayoutService();
+            $data = $service->buildPayoutData($payout->vendor_id, $payout->company_code, $payout->payout_month, $payout->payout_year);
+
+            $lineItems = collect($data['line_items'])->map(fn($i) => (object) $i);
+            $payoutSummary = $data['summary'];
+            $warehouseCharges = $data['warehouse_charges'];
+            $chargebacks = $data['chargebacks'];
+            $calculatedAt = null;
+        }
+
+        $orders = Order::withoutGlobalScopes()
+            ->whereHas('items', fn($q) => $q->where('vendor_id', $payout->vendor_id)->where('shipped_qty', '>', 0))
+            ->where('company_code', $payout->company_code)
             ->whereMonth('order_date', $payout->payout_month)
             ->whereYear('order_date', $payout->payout_year)
-            ->with(['salesChannel', 'receivable', 'items' => fn($q) => $q->where('vendor_id', $payout->vendor_id)->with('product')])
+            ->whereIn('status', ['shipped', 'delivered'])
+            ->with('salesChannel')
             ->get();
 
-
-        // Before the loop — build FIFO commission map per product for this vendor
-        $vendorLiveSheets = \App\Models\LiveSheet::where('vendor_id', $payout->vendor_id)
-            ->where('status', 'locked') // Only consider locked sheets for commission (approved but not yet paid out)
-            ->orderBy('approved_at', 'asc') // FIFO — oldest first
-            ->with(['items' => fn($q) => $q->select('id', 'live_sheet_id', 'product_id', 'quantity', 'product_details')])
-            ->get();
-
-        // Build FIFO queue with BOTH vendor_wsp and commission per batch
-        $fifoQueue = [];
-        foreach ($vendorLiveSheets as $ls) {
-            $commPercent = floatval($ls->commission_percentage ?? 0);
-            foreach ($ls->items as $lsItem) {
-                $pid = $lsItem->product_id;
-                $d = $lsItem->product_details ?? [];
-                $batchWsp = floatval($d['wsp'] ?? $d['vendor_wsp'] ?? $lsItem->unit_price ?? 0);
-
-                if (!isset($fifoQueue[$pid])) {
-                    $fifoQueue[$pid] = [];
-                }
-                $fifoQueue[$pid][] = [
-                    'live_sheet_id' => $ls->id,
-                    'vendor_wsp'    => $batchWsp,
-                    'commission'    => $commPercent,
-                    'remaining_qty' => intval($lsItem->quantity),
-                ];
-            }
-        }
-        // echo '<pre>';
-        // print_r($fifoQueue);
-        // print_r($vendorLiveSheets->toArray());
-        // echo '</pre>';
-        // exit;
-        // Now we have a FIFO queue of batches with both WSP and commission percentage for each
-        $periodStart = \Carbon\Carbon::create($payout->payout_year, $payout->payout_month, 1)->startOfMonth();
-        $priorSold = \App\Models\OrderItem::where('vendor_id', $payout->vendor_id)
-            ->whereHas('order', fn($q) => $q->where('order_date', '<', $periodStart))
-            ->select('product_id', \DB::raw('SUM(quantity) as sold'))
-            ->groupBy('product_id')
-            ->pluck('sold', 'product_id');
-
-        // Deduct prior sold (same as before)
-        foreach ($priorSold as $pid => $soldQty) {
-            if (!isset($fifoQueue[$pid])) {
-                continue;
-            }
-            $remaining = intval($soldQty);
-            foreach ($fifoQueue[$pid] as &$batch) {
-                if ($remaining <= 0) {
-                    break;
-                }
-                $deduct = min($remaining, $batch['remaining_qty']);
-                $batch['remaining_qty'] -= $deduct;
-                $remaining -= $deduct;
-            }
-            unset($batch);
-        }
-
-        // Build line items — FIFO for both WSP and commission
-        $lineItems = collect();
-        foreach ($orders as $order) {
-            foreach ($order->items as $item) {
-                $product = $item->product;
-                $pid = $product->id;
-                $qty = intval($item->quantity);
-                $qtyToAllocate = $qty;
-
-                $totalSaleAmount = 0;
-                $totalCommission = 0;
-                $totalPayout = 0;
-                $details = [];
-
-                if (isset($fifoQueue[$pid])) {
-                    foreach ($fifoQueue[$pid] as &$batch) {
-                        if ($qtyToAllocate <= 0) {
-                            break;
-                        }
-                        if ($batch['remaining_qty'] <= 0) {
-                            continue;
-                        }
-
-                        $allocate = min($qtyToAllocate, $batch['remaining_qty']);
-                        $batchSale = round($batch['vendor_wsp'] * $allocate, 2);
-                        $batchComm = round(($batch['commission'] / 100) * $batchSale, 2);
-                        $batchPayout = round($batchSale - $batchComm, 2);
-
-                        $totalSaleAmount += $batchSale;
-                        $totalCommission += $batchComm;
-                        $totalPayout += $batchPayout;
-
-                        $details[] = "{$allocate}u × \${$batch['vendor_wsp']} @ {$batch['commission']}%";
-
-                        $batch['remaining_qty'] -= $allocate;
-                        $qtyToAllocate -= $allocate;
-                    }
-                    unset($batch);
-                }
-
-                // Unallocated qty — fallback to product.vendor_wsp, 0% commission
-                if ($qtyToAllocate > 0) {
-                    $fallbackWsp = floatval($product->vendor_wsp ?? $product->fob_price ?? 0);
-                    $fallbackSale = round($fallbackWsp * $qtyToAllocate, 2);
-                    $totalSaleAmount += $fallbackSale;
-                    $totalPayout += $fallbackSale;
-                    $details[] = "{$qtyToAllocate}u × \${$fallbackWsp} @ 0%";
-                }
-
-                // Weighted average WSP for display
-                $avgWsp = $qty > 0 ? round($totalSaleAmount / $qty, 2) : 0;
-
-                $lineItems->push((object)[
-                    'order_id'      => $order->id,
-                    'order_number'  => $order->order_number,
-                    'sku'           => $item->sku ?? $product->sku ?? '—',
-                    'channel'       => $order->salesChannel->name ?? '—',
-                    'vendor_wsp'    => $avgWsp,
-                    'qty'           => $qty,
-                    'sale_amount'   => round($totalSaleAmount, 2),
-                    'commission'    => round($totalCommission, 2),
-                    'net_payout'    => round($totalPayout, 2),
-                    'fifo_detail'   => implode(' + ', $details),
-                ]);
-            }
-        }
-
-        /*    //$saleAmount = floatval($item->total_price ?? $item->unit_price * $qty);
-                //  $payoutAmount = round($vendorWsp * $qty, 2);
-                $commission_percentage = 25; // Assuming a flat 25% commission for demonstration
-                $commission = round($commission_percentage / 100 * $saleAmount, 2);
-                //  $commission = round($saleAmount - $payoutAmount, 2);
-                $payoutAmount = round($saleAmount - $commission, 2);
-
-                $lineItems->push((object)[
-                    'order_id'      => $order->id,
-                    'order_number'  => $order->order_number,
-                    'sku'           => $item->sku ?? $product->sku ?? '—',
-                    'channel'       => $order->salesChannel->name ?? '—',
-                    'vendor_wsp'    => $vendorWsp,
-                    'qty'           => $qty,
-                    'sale_amount'   => $saleAmount,
-                    'commission'    => $commission,
-                    'net_payout'    => $payoutAmount,
-                ]);
-            }
-        } */
-        // Summary
-        $payoutSummary = [
-            'total_qty'        => $lineItems->sum('qty'),
-            'total_sales'      => $lineItems->sum('sale_amount'),
-            'total_commission' => $lineItems->sum('commission'),
-            'total_payout'     => $lineItems->sum('net_payout'),
-        ];
-
-        // Get warehouse charges
-        // $warehouseCharges = \App\Models\WarehouseCharge::where('vendor_id', $payout->vendor_id)
-        //     ->where('charge_month', $payout->payout_month)
-        //     ->where('charge_year', $payout->payout_year)
-        //     ->with('warehouse')
-        //     ->get();
-
-        $warehouseCharges = \App\Models\VendorMonthlyCharge::where('vendor_id', $payout->vendor_id)
-            ->where('charge_month', $payout->payout_month)
-            ->where('charge_year', $payout->payout_year)
-            ->with('warehouse', 'grn')
-            ->get();
-        // echo '<pre>';
-        // print_r($warehouseCharges->toArray());
-        // echo '</pre>';
-        // exit;
-        // Get chargebacks
-        $chargebacks = Chargeback::where('vendor_id', $payout->vendor_id)
-            ->where('status', 'confirmed')
-            ->whereMonth('confirmed_at', $payout->payout_month)
-            ->whereYear('confirmed_at', $payout->payout_year)
-            ->with('order')
-            ->get();
-
-        return view('finance.payouts.show', compact('payout', 'orders', 'lineItems', 'payoutSummary', 'warehouseCharges', 'chargebacks'));
+        return view('finance.payouts.show', compact(
+            'payout',
+            'orders',
+            'lineItems',
+            'payoutSummary',
+            'warehouseCharges',
+            'chargebacks',
+            'calculatedAt'
+        ));
     }
+    // ─── CALCULATE PAYOUT ────────────────────────────────────────
 
     public function calculatePayout(Request $request)
     {
         $request->validate([
             'vendor_id' => 'required|exists:vendors,id',
             'month'     => 'required|integer|between:1,12',
-            'year'      => 'required|integer',
+            'year'      => 'required|integer|min:2024',
         ]);
+
+        $activeCode = session('active_company');
         $vendor = Vendor::findOrFail($request->vendor_id);
-        $this->financeService->calculateVendorPayout($vendor, $request->month, $request->year);
-        return back()->with('success', "Payout calculated for {$vendor->company_name}.");
+        $service = new \App\Services\VendorPayoutService();
+
+        $result = $service->calculateAndSave(
+            $vendor->id,
+            $activeCode ?? $vendor->company_code,
+            $request->month,
+            $request->year
+        );
+
+        if ($result['success']) {
+            $summary = $result['data']['summary'];
+            $currency = config('app.active_currency_symbol', '$');
+            return back()->with(
+                'success',
+                "Payout calculated for {$vendor->company_name}: " .
+                    "{$summary['total_qty']} shipped units, " .
+                    "Sales: {$currency}" . number_format($summary['total_sales'], 2) .
+                    ", Commission: {$currency}" . number_format($summary['total_commission'], 2) .
+                    ", WH Charges: {$currency}" . number_format($summary['total_warehouse_charges'], 2) .
+                    ", Chargebacks: {$currency}" . number_format($summary['total_chargebacks'], 2) .
+                    ", Net Payout: {$currency}" . number_format($summary['net_payout'], 2)
+            );
+        }
+
+        return back()->with('error', $result['error'] ?? 'Calculation failed.');
     }
 
     public function processPayment(Request $request, VendorPayout $payout)
@@ -600,10 +497,10 @@ class FinanceController extends Controller
     // ─── PRICING REVIEW ──────────────────────────────────────────
     public function pricingReview(Request $request)
     {
-        $activeCode = session('active_company');         
+        $activeCode = session('active_company');
         $pricings = \App\Models\PlatformPricing::with('product', 'salesChannel', 'asn')
             ->where('status', 'submitted')
-            ->where('company_code',$activeCode) 
+            ->where('company_code', $activeCode)
             ->paginate(30);
         return view('finance.pricing-review', compact('pricings'));
     }
@@ -623,7 +520,7 @@ class FinanceController extends Controller
             ->where('company_code', $activeCode)
             ->when($request->status, fn($q, $v) => $q->where('status', $v))
             ->latest()->paginate(20);
-            
+
         return view('finance.live-sheets.index', compact('liveSheets'));
     }
 
@@ -718,51 +615,7 @@ class FinanceController extends Controller
             }
         }
 
-        // ── All codes are valid — proceed with update ──
-        // $updated = 0;
-        // foreach ($request->sap_codes as $row) {
-        //     $item = \App\Models\LiveSheetItem::find($row['item_id']);
-        //     if (!$item || $item->live_sheet_id !== $liveSheet->id) {
-        //         continue;
-        //     }
 
-        //     $sapCode = trim($row['sap_code'] ?? '');
-        //     $vendorWsp = $row['vendor_wsp'] ?? null;
-
-        //     // 1. Update PRODUCT table (master — single source of truth)
-        //     if ($item->product) {
-        //         $productUpdate = [];
-        //         if ($sapCode !== '') {
-        //             $productUpdate['sap_code'] = $sapCode;
-        //         }
-        //         if ($vendorWsp !== null && $vendorWsp !== '') {
-        //             $productUpdate['vendor_wsp'] = floatval($vendorWsp);
-        //         }
-        //         if (!empty($productUpdate)) {
-        //             $item->product->update($productUpdate);
-        //         }
-        //     }
-
-        //     // 2. Sync product_details on THIS live sheet item from product table
-        //     $details = $item->product_details ?? [];
-        //     if ($item->product) {
-        //         $details['sap_code'] = $item->product->fresh()->sap_code ?? $details['sap_code'] ?? '';
-        //         $details['vendor_wsp'] = $item->product->fresh()->vendor_wsp ?? $details['vendor_wsp'] ?? '';
-        //     }
-        //     $item->update(['product_details' => $details]);
-
-        //     // 3. Backfill: update ALL other live sheet items with same product_id
-        //     \App\Models\LiveSheetItem::where('product_id', $item->product_id)
-        //         ->where('id', '!=', $item->id)
-        //         ->each(function ($otherItem) use ($item) {
-        //             $d = $otherItem->product_details ?? [];
-        //             $d['sap_code'] = $item->product->sap_code ?? $d['sap_code'] ?? '';
-        //             $d['vendor_wsp'] = $item->product->vendor_wsp ?? $d['vendor_wsp'] ?? '';
-        //             $otherItem->update(['product_details' => $d]);
-        //         });
-
-        //     $updated++;
-        // }
 
         \App\Models\ActivityLog::log('updated', 'live_sheet', $liveSheet, null, ['sap_codes_updated' => $updated], 'SAP codes and Vendor WSP updated by Finance');
 
@@ -802,6 +655,7 @@ class FinanceController extends Controller
     /**
      * Upload filled SAP CSV and apply codes to products
      */
+
     public function uploadSapCodes(Request $request, \App\Models\LiveSheet $liveSheet)
     {
         $request->validate([
@@ -820,39 +674,43 @@ class FinanceController extends Controller
             if ($ext === 'xlsx') {
                 $reader = new \PhpOffice\PhpSpreadsheet\Reader\Xlsx();
                 $reader->setReadDataOnly(false);
-                $spreadsheet = $reader->load($fullPath);
-                $rows = $spreadsheet->getActiveSheet()->toArray();
+                $rows = $reader->load($fullPath)->getActiveSheet()->toArray();
             } else {
                 $rows = [];
                 if (($handle = fopen($fullPath, 'r')) !== false) {
-                    while (($row = fgetcsv($handle)) !== false) {
-                        $rows[] = $row;
-                    }
+                    while (($row = fgetcsv($handle)) !== false) $rows[] = $row;
                     fclose($handle);
                 }
             }
-
-            // File read from temp upload path, no cleanup needed
 
             if (count($rows) < 2) {
                 return back()->with('error', 'File is empty or has no data rows.');
             }
 
-            // Find column indexes
             $header = array_map(fn($h) => strtolower(trim($h ?? '')), $rows[0]);
-            $itemIdCol = null;
-            $sapCol = null;
-            $payoutCol = null;
+            $itemIdCol = $currSapCol = $newSapCol = $currPayoutCol = $newPayoutCol = null;
 
             foreach ($header as $i => $h) {
                 if (in_array($h, ['item id', 'item_id', 'id'])) $itemIdCol = $i;
-                if (in_array($h, ['new sap code', 'new_sap_code', 'sap code', 'sap_code'])) $sapCol = $i;
-                if (in_array($h, ['new vendor payout price', 'vendor_wsp', 'vendor payout price', 'vendor wsp', 'wsp'])) $payoutCol = $i;
+                if (in_array($h, ['current sap code', 'current_sap_code'])) $currSapCol = $i;
+                if (in_array($h, ['new sap code', 'new_sap_code', 'sap code', 'sap_code'])) $newSapCol = $i;
+                if (in_array($h, ['current vendor wsp', 'current_vendor_wsp'])) $currPayoutCol = $i;
+                if (in_array($h, ['new vendor wsp', 'new_vendor_wsp', 'vendor wsp', 'vendor_wsp'])) $newPayoutCol = $i;
             }
 
-            if ($sapCol === null && $payoutCol === null) {
+            if ($newSapCol === null && $newPayoutCol === null) {
                 return back()->with('error', 'CSV must have a "New SAP Code" or "New Vendor WSP" column.');
             }
+
+            // Add right after header parsing, before the loop:
+            \Log::info('SAP Upload Debug', [
+                'headers' => $header,
+                'itemIdCol' => $itemIdCol,
+                'newSapCol' => $newSapCol,
+                'newPayoutCol' => $newPayoutCol,
+                'row_count' => count($rows),
+                'sample_row' => $rows[1] ?? [],
+            ]);
 
             $updated = 0;
             $errors = [];
@@ -860,76 +718,89 @@ class FinanceController extends Controller
 
             for ($i = 1; $i < count($rows); $i++) {
                 $row = $rows[$i];
-                $sapCode = $sapCol !== null ? trim($row[$sapCol] ?? '') : '';
-                $payoutPrice = $payoutCol !== null ? trim($row[$payoutCol] ?? '') : '';
-
-                if ($sapCode === '' && $payoutPrice === '') continue;
+                $rowNum = $i + 1;
 
                 $itemId = $itemIdCol !== null ? intval($row[$itemIdCol] ?? 0) : null;
                 if (!$itemId) continue;
 
-                // SAP uniqueness check
-                if ($sapCode !== '' && in_array($sapCode, $sapCodes)) {
-                    $errors[] = "Row " . ($i + 1) . ": Duplicate SAP code '{$sapCode}'.";
-                    continue;
-                }
-                if ($sapCode !== '') $sapCodes[] = $sapCode;
+                $currentSap = $currSapCol !== null ? trim($row[$currSapCol] ?? '') : '';
+                $newSap     = $newSapCol !== null ? trim($row[$newSapCol] ?? '') : '';
+                $newWsp     = $newPayoutCol !== null ? trim($row[$newPayoutCol] ?? '') : '';
 
-                // Validate payout price
-                if ($payoutPrice !== '' && !is_numeric($payoutPrice)) {
-                    $errors[] = "Row " . ($i + 1) . ": Invalid payout price '{$payoutPrice}'.";
-                    continue;
-                }
+                // Skip row if nothing to update
+                if ($newSap === '' && $newWsp === '') continue;
 
-                $item = \App\Models\LiveSheetItem::where('id', $itemId)
+                // Find live sheet item
+                $item = \App\Models\LiveSheetItem::withoutGlobalScopes()
+                    ->where('id', $itemId)
                     ->where('live_sheet_id', $liveSheet->id)
                     ->first();
-
                 if (!$item) continue;
 
-                // Check SAP against existing products
-                if ($sapCode !== '') {
-                    $dup = \App\Models\Product::where('sap_code', $sapCode)
+                // Validate new WSP
+                if ($newWsp !== '' && !is_numeric($newWsp)) {
+                    $errors[] = "Row {$rowNum}: Invalid Vendor WSP '{$newWsp}'.";
+                    continue;
+                }
+
+                // SAP: only update if new_sap_code is provided
+                // If current_sap_code exists but new is blank → skip SAP update
+                if ($newSap !== '') {
+                    // Uniqueness within this upload
+                    if (in_array($newSap, $sapCodes)) {
+                        $errors[] = "Row {$rowNum}: Duplicate SAP code '{$newSap}'.";
+                        continue;
+                    }
+                    $sapCodes[] = $newSap;
+
+                    // Uniqueness against existing products
+                    $dup = \App\Models\Product::withoutGlobalScopes()
+                        ->where('sap_code', $newSap)
                         ->when($item->product_id, fn($q) => $q->where('id', '!=', $item->product_id))
                         ->first();
-
                     if ($dup) {
-                        $errors[] = "Row " . ($i + 1) . ": SAP '{$sapCode}' already used by {$dup->sku}.";
+                        $errors[] = "Row {$rowNum}: SAP '{$newSap}' already used by {$dup->sku}.";
                         continue;
                     }
                 }
 
-                // Update product
-                if ($item->product_id) {
-                    $productUpdate = [];
-                    if ($sapCode !== '') $productUpdate['sap_code'] = $sapCode;
-                    if ($payoutPrice !== '') $productUpdate['vendor_wsp'] = floatval($payoutPrice);
-                    if (!empty($productUpdate)) {
-                        \App\Models\Product::where('id', $item->product_id)->update($productUpdate);
-                    }
+                // Build updates
+                $productUpdate = [];
+                $detailsUpdate = $item->product_details ?? [];
+
+                if ($newSap !== '') {
+                    $productUpdate['sap_code'] = $newSap;
+                    $detailsUpdate['sap_code'] = $newSap;
+                }
+
+                if ($newWsp !== '') {
+                    $productUpdate['vendor_wsp'] = floatval($newWsp);
+                    $detailsUpdate['vendor_wsp'] = floatval($newWsp);
+                }
+
+                // Update product table
+                if (!empty($productUpdate) && $item->product_id) {
+                    \App\Models\Product::where('id', $item->product_id)->update($productUpdate);
                 }
 
                 // Update live sheet item product_details
-                $d = $item->product_details ?? [];
-                if ($sapCode !== '') $d['sap_code'] = $sapCode;
-                if ($payoutPrice !== '') $d['vendor_wsp'] = floatval($payoutPrice);
-                $item->update(['product_details' => $d]);
+                $item->update(['product_details' => $detailsUpdate]);
                 $updated++;
             }
 
             \App\Models\ActivityLog::log('uploaded', 'sap_codes', $liveSheet, null, [
                 'updated' => $updated,
                 'errors' => count($errors),
-            ], "SAP codes or Vendor payout price uploaded via CSV: {$updated} updated");
+            ], "SAP/WSP uploaded: {$updated} updated");
 
-            $msg = "{$updated} SAP code,Vendor payout price(s) updated.";
+            $msg = "{$updated} item(s) updated.";
             if (!empty($errors)) {
-                $msg .= " Errors: " . implode('; ', array_slice($errors, 0, 5));
+                $msg .= " " . count($errors) . " error(s): " . implode('; ', array_slice($errors, 0, 5));
             }
 
             return back()->with($updated > 0 ? 'success' : 'error', $msg);
         } catch (\Exception $e) {
-            \Log::error('SAP upload or Vendor payout price failed: ' . $e->getMessage());
+            \Log::error('SAP/WSP upload failed: ' . $e->getMessage());
             return back()->with('error', 'Upload failed: ' . $e->getMessage());
         }
     }
@@ -940,7 +811,7 @@ class FinanceController extends Controller
         $activeCode = session('active_company');
 
         $rateCards = \App\Models\VendorRateCard::with('vendor', 'creator', 'approver')
-            ->where('company_code', $activeCode)            
+            ->where('company_code', $activeCode)
             ->when($request->vendor_id, fn($q, $v) => $q->where('vendor_id', $v))
             ->orderByDesc('created_at')
             ->paginate(30)
@@ -1020,7 +891,7 @@ class FinanceController extends Controller
 
     public function vendorCharges(Request $request)
     {
-       
+
         $activeCode = session('active_company');
 
         $month = $request->get('month', now()->month);
@@ -1107,7 +978,7 @@ class FinanceController extends Controller
 
     public function downloadVendorCharges(Request $request)
     {
-        $activeCode = session('active_company');        
+        $activeCode = session('active_company');
         $month = $request->get('month', now()->month);
         $year = $request->get('year', now()->year);
         $charges = \App\Models\VendorMonthlyCharge::with('vendor', 'grn')

@@ -86,7 +86,17 @@ class VendorRateCard extends Model
     {
         return static::where('vendor_id', $vendorId)->approved()->effectiveOn($date)->orderByDesc('version')->first();
     }
-
+    public function scopeGetActive($query, $vendorId, $date)
+    {
+        return $query->where('vendor_id', $vendorId)
+            ->where('effective_from', '<=', $date)
+            ->where(function ($q) use ($date) {
+                $q->where('effective_to', '>=', $date)
+                    ->orWhereNull('effective_to');
+            })
+            ->approved()
+            ->orderByDesc('version')->first();
+    }
     public function getCurrencySymbol(): string
     {
         return match ($this->currency) {

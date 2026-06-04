@@ -59,6 +59,7 @@ class Order extends Model
         'cancellation_reason',
         'cancelled_at',
         'cancelled_by',
+        'order_pack_type',
     ];
 
     protected $casts = [

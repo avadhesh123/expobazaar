@@ -6,6 +6,11 @@
 <div style="display:flex;gap:.5rem;margin-bottom:1.25rem;">
     <a href="{{ route('logistics.grn') }}" class="btn btn-outline btn-sm"><i class="fas fa-arrow-left"></i> All GRNs</a>
     <a href="{{ route('logistics.shipments.show', $grn->shipment) }}" class="btn btn-outline btn-sm"><i class="fas fa-ship"></i> View Shipment</a>
+    @if($grn ?? null)
+<a href="{{ route('logistics.grn.download', $grn) }}" class="btn btn-outline btn-sm">
+    <i class="fas fa-download" style="color:#16a34a;"></i> Download GRN
+</a>
+@endif
 </div>
 
 {{-- GRN Header --}}

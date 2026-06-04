@@ -70,7 +70,7 @@
                 <div class="form-group">
                     <label>Company Code Access <span style="color:#dc2626;">*</span></label>
                     <div style="display:flex;gap:1.5rem;padding:.5rem 0;">
-                        @foreach(['2000'=>'India (2000)','2100'=>'USA (2100)','2200'=>'Netherlands (2200)'] as $code=>$label)
+                        @foreach(['2000' => 'India (2000)', '2100' => 'USA (2100)', '2200' => 'EU Netherlands(2200)','2400' => 'United Kingdom (2400)'] as $code => $label)
                         <label style="display:flex;align-items:center;gap:.4rem;font-size:.85rem;cursor:pointer;">
                             <input type="checkbox" name="company_codes[]" value="{{ $code }}"
                                 {{ in_array($code, old('company_codes', $user->company_codes ?? [])) ? 'checked' : '' }}

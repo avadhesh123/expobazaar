@@ -46,7 +46,7 @@ return [
             'grn'                 => ['label' => 'GRN Management',           'actions' => ['view', 'upload'],           'route' => 'logistics.grn',          'icon' => 'fas fa-clipboard-check'],
             'inventory'           => ['label' => 'Inventory Management',     'actions' => ['view', 'transfer', 'ageing'], 'route' => 'logistics.inventory', 'icon' => 'fas fa-boxes'],
             'warehouse-pallets'   => ['label' => 'Warehouse Pallet Details', 'actions' => ['view', 'create'],           'route' => 'logistics.warehouse-pallets',    'icon' => 'fas fa-pallet'],
-            'warehouse-charge'    => ['label' => 'Warehouse Charges',        'actions' => ['view', 'run', 'approve'],   'route' => 'logistics.warehouse-charges', 'icon' => 'fas fa-calculator'],
+            // 'warehouse-charge'    => ['label' => 'Warehouse Charges',        'actions' => ['view', 'run', 'approve'],   'route' => 'logistics.warehouse-charges', 'icon' => 'fas fa-calculator'],
             'warehouse-rate-card' => ['label' => 'Warehouse Rate Card',             'actions' => ['view'],                     'route' => 'logistics.warehouse-rate-cards', 'icon' => 'fas fa-file-contract'],
             'wh-charge-recon'     => ['label' => 'Warehouse Charges & Recon',       'actions' => ['view', 'run', 'approve'],   'route' => 'logistics.warehouse-monthly-charges', 'icon' => 'fas fa-receipt'],
             'vendor-rate-card'    => ['label' => 'Vendor Rate Cards',        'actions' => ['view'],                     'route' => 'logistics.vendor-rate-cards', 'icon' => 'fas fa-users-cog'],

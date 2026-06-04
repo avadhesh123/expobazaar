@@ -10,6 +10,11 @@ class CompanyScope implements Scope
 {
     public function apply(Builder $builder, Model $model): void
     {
+        // Disabled — using explicit filters in controllers instead
+        return;
+    }
+    public function apply03(Builder $builder, Model $model): void
+    {
         $user = auth()->user();
         if (!$user) {
             return;

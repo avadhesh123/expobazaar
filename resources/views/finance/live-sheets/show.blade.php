@@ -190,8 +190,8 @@
 
                         @foreach($liveSheet->items as $idx => $item)
                         @php $d = $item->product_details ?? [];
-                        $sapCode = $d['sap_code'] ?? '';
-                        $vendorWsp = $d['vendor_wsp'] ?? $d['vendor_payout_price'] ?? '';
+                        $sapCode = $item->product->sap_code ?? $d['sap_code'] ?? '';
+                        $vendorWsp =  $item->product->vendor_wsp ?? $d['vendor_wsp'] ?? $d['vendor_payout_price'] ?? '';
 
                         $finalFob = floatval($d['final_fob'] ?? $item->unit_price ?? 0);
                         $dutyAmt = $finalFob * (floatval($d['duty_percent'] ?? 0) / 100);

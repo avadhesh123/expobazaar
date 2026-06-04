@@ -288,7 +288,7 @@
         e.preventDefault();
 
         const orderId = $('#status_order_id').val();
-        const newStatus = $('#current_status').val();
+        const newStatus = $('#new_status').val();
         const remarks = $('#status_remarks').val().trim();
 
         $.ajax({

@@ -8,22 +8,14 @@ class VendorPayout extends Model
 {
     protected $fillable = [
         'vendor_id', 'company_code', 'payout_month', 'payout_year',
-        'total_sales', 'total_commission', 'gross_payout',
-        'total_warehouse_charges', 'total_chargebacks',
-        'total_storage_charges', 'total_inward_charges',
-        'total_logistics_charges', 'total_platform_deductions',
-        'total_other_deductions', 'total_shipped_qty',
-        'net_payout', 'status', 'payment_date',
+        'total_sales', 'total_storage_charges', 'total_inward_charges',
+        'total_logistics_charges', 'total_platform_deductions', 'total_chargebacks',
+        'total_other_deductions', 'net_payout', 'status', 'payment_date',
         'payment_reference', 'payment_method', 'payment_advice_file',
-        'vendor_invoice_file', 'vendor_invoice_number',
-        'approved_by', 'paid_by', 'remarks',
-        'calculation_snapshot',
+        'vendor_invoice_file', 'approved_by', 'paid_by', 'remarks',
     ];
 
-    protected $casts = [
-        'payment_date' => 'date',
-        'calculation_snapshot' => 'array',
-    ];
+    protected $casts = ['payment_date' => 'date'];
 
     public function vendor() { return $this->belongsTo(Vendor::class); }
     public function approver() { return $this->belongsTo(User::class, 'approved_by'); }
@@ -36,8 +28,10 @@ class VendorPayout extends Model
 
     public function scopePending($query) { return $query->where('status', 'payment_pending'); }
 
-    public function getPeriodAttribute(): string
+    public function calculateNetPayout(): float
     {
-        return date('M Y', mktime(0, 0, 0, $this->payout_month, 1, $this->payout_year));
+        return $this->total_sales - $this->total_storage_charges - $this->total_inward_charges
+            - $this->total_logistics_charges - $this->total_platform_deductions
+            - $this->total_chargebacks - $this->total_other_deductions;
     }
 }

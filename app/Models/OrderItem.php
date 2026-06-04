@@ -9,7 +9,7 @@ class OrderItem extends Model
     protected $fillable = [
         'order_id', 'product_id', 'vendor_id', 'quantity',
         'unit_price', 'total_price', 'discount', 'tax', 'sku',
-        'material_cost', 'consignment_id',
+        'material_cost', 'consignment_id','shipped_qty'
     ];
 
     public function order() { return $this->belongsTo(Order::class); }

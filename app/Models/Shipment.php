@@ -58,6 +58,7 @@ class Shipment extends Model
         'destination_charges',
         'drayage_cost',
         'duty_amount',
+        'manpower_no_of_hours',
     ];
 
     protected $casts = [

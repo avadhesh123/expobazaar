@@ -3,7 +3,7 @@
 namespace App\Http\Controllers\Logistics;
 
 use App\Http\Controllers\Controller;
-use App\Models\{OrderItem, Shipment, Consignment, Vendor, Grn, GrnItem, Inventory, InventoryMovement, WarehouseCharge, Warehouse, LiveSheet};
+use App\Models\{OrderItem, Shipment, Consignment, Vendor, Grn, GrnItem, Inventory, InventoryMovement, WarehouseCharge, Warehouse, LiveSheet, WarehouseRateCard};
 use App\Services\{DashboardService, LogisticsService};
 use Illuminate\Http\Request;
 use App\Models\ActivityLog;
@@ -31,10 +31,8 @@ class LogisticsController extends Controller
 
         $consignments = Consignment::with('vendor', 'liveSheet')
             ->where('status', 'created')
-            ->when(!$user->isAdmin() && !empty($activeCode), function ($q) use ($activeCode) {
-                return $q->where('company_code', $activeCode);
-            })
-            ->when($request->company_code, fn($q, $v) => $q->where('company_code', $v))
+            ->where('company_code', $activeCode)
+          //  ->when($request->company_code, fn($q, $v) => $q->where('company_code', $v))
             ->whereDoesntHave('shipments')
             ->when($request->company_code, fn($q, $v) => $q->where('company_code', $v))
             ->get();
@@ -183,24 +181,18 @@ class LogisticsController extends Controller
 
         $grns = Grn::with('shipment', 'warehouse')
             ->when($request->status, fn($q, $v) => $q->where('status', $v))
-            ->when(!$user->isAdmin() && !empty($activeCompany), function ($q) use ($activeCompany) {
-                return $q->where('company_code', $activeCompany);
-            })
+            ->where('company_code', $activeCompany)
             ->when($request->warehouse_id, fn($q, $v) => $q->where('warehouse_id', $v))
             ->latest()->paginate(20);
 
         $pendingShipments = Shipment::whereIn('status', ['arrived', 'grn_pending', 'locked', 'asn_generated', 'in_transit', 'consolidated'])
             ->whereDoesntHave('grn')
             ->with('consignments.vendor', 'warehouse')
-            ->when(!$user->isAdmin() && !empty($activeCompany), function ($q) use ($activeCompany) {
-                return $q->where('company_code', $activeCompany);
-            })
+            ->where('company_code', $activeCompany)
             ->latest()->get();
 
         $warehouses = Warehouse::active()
-            ->when(!$user->isAdmin() && !empty($activeCompany), function ($q) use ($activeCompany) {
-                return $q->where('company_code', $activeCompany);
-            })
+            ->where('company_code', $activeCompany)
             ->get();
         return view('logistics.grn.index', compact('grns', 'pendingShipments', 'warehouses'));
     }
@@ -530,7 +522,7 @@ class LogisticsController extends Controller
         return view('logistics.inventory.allocation', compact('inventoryByWarehouse', 'warehouses', 'movements'));
     }
 
-    public function transferInventory(Request $request)
+    public function transferInventoryMaY(Request $request)
     {
 
         $request->validate([
@@ -553,6 +545,178 @@ class LogisticsController extends Controller
         return back()->with('success', 'Inventory transferred.');
     }
 
+    public function transferInventory(Request $request)
+    {
+        $request->validate([
+            'from_warehouse_id'   => 'required|exists:warehouses,id',
+            'to_warehouse_id'     => 'required|exists:warehouses,id|different:from_warehouse_id',
+            'transportation_cost' => 'required|numeric|min:0',
+            'pick_pack_cost'      => 'required|numeric|min:0',
+            'reference_no'        => 'required|string|max:100',
+            'transfer_inv_file'   => 'required|file|max:10240',
+        ]);
+
+        $file = $request->file('transfer_inv_file');
+        $ext = strtolower($file->getClientOriginalExtension());
+
+        try {
+            $fullPath = $file->getRealPath();
+            if (in_array($ext, ['xlsx', 'xls'])) {
+                $reader = new \PhpOffice\PhpSpreadsheet\Reader\Xlsx();
+                $reader->setReadDataOnly(false);
+                $rows = $reader->load($fullPath)->getActiveSheet()->toArray(null, true, true, false);
+            } else {
+                $rows = [];
+                if (($handle = fopen($fullPath, 'r')) !== false) {
+                    while (($row = fgetcsv($handle)) !== false) $rows[] = $row;
+                    fclose($handle);
+                }
+            }
+
+            if (count($rows) < 2) {
+                return back()->with('error', 'File is empty.');
+            }
+
+            //   $header = array_map(fn($h) => strtolower(trim($h ?? '')), $rows[0]);
+
+            $header = array_map(function ($h) {
+                $h = trim($h ?? '');
+                $h = preg_replace('/[\x{FEFF}\x{200B}]/u', '', $h); // Remove BOM and zero-width chars
+                return strtolower($h);
+            }, $rows[0]);
+
+            $skuCol = $qtyCol = null;
+            foreach ($header as $i => $h) {
+                if (in_array($h, ['sku', 'vendor sku', 'style code'])) $skuCol = $i;
+                if (in_array($h, ['qty', 'quantity', 'transfer qty'])) $qtyCol = $i;
+            }
+
+            if ($skuCol === null || $qtyCol === null) {
+                return back()->with('error', 'File must have "SKU" and "Qty" columns.');
+            }
+
+            $fromWarehouseId = $request->from_warehouse_id;
+            $toWarehouseId = $request->to_warehouse_id;
+            $companyCode = session('active_company');
+            $errors = [];
+            $items = [];
+
+            // ── Step 1: Validate ALL rows first ──
+            for ($i = 1; $i < count($rows); $i++) {
+                $row = $rows[$i];
+                $rowNum = $i + 1;
+                $sku = trim($row[$skuCol] ?? '');
+                $qty = intval($row[$qtyCol] ?? 0);
+
+                if (empty($sku)) continue;
+                if ($qty < 1) {
+                    $errors[] = "Row {$rowNum}: Invalid quantity for SKU '{$sku}'.";
+                    continue;
+                }
+
+                $product = \App\Models\Product::withoutGlobalScopes()->where('sku', $sku)->first();
+                if (!$product) {
+                    $errors[] = "Row {$rowNum}: SKU '{$sku}' not found.";
+                    continue;
+                }
+
+                $availableStock = \App\Models\Inventory::where('product_id', $product->id)
+                    ->where('warehouse_id', $fromWarehouseId)
+                    ->when($companyCode, fn($q) => $q->where('company_code', $companyCode))
+                    ->sum('available_quantity');
+
+                if ($availableStock < $qty) {
+                    $errors[] = "TRANSFER CANCELLED — Row {$rowNum}: SKU '{$sku}' insufficient stock. Available: {$availableStock}, Requested: {$qty}.";
+                    return back()->with('error', "Transfer cancelled. SKU '{$sku}' has only {$availableStock} available but {$qty} requested.")->with('transfer_errors', $errors);
+                }
+
+                $items[] = ['product' => $product, 'qty' => $qty, 'sku' => $sku, 'row' => $rowNum];
+            }
+
+            if (empty($items)) {
+                return back()->with('error', 'No valid items found in file.');
+            }
+
+            // ── Step 2: All validated — execute transfers ──
+            \DB::beginTransaction();
+            $transferred = 0;
+
+            foreach ($items as $item) {
+                $this->logisticsService->transferInventory(
+                    $item['product']->id,
+                    $fromWarehouseId,
+                    $toWarehouseId,
+                    $item['qty'],
+                    null,
+                    null // sub warehouse IDs
+                );
+                $transferred++;
+            }
+
+            // Log the batch transfer
+            \App\Models\ActivityLog::log('transferred', 'inventory_batch', auth()->user(), null, [
+                'from_warehouse' => $fromWarehouseId,
+                'to_warehouse'   => $toWarehouseId,
+                'items_count'    => $transferred,
+                'reference_no'   => $request->reference_no,
+                'transport_cost' => $request->transportation_cost,
+                'pick_pack_cost' => $request->pick_pack_cost,
+            ], "Batch transfer: {$transferred} SKUs, Ref: {$request->reference_no}");
+
+            \DB::commit();
+
+            return back()->with('success', "{$transferred} SKU(s) transferred successfully. Reference: {$request->reference_no}");
+        } catch (\Exception $e) {
+            \DB::rollBack();
+            \Log::error('Inventory transfer failed: ' . $e->getMessage());
+            return back()->with('error', 'Transfer failed: ' . $e->getMessage());
+        }
+    }
+    public function downloadGrn(\App\Models\Grn $grn)
+    {
+        $grn->load('items.product.vendor', 'warehouse', 'shipment');
+
+        $csv = "\xEF\xBB\xBF"; // UTF-8 BOM
+        $csv .= "GRN Number,Receipt Date,Warehouse,Shipment,Status\n";
+        $csv .= "\"{$grn->grn_number}\",\"{$grn->receipt_date?->format('Y-m-d')}\",\"" . ($grn->warehouse->name ?? '') . "\",\"" . ($grn->shipment->shipment_code ?? '') . "\",\"{$grn->status}\"\n\n";
+        $csv .= "S.No,Vendor SKU,SAP Code,Product Name,Vendor Name,Expected Qty,Received Qty,Damaged Qty,Missing Qty,Excess Qty,Remarks\n";
+
+        foreach ($grn->items as $idx => $item) {
+            $p = $item->product;
+            $excess = max(0, intval($item->received_quantity) - intval($item->expected_quantity));
+            $csv .= implode(',', [
+                $idx + 1,
+                '"' . ($p->sku ?? '') . '"',
+                '"' . ($p->sap_code ?? '') . '"',
+                '"' . str_replace('"', '""', $p->name ?? '') . '"',
+                '"' . str_replace('"', '""', $p->vendor->company_name ?? '') . '"',
+                intval($item->expected_quantity),
+                intval($item->received_quantity),
+                intval($item->damaged_quantity ?? 0),
+                intval($item->missing_quantity ?? 0),
+                $excess,
+                '"' . str_replace('"', '""', $item->remarks ?? '') . '"',
+            ]) . "\n";
+        }
+
+        $filename = "GRN-{$grn->grn_number}.csv";
+        return response($csv, 200, [
+            'Content-Type' => 'text/csv; charset=utf-8',
+            'Content-Disposition' => "attachment; filename=\"{$filename}\"",
+        ]);
+    }
+    public function downloadTransferTemplate()
+    {
+        $csv = "\xEF\xBB\xBF";
+        $csv .= "SKU,Qty\n";
+        $csv .= "EB-SKU-001,50\n";
+        $csv .= "EB-SKU-002,30\n";
+
+        return response($csv, 200, [
+            'Content-Type' => 'text/csv; charset=utf-8',
+            'Content-Disposition' => 'attachment; filename="Transfer-Inventory-Template.csv"',
+        ]);
+    }
     // ─── WAREHOUSE CHARGES ───────────────────────────────────────
     public function warehouseCharges(Request $request)
     {
@@ -566,9 +730,7 @@ class LogisticsController extends Controller
 
         $charges = WarehouseCharge::with('warehouse', 'vendor', 'items')
             ->byMonth($month, $year)
-            ->when(!$user->isAdmin() && !empty($activeCode), function ($q) use ($activeCode) {
-                return $q->where('company_code', $activeCode);
-            })
+            ->where('company_code', $activeCode)
             ->when($category, fn($q, $v) => $q->where('charge_category', $v))
             ->when($request->warehouse_id, fn($q, $v) => $q->where('warehouse_id', $v))
             ->when($request->vendor_id, fn($q, $v) => $q->where('vendor_id', $v))
@@ -602,11 +764,24 @@ class LogisticsController extends Controller
         $month = $request->month;
         $year = $request->year;
         $warehouse = Warehouse::findOrFail($request->warehouse_id);
-        $whRates = $warehouse->rate_card ?? [];
-        if (is_string($whRates)) {
-            $whRates = json_decode($whRates, true) ?? [];
-        }
 
+
+        $whRates = WarehouseRateCard::where('warehouse_id', $request->warehouse_id)
+            ->where('effective_from', '<=', now())
+            ->where('status', 'approved')
+            ->where(function ($q) {
+                $q->where('effective_to', '>=', now())
+                    ->orWhereNull('effective_to');
+            })
+            ->get();
+
+
+        // $whRates = $warehouse->rate_card ?? [];
+        // if (is_string($whRates)) {
+        //     $whRates = json_decode($whRates, true) ?? [];
+        // }
+        if ($whRates) print_r($whRates->toArray());
+        exit;
         $inventoryItems = Inventory::with('product.vendor')
             ->where('warehouse_id', $warehouse->id)
             ->where('quantity', '>', 0)
@@ -993,12 +1168,12 @@ class LogisticsController extends Controller
 
         $rateCards = \App\Models\WarehouseRateCard::with('warehouse', 'creator', 'approver')
             ->when($request->warehouse_id, fn($q, $v) => $q->where('warehouse_id', $v))
-            ->when(!$user->isAdmin() && !empty($activeCode), function ($q) use ($activeCode) {
-                return $q->where('company_code', $activeCode);
-            })
-            ->when($request->company_code, fn($q, $v) => $q->where('company_code', $v))
+            // ->when(!$user->isAdmin() && !empty($activeCode), function ($q) use ($activeCode) {
+            //     return $q->where('company_code', $activeCode);
+            // })
+            ->where('company_code', $activeCode)
             ->orderByDesc('created_at')->paginate(30)->withQueryString();
-        $warehouses = Warehouse::active()->orderBy('name')->get();
+        $warehouses = Warehouse::active()->where('company_code', $activeCode)->orderBy('name')->get();
         return view('logistics.warehouse-rate-cards.index', compact('rateCards', 'warehouses'));
     }
 
@@ -1006,19 +1181,16 @@ class LogisticsController extends Controller
     {
         $request->validate([
             'warehouse_id' => 'required|exists:warehouses,id',
-            'wh_inward_rate_per_carton' => 'required|numeric|min:0',
-            'wh_storage_rate_per_cft' => 'required|numeric|min:0',
-            'wh_fulfillment_rate_small' => 'required|numeric|min:0',
-            'wh_fulfillment_rate_large' => 'required|numeric|min:0',
-            'wh_fulfillment_qty_threshold' => 'required|integer|min:1',
-            'wh_pick_pack_rate_per_unit' => 'required|numeric|min:0',
             'effective_from' => 'required|date',
         ]);
+        // echo '<pre>';
+        // print_r($request->toArray());
+        // exit;
         $wh = Warehouse::findOrFail($request->warehouse_id);
         $currency = match ($wh->company_code) {
             '2000' => 'INR',
-            '2100' => 'EUR',
-            '2200' => 'USD',
+            '2100' => 'USD',
+            '2200' => 'EUR',
             '2400' => 'GBP',
             default => 'USD'   // fallback
         };
@@ -1030,12 +1202,23 @@ class LogisticsController extends Controller
 
         $rc = \App\Models\WarehouseRateCard::create(array_merge($request->only([
             'warehouse_id',
-            'wh_inward_rate_per_carton',
-            'wh_storage_rate_per_cft',
-            'wh_fulfillment_rate_small',
-            'wh_fulfillment_rate_large',
-            'wh_fulfillment_qty_threshold',
-            'wh_pick_pack_rate_per_unit',
+            'unloading_fcl',
+            'unloading_lcl_palletize',
+            'unloading_carton',
+            'put_away_per_carton',
+            'checkin_per_qty',
+            'checkin_per_hours',
+            'storage_per_pallet',
+            'storage_per_cft',
+            'order_processing_palletize',
+            'order_processing_non_palletize',
+            'pick_pack',
+            'fulfillment_rate_small',
+            'fulfillment_rate_large',
+            'fulfillment_qty_threshold',
+            'manpower_cost',
+            'return_inward_per_qty',
+            'return_inward_per_carton',
             'effective_from',
         ]), ['company_code' => $wh->company_code, 'currency' => $currency, 'version' => $maxV + 1, 'status' => 'draft', 'created_by' => auth()->id()]));
 
@@ -1045,13 +1228,14 @@ class LogisticsController extends Controller
 
     public function submitWarehouseRateCard(\App\Models\WarehouseRateCard $warehouseRateCard)
     {
-        if (!$warehouseRateCard->isComplete()) return back()->with('error', 'All rate fields must be filled.');
+        // if (!$warehouseRateCard->isComplete()) return back()->with('error', 'All rate fields must be filled.');
         $warehouseRateCard->update(['status' => 'pending_approval']);
         return back()->with('success', 'Submitted for approval.');
     }
 
     public function approveWarehouseRateCard(\App\Models\WarehouseRateCard $warehouseRateCard)
     {
+        // die('ddddddddd');
         $warehouseRateCard->update(['status' => 'approved', 'approved_by' => auth()->id(), 'approved_at' => now()]);
         ActivityLog::log('approved', 'warehouse_rate_card', $warehouseRateCard);
         return back()->with('success', 'Rate card approved and active.');
@@ -1064,16 +1248,27 @@ class LogisticsController extends Controller
 
         $user = auth()->user();
         $activeCode =  session('active_company');
-
         $month = $request->get('month', now()->month);
         $year = $request->get('year', now()->year);
-        $charges = \App\Models\WarehouseMonthlyCharge::with('warehouse', 'grnDetails.grn', 'rateCard')
-            ->when(!$user->isAdmin() && !empty($activeCode), function ($q) use ($activeCode) {
-                return $q->where('company_code', $activeCode);
-            })
-            ->when($request->company_code, fn($q, $v) => $q->where('company_code', $v))
-            ->byMonth($month, $year)->orderBy('warehouse_id')->get();
-        $warehouses = Warehouse::active()->orderBy('name')->get();
+        // $charges = \App\Models\WarehouseMonthlyCharge::with('warehouse', 'grnDetails.grn', 'rateCard')
+        //     ->where('company_code', $activeCode)          
+        //     ->byMonth($month, $year)->orderBy('warehouse_id')->get();
+
+        $charges = \App\Models\WarehouseMonthlyCharge::with([
+            'warehouse',
+            'rateCard',
+            'grnDetails.grn' => fn($q) => $q->where('company_code', $activeCode),
+        ])
+            ->where('company_code', $activeCode)
+            ->byMonth($month, $year)
+            ->orderBy('warehouse_id')
+            ->get();
+
+        $warehouses = Warehouse::active()
+            ->when($activeCode, fn($q) => $q->where('company_code', $activeCode))
+            ->orderBy('name')->get();
+
+        //  $warehouses = Warehouse::active()->orderBy('name')->get();
         return view('logistics.warehouse-monthly-charges.index', compact('charges', 'warehouses', 'month', 'year'));
     }
 
@@ -1082,9 +1277,13 @@ class LogisticsController extends Controller
         $request->validate(['month' => 'required|integer|min:1|max:12', 'year' => 'required|integer|min:2024', 'warehouse_id' => 'required|exists:warehouses,id']);
         $service = new \App\Services\WarehouseChargeCalculationService();
         $result = $service->calculateMonthlyCharges($request->warehouse_id, $request->month, $request->year, auth()->id(), (bool)$request->dry_run);
+
         if ($result['success']) {
-            return back()->with('success', "Calculated. Expected total: \$" . number_format($result['expected_total'], 2) . " across {$result['grn_count']} GRNs.");
+            $currency = $result['currency'] ?? '$';
+            $grnCount = $result['details']['unloading']['grn_count'] ?? 0;
+            return back()->with('success', "Calculated. Expected total: {$currency} " . number_format($result['expected_total'], 2) . " ({$grnCount} GRNs processed).");
         }
+
         return back()->with('error', $result['error']);
     }
 
@@ -1373,20 +1572,30 @@ class LogisticsController extends Controller
     }
     public function updatePallets(Request $request, \App\Models\Shipment $shipment)
     {
-        $request->validate([
-            'no_of_pallets' => 'nullable|integer|min:0|max:9999',
-        ]);
+        // $request->validate([
+        //     'no_of_pallets' => 'nullable|integer|min:0|max:9999',
+        // ]);
 
-        $oldValue = $shipment->no_of_pallets;
-        $newValue = $request->no_of_pallets;
-        //  $shipment->update(['no_of_pallets' => $newValue]);
+        if (isset($request->manpower_no_of_hours)) {
 
-        if ($oldValue != $newValue) {
-            $shipment->update(['no_of_pallets' => $newValue]);
+            $oldValue = $shipment->manpower_no_of_hours;
+            $newValue = $request->manpower_no_of_hours;
+            //  $shipment->update(['no_of_pallets' => $newValue]);
 
-            \App\Models\ShipmentLog::record($shipment->id, 'no_of_pallets', $oldValue, $newValue);
+            if ($oldValue != $newValue) {
+                $shipment->update(['manpower_no_of_hours' => $newValue]);
+                \App\Models\ShipmentLog::record($shipment->id, 'manpower_no_of_hours', $oldValue, $newValue);
+            }
+        } else {
+            $oldValue = $shipment->no_of_pallets;
+            $newValue = $request->no_of_pallets;
+            //  $shipment->update(['no_of_pallets' => $newValue]);
+
+            if ($oldValue != $newValue) {
+                $shipment->update(['no_of_pallets' => $newValue]);
+                \App\Models\ShipmentLog::record($shipment->id, 'no_of_pallets', $oldValue, $newValue);
+            }
         }
-
 
         return response()->json(['success' => true, 'value' => $newValue]);
         //        return back()->with('success', 'Pallets updated.');
@@ -1490,5 +1699,38 @@ class LogisticsController extends Controller
             'success',
             ($existing ? 'Updated' : 'Recorded') . ": {$warehouse->name} — {$request->no_of_pallets} pallets on {$request->entry_date}."
         );
+    }
+    public function changeShipmentStatus(Request $request, \App\Models\Shipment $shipment)
+    {
+        $request->validate([
+            'status' => 'required|in:created,locked,cancelled,reopened',
+        ]);
+
+        $oldStatus = $shipment->status;
+        $newStatus = $request->status;
+
+        // If reopening — unlink consignments so they appear in container planning
+        if ($newStatus === 'reopened') {
+            $shipment->consignments()->update(['status' => 'created']);
+            $newStatus = 'cancelled';
+        }
+
+        $shipment->update([
+            'status' => $newStatus,
+            'shipment_status' => $newStatus,
+        ]);
+
+        // Log the change
+        \App\Models\ShipmentLog::record($shipment->id, 'status', $oldStatus, $newStatus);
+
+        if ($request->ajax()) {
+            return response()->json([
+                'success' => true,
+                'old_status' => $oldStatus,
+                'new_status' => $newStatus,
+            ]);
+        }
+
+        return back()->with('success', "Shipment {$shipment->shipment_code} status changed: {$oldStatus} → {$newStatus}.");
     }
 }

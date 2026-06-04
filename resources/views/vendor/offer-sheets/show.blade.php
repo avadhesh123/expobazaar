@@ -38,6 +38,11 @@
 </div>
 
 {{-- Products Table --}}
+@php
+$isUS = ($activeCompany === '2100');
+$lwhUnit = $isUS ? 'Inches' : 'CM';
+$weightUnit = $isUS ? 'LBS' : 'KG';
+@endphp
 <div class="card">
     <div class="card-header">
         <h3><i class="fas fa-table" style="margin-right:.5rem;color:#1e3a5f;"></i> Products ({{ $offerSheet->items->count() }})</h3>
@@ -54,10 +59,10 @@
                     <th style="min-width:100px;">Vendor SKU</th>
                     <th style="min-width:180px;position:sticky;left:40px;background:#f0f4f8;z-index:2;">Product Name</th>
                     <th style="width:70px;">Image</th>
-                    <th>Length (in)</th>
-                    <th>Width (in)</th>
-                    <th>Height (in)</th>
-                    <th>Weight (g)</th>
+                    <th>Length ({{$lwhUnit}})</th>
+                    <th>Width ({{$lwhUnit}})</th>
+                    <th>Height ({{$lwhUnit}})</th>
+                    <th>Weight ({{$weightUnit}})</th>
                     <th style="min-width:100px;">Material</th>
                     <th>Color</th>
                     <th>Finish</th>
@@ -73,9 +78,9 @@
                 <tr style="{{ $item->is_selected ? 'background:#f0fdf4;border-left:3px solid #16a34a;' : '' }}">
                     <td style="text-align:center;position:sticky;left:0;background:{{ $item->is_selected?'#f0fdf4':'#fff' }};z-index:1;">
                         @if($item->is_selected)
-                            <i class="fas fa-check-circle" style="color:#16a34a;font-size:1rem;"></i>
+                        <i class="fas fa-check-circle" style="color:#16a34a;font-size:1rem;"></i>
                         @else
-                            <i class="far fa-circle" style="color:#d1d5db;font-size:1rem;"></i>
+                        <i class="far fa-circle" style="color:#d1d5db;font-size:1rem;"></i>
                         @endif
                     </td>
                     <td style="text-align:center;color:#94a3b8;font-weight:600;">{{ $d['sno'] ?? $loop->iteration }}</td>
@@ -83,46 +88,46 @@
                     <td style="font-weight:600;font-size:.82rem;position:sticky;left:40px;background:{{ $item->is_selected?'#f0fdf4':'#fff' }};z-index:1;">{{ $item->product_name }}</td>
                     <td style="text-align:center;">
                         @php
-                            $imgUrl = null;
-                            if ($item->thumbnail) {
-                                // Handle different path formats
-                                if (str_starts_with($item->thumbnail, 'http')) {
-                                    $imgUrl = $item->thumbnail;
-                                } elseif (str_starts_with($item->thumbnail, 'offer-thumbnails/') || str_starts_with($item->thumbnail, 'offer-')) {
-                                    $imgUrl = asset('storage/' . $item->thumbnail);
-                                } elseif (str_starts_with($item->thumbnail, 'storage/')) {
-                                    $imgUrl = asset($item->thumbnail);
-                                } else {
-                                    $imgUrl = asset('storage/' . $item->thumbnail);
-                                }
-                            }
+                        $imgUrl = null;
+                        if ($item->thumbnail) {
+                        // Handle different path formats
+                        if (str_starts_with($item->thumbnail, 'http')) {
+                        $imgUrl = $item->thumbnail;
+                        } elseif (str_starts_with($item->thumbnail, 'offer-thumbnails/') || str_starts_with($item->thumbnail, 'offer-')) {
+                        $imgUrl = asset('storage/' . $item->thumbnail);
+                        } elseif (str_starts_with($item->thumbnail, 'storage/')) {
+                        $imgUrl = asset($item->thumbnail);
+                        } else {
+                        $imgUrl = asset('storage/' . $item->thumbnail);
+                        }
+                        }
                         @endphp
                         @if($imgUrl)
-                            <a href="{{ $imgUrl }}" target="_blank" title="Click to enlarge">
-                                <img src="{{ $imgUrl }}" style="width:48px;height:48px;object-fit:cover;border-radius:6px;border:1px solid #e2e8f0;cursor:zoom-in;" onerror="this.style.display='none';this.nextElementSibling.style.display='inline';">
-                                <i class="fas fa-image" style="color:#fca5a5;display:none;" title="Image not found"></i>
-                            </a>
+                        <a href="{{ $imgUrl }}" target="_blank" title="Click to enlarge">
+                            <img src="{{ $imgUrl }}" style="width:48px;height:48px;object-fit:cover;border-radius:6px;border:1px solid #e2e8f0;cursor:zoom-in;" onerror="this.style.display='none';this.nextElementSibling.style.display='inline';">
+                            <i class="fas fa-image" style="color:#fca5a5;display:none;" title="Image not found"></i>
+                        </a>
                         @else
-                            <i class="fas fa-image" style="color:#d1d5db;"></i>
+                        <i class="fas fa-image" style="color:#d1d5db;"></i>
                         @endif
 
-                        <button type="button" 
-                id="upload-btn-{{ $item->id }}"
-                class="btn btn-sm btn-light" 
-                style="bottom:-2px; right:-2px; padding:2px 5px; font-size:0.7rem; border-radius:50%;"
-                title="Upload / Replace Image"
-                onclick="uploadProductImage({{ $item->id }})">
-            <i class="fas fa-upload"></i>
-        </button><input type="file" 
-           id="file-input-{{ $item->id }}" 
-           accept="image/*" 
-           style="display:none;" 
-           onchange="handleImageUpload(event, {{ $item->id }})">
+                        <button type="button"
+                            id="upload-btn-{{ $item->id }}"
+                            class="btn btn-sm btn-light"
+                            style="bottom:-2px; right:-2px; padding:2px 5px; font-size:0.7rem; border-radius:50%;"
+                            title="Upload / Replace Image"
+                            onclick="uploadProductImage({{ $item->id }})">
+                            <i class="fas fa-upload"></i>
+                        </button><input type="file"
+                            id="file-input-{{ $item->id }}"
+                            accept="image/*"
+                            style="display:none;"
+                            onchange="handleImageUpload(event, {{ $item->id }})">
                     </td>
-                    <td style="text-align:center;font-family:monospace;font-size:.82rem;">{{ $d['length_inches'] ?? '—' }}</td>
-                    <td style="text-align:center;font-family:monospace;font-size:.82rem;">{{ $d['width_inches'] ?? '—' }}</td>
-                    <td style="text-align:center;font-family:monospace;font-size:.82rem;">{{ $d['height_inches'] ?? '—' }}</td>
-                    <td style="text-align:center;font-family:monospace;font-size:.82rem;">{{ $d['weight_grams'] ?? '—' }}</td>
+                    <td style="text-align:center;font-family:monospace;font-size:.82rem;">{{ $d['length'] ?? $d['length_inches']??'—' }}</td>
+                    <td style="text-align:center;font-family:monospace;font-size:.82rem;">{{ $d['width'] ?? $d['width_inches'] ?? '—' }}</td>
+                    <td style="text-align:center;font-family:monospace;font-size:.82rem;">{{ $d['height'] ?? $d['height_inches'] ??'—' }}</td>
+                    <td style="text-align:center;font-family:monospace;font-size:.82rem;">{{ $d['weight'] ?? $d['weight_grams'] ?? '—' }}</td>
                     <td style="font-size:.82rem;">{{ $d['material'] ?? '—' }}</td>
                     <td style="font-size:.82rem;">
                         @if(!empty($d['color']))
@@ -151,64 +156,64 @@
 @endif
 
 <script>
-function handleImageUpload(event, itemId) {
-    const file = event.target.files[0];
-    if (!file) return;
+    function handleImageUpload(event, itemId) {
+        const file = event.target.files[0];
+        if (!file) return;
 
-    // Basic validation
-    if (!file.type.startsWith('image/')) {
-        alert('Please select a valid image file.');
-        return;
-    }
-    if (file.size > 5 * 1024 * 1024) { // 5MB limit
-        alert('Image size must be less than 5MB.');
-        return;
-    }
-
-    const formData = new FormData();
-    formData.append('image', file);
-    formData.append('_token', '{{ csrf_token() }}');
-    formData.append('offer_sheet_item_id', itemId);
-
-    // Show loading state
-    const uploadBtn = document.getElementById(`upload-btn-${itemId}`);
-    const originalIcon = uploadBtn.innerHTML;
-    uploadBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
-    uploadBtn.disabled = true;
-
-    fetch("{{ route('vendor.offer-sheet.upload-image') }}", {
-        method: 'POST',
-        body: formData
-    })
-    .then(response => response.json())
-    .then(data => {
-        if (data.success) {
-            // Update image preview instantly
-            const img = document.getElementById(`img-${itemId}`);
-            if (img) {
-                img.src = data.image_url;
-                img.style.display = 'inline';
-            } else {
-                // If no img tag existed, reload row or show new image
-                location.reload();
-            }
-            alert('Image uploaded successfully!');
-        } else {
-            alert(data.message || 'Upload failed.');
+        // Basic validation
+        if (!file.type.startsWith('image/')) {
+            alert('Please select a valid image file.');
+            return;
         }
-    })
-    .catch(error => {
-        console.error(error);
-        alert('An error occurred during upload.');
-    })
-    .finally(() => {
-        uploadBtn.innerHTML = originalIcon;
-        uploadBtn.disabled = false;
-    });
-}
+        if (file.size > 5 * 1024 * 1024) { // 5MB limit
+            alert('Image size must be less than 5MB.');
+            return;
+        }
 
-function uploadProductImage(itemId) {
-    document.getElementById(`file-input-${itemId}`).click();
-}
+        const formData = new FormData();
+        formData.append('image', file);
+        formData.append('_token', '{{ csrf_token() }}');
+        formData.append('offer_sheet_item_id', itemId);
+
+        // Show loading state
+        const uploadBtn = document.getElementById(`upload-btn-${itemId}`);
+        const originalIcon = uploadBtn.innerHTML;
+        uploadBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+        uploadBtn.disabled = true;
+
+        fetch("{{ route('vendor.offer-sheet.upload-image') }}", {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    // Update image preview instantly
+                    const img = document.getElementById(`img-${itemId}`);
+                    if (img) {
+                        img.src = data.image_url;
+                        img.style.display = 'inline';
+                    } else {
+                        // If no img tag existed, reload row or show new image
+                        location.reload();
+                    }
+                    alert('Image uploaded successfully!');
+                } else {
+                    alert(data.message || 'Upload failed.');
+                }
+            })
+            .catch(error => {
+                console.error(error);
+                alert('An error occurred during upload.');
+            })
+            .finally(() => {
+                uploadBtn.innerHTML = originalIcon;
+                uploadBtn.disabled = false;
+            });
+    }
+
+    function uploadProductImage(itemId) {
+        document.getElementById(`file-input-${itemId}`).click();
+    }
 </script>
 @endsection

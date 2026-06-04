@@ -56,6 +56,7 @@
                     <th>Vendors</th>
                     <th>CBM</th>
                     <th style="text-align:center;min-width:90px;">No. of Pallets</th>
+                    <th style="text-align:center;min-width:90px;">Manpower (No of Hours)</th>
 
                     <th>Utilization</th>
                     <th>Sailing Date</th>
@@ -96,6 +97,16 @@
                             style="width:70px;padding:.25rem .3rem;border:1px solid #d1d5db;border-radius:6px;font-size:.78rem;font-family:monospace;text-align:center;">
                         <div class="pallet-status-{{ $sh->id }}" style="font-size:.5rem;height:.7rem;margin-top:.1rem;"></div>
                     </td>
+                    <td style="text-align:center;">
+                        <input type="number" max="9999"
+                            step="0.01"
+                            value="{{ $sh->manpower_no_of_hours ?? '' }}"
+                            placeholder="0"
+                            class="manpower-input"
+                            data-shipment-id="{{ $sh->id }}"
+                            style="width:70px;padding:.25rem .3rem;border:1px solid #d1d5db;border-radius:6px;font-size:.78rem;font-family:monospace;text-align:center;">
+                        <div class="manpower-status-{{ $sh->id }}" style="font-size:.5rem;height:.7rem;margin-top:.1rem;"></div>
+                    </td>
                     <td>
                         <div style="display:flex;align-items:center;gap:.4rem;">
                             <div style="flex:1;height:8px;background:#e2e8f0;border-radius:4px;min-width:60px;">
@@ -132,6 +143,24 @@
                             <i class="fas {{ $sc[$sh->status][1] ?? 'fa-circle' }}" style="margin-right:.2rem;font-size:.55rem;"></i>
                             {{ ucfirst(str_replace('_',' ',$sh->status)) }}
                         </span>
+                        <!-- <select class="shipment-status-select" data-id="{{ $sh->id }}"
+                            style="padding:.25rem .4rem;border:1px solid #d1d5db;border-radius:6px;font-size:.75rem;font-weight:600;
+        {{ $sh->status === 'locked' ? 'background:#f0fdf4;color:#16a34a;' : ($sh->status === 'cancelled' ? 'background:#fef2f2;color:#dc2626;' : 'background:#fefce8;color:#854d0e;') }}">
+                            <option value="planning" {{ $sh->status === 'planning' ? 'selected' : '' }}>Planning</option>
+                            <option value="consolidated" {{ $sh->status === 'consolidated' ? 'selected' : '' }}>Consolidated</option>
+                            <option value="in_transit" {{ $sh->status === 'in_transit' ? 'selected' : '' }}>In Transit</option>
+                            <option value="grn_pending" {{ $sh->status === 'grn_pending' ? 'selected' : '' }}>GRN pending</option>
+                            <option value="grn_completed" {{ $sh->status === 'grn_completed' ? 'selected' : '' }}>GRN completed</option>
+                            <option value="delivered" {{ $sh->status === 'delivered' ? 'selected' : '' }}>Delivered</option>
+                            <option value="arrived" {{ $sh->status === 'arrived' ? 'selected' : '' }}>Arrived</option>
+
+                            <option value="locked" {{ $sh->status === 'locked' ? 'selected' : '' }}>Locked</option>
+                            <option value="reopened">↩ Reopen for Planning</option>
+                            <option value="cancelled" {{ $sh->status === 'cancelled' ? 'selected' : '' }}>Cancelled</option>
+
+                        </select>
+                        <span class="shipment-status-msg-{{ $sh->id }}" style="font-size:.55rem;display:block;margin-top:.1rem;"></span>
+                     -->
                     </td>
                     <td>
                         <div style="display:flex;gap:.25rem;flex-wrap:wrap;">
@@ -146,6 +175,7 @@
                             @endif
                         </div>
                     </td>
+
                 </tr>
 
                 {{-- Inline Lock / Sailing Date Panel --}}
@@ -176,56 +206,171 @@
     @if($shipments->hasPages())<div style="padding:1rem 1.4rem;border-top:1px solid #e8ecf1;">{{ $shipments->links('pagination::tailwind') }}</div>@endif
 </div>
 <script>
-let palletTimers = {};
-document.querySelectorAll('.pallet-input').forEach(input => {
-    input.addEventListener('input', function() { debounceSavePallets(this); });
-    input.addEventListener('blur', function() { savePallets(this); });
-});
+    let palletTimers = {};
+    document.querySelectorAll('.pallet-input').forEach(input => {
+        input.addEventListener('input', function() {
+            debounceSavePallets(this);
+        });
+        input.addEventListener('blur', function() {
+            savePallets(this);
+        });
+    });
 
-function debounceSavePallets(el) {
-    const id = el.dataset.shipmentId;
-    clearTimeout(palletTimers[id]);
-    palletTimers[id] = setTimeout(() => savePallets(el), 600);
-}
-
-function savePallets(el) {
-    const id = el.dataset.shipmentId;
-    const val = el.value.trim();
-    const statusEl = document.querySelector('.pallet-status-' + id);
-
-    if (val !== '' && (isNaN(val) || parseInt(val) < 0)) {
-        if (statusEl) statusEl.innerHTML = '<span style="color:#dc2626;">Invalid</span>';
-        return;
+    function debounceSavePallets(el) {
+        const id = el.dataset.shipmentId;
+        clearTimeout(palletTimers[id]);
+        palletTimers[id] = setTimeout(() => savePallets(el), 600);
     }
 
-    if (statusEl) statusEl.innerHTML = '<span style="color:#e8a838;"><i class="fas fa-spinner fa-spin"></i></span>';
+    function savePallets(el) {
+        const id = el.dataset.shipmentId;
+        const val = el.value.trim();
+        const statusEl = document.querySelector('.pallet-status-' + id);
 
-    fetch('/logistics/shipments/' + id + '/update-pallets', {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            'X-CSRF-TOKEN': '{{ csrf_token() }}',
-            'Accept': 'application/json',
-        },
-        body: JSON.stringify({ no_of_pallets: val === '' ? null : parseInt(val) })
-    })
-    .then(r => r.json())
-    .then(data => {
-        if (statusEl) {
-            if (data.success) {
-                statusEl.innerHTML = '<span style="color:#16a34a;">✓ Saved</span>';
-            } else {
-                statusEl.innerHTML = '<span style="color:#dc2626;">✗ Error</span>';
-            }
-            setTimeout(() => { statusEl.innerHTML = ''; }, 3000);
+        if (val !== '' && (isNaN(val) || parseInt(val) < 0)) {
+            if (statusEl) statusEl.innerHTML = '<span style="color:#dc2626;">Invalid</span>';
+            return;
         }
-    })
-    .catch(() => {
-        if (statusEl) {
-            statusEl.innerHTML = '<span style="color:#dc2626;">✗ Failed</span>';
-            setTimeout(() => { statusEl.innerHTML = ''; }, 3000);
-        }
+
+        if (statusEl) statusEl.innerHTML = '<span style="color:#e8a838;"><i class="fas fa-spinner fa-spin"></i></span>';
+
+        fetch('/logistics/shipments/' + id + '/update-pallets', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': '{{ csrf_token() }}',
+                    'Accept': 'application/json',
+                },
+                body: JSON.stringify({
+                    no_of_pallets: val === '' ? null : parseInt(val)
+                })
+            })
+            .then(r => r.json())
+            .then(data => {
+                if (statusEl) {
+                    if (data.success) {
+                        statusEl.innerHTML = '<span style="color:#16a34a;">✓ Saved</span>';
+                    } else {
+                        statusEl.innerHTML = '<span style="color:#dc2626;">✗ Error</span>';
+                    }
+                    setTimeout(() => {
+                        statusEl.innerHTML = '';
+                    }, 3000);
+                }
+            })
+            .catch(() => {
+                if (statusEl) {
+                    statusEl.innerHTML = '<span style="color:#dc2626;">✗ Failed</span>';
+                    setTimeout(() => {
+                        statusEl.innerHTML = '';
+                    }, 3000);
+                }
+            });
+    }
+
+    let manpowerTimers = {};
+    document.querySelectorAll('.manpower-input').forEach(input => {
+        input.addEventListener('input', function() {
+            debounceSaveManpower(this);
+        });
+        input.addEventListener('blur', function() {
+            saveManpower(this);
+        });
     });
-}
+
+    function debounceSaveManpower(el) {
+        const id = el.dataset.shipmentId;
+        clearTimeout(manpowerTimers[id]);
+        manpowerTimers[id] = setTimeout(() => saveManpower(el), 600);
+    }
+
+    function saveManpower(el) {
+        console.log('saveManpower')
+        const id = el.dataset.shipmentId;
+        const val = el.value.trim();
+        const statusEl = document.querySelector('.manpower-status-' + id);
+
+        if (val !== '' && (isNaN(val) || parseFloat(val) < 0)) {
+            if (statusEl) statusEl.innerHTML = '<span style="color:#dc2626;">Invalid</span>';
+            return;
+        }
+
+        if (statusEl) statusEl.innerHTML = '<span style="color:#e8a838;"><i class="fas fa-spinner fa-spin"></i></span>';
+
+        fetch('/logistics/shipments/' + id + '/update-pallets', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': '{{ csrf_token() }}',
+                    'Accept': 'application/json',
+                },
+                body: JSON.stringify({
+                    manpower_no_of_hours: val === '' ? null : parseFloat(val)
+                })
+            })
+            .then(r => r.json())
+            .then(data => {
+                if (statusEl) {
+                    if (data.success) {
+                        statusEl.innerHTML = '<span style="color:#16a34a;">✓ Saved</span>';
+                    } else {
+                        statusEl.innerHTML = '<span style="color:#dc2626;">✗ Error</span>';
+                    }
+                    setTimeout(() => {
+                        statusEl.innerHTML = '';
+                    }, 3000);
+                }
+            })
+            .catch(() => {
+                if (statusEl) {
+                    statusEl.innerHTML = '<span style="color:#dc2626;">✗ Failed</span>';
+                    setTimeout(() => {
+                        statusEl.innerHTML = '';
+                    }, 3000);
+                }
+            });
+    }
+
+    document.querySelectorAll('.shipment-status-select').forEach(select => {
+        select.addEventListener('change', function() {
+            var id = this.dataset.id;
+            var status = this.value;
+            var msg = document.querySelector('.shipment-status-msg-' + id);
+            var confirmMsg = status === 'reopened' ?
+                'Reopen this shipment? Its consignments will be released back to Container Planning.' :
+                'Change shipment status to ' + status + '?';
+
+            if (!confirm(confirmMsg)) {
+                location.reload();
+                return;
+            }
+
+            if (msg) msg.innerHTML = '<span style="color:#e8a838;"><i class="fas fa-spinner fa-spin"></i></span>';
+
+            fetch('/logistics/shipments/' + id + '/change-status', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRF-TOKEN': '{{ csrf_token() }}',
+                        'Accept': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        status: status
+                    })
+                })
+                .then(r => r.json())
+                .then(data => {
+                    if (data.success) {
+                        if (msg) msg.innerHTML = '<span style="color:#16a34a;">✓ ' + data.old_status + ' → ' + data.new_status + '</span>';
+                        setTimeout(() => location.reload(), 1000);
+                    } else {
+                        if (msg) msg.innerHTML = '<span style="color:#dc2626;">✗ Failed</span>';
+                    }
+                })
+                .catch(() => {
+                    if (msg) msg.innerHTML = '<span style="color:#dc2626;">✗ Error</span>';
+                });
+        });
+    });
 </script>
 @endsection

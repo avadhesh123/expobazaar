@@ -663,6 +663,43 @@ document.addEventListener('DOMContentLoaded', function() {
        
         <div style="padding:1.25rem 2rem 3rem;">@yield('content')</div>
     </div>
+
+
+{{-- Global Form Loader --}}
+<div id="globalLoader" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.75); z-index: 99999; align-items: center; justify-content: center;">
+    <div style="background: white; padding: 35px 45px; border-radius: 12px; text-align: center; box-shadow: 0 10px 40px rgba(0,0,0,0.3); min-width: 280px;">
+        <i class="fas fa-spinner fa-spin" style="font-size: 3rem; color: #3b82f6; margin-bottom: 18px;"></i>
+        <div style="font-size: 1.15rem; font-weight: 600; color: #1e3a5f;">Processing...</div>
+        <div style="font-size: 0.88rem; color: #64748b; margin-top: 8px;">Please wait, do not refresh the page</div>
+    </div>
+</div>
+
+<script>
+$(document).ready(function() {
+
+    // Global Loader for ALL Forms
+    $(document).on('submit', 'form', function() {
+        
+        // Show loader
+        $('#globalLoader').fadeIn(200);
+
+        // Optional: Disable submit button to prevent double submit
+        const $btn = $(this).find('button[type="submit"]');
+        if ($btn.length) {
+            $btn.prop('disabled', true)
+                .html('<i class="fas fa-spinner fa-spin"></i> Processing...');
+        }
+    });
+
+    // Hide loader after AJAX requests (if using AJAX)
+    $(document).ajaxComplete(function() {
+        $('#globalLoader').fadeOut(300);
+    });
+
+});
+</script>
+
+
     <script>
         // Only auto-hide SUCCESS alerts after 5 seconds, NEVER hide errors
         var sa = document.getElementById('successAlert');

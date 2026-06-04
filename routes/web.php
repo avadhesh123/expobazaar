@@ -193,6 +193,7 @@ Route::middleware(['auth'])->group(function () {
             Route::post('shipments/{shipment}/entry-summary', [LogisticsController::class, 'uploadEntrySummary'])->name('shipments.entry-summary');
             Route::post('shipments/{shipment}/update-status', [LogisticsController::class, 'updateShipmentStatus'])->name('shipments.update-status');
             Route::post('shipments/{shipment}/update-pallets', [LogisticsController::class, 'updatePallets'])->name('shipments.update-pallets');
+            Route::post('shipments/{shipment}/change-status', [LogisticsController::class, 'changeShipmentStatus'])->name('shipments.change-status');
 
             Route::get('warehouse-pallets', [LogisticsController::class, 'warehousePallets'])->name('warehouse-pallets');
             Route::post('warehouse-pallets', [LogisticsController::class, 'storeWarehousePallet'])->name('warehouse-pallets.store');
@@ -202,6 +203,7 @@ Route::middleware(['auth'])->group(function () {
             Route::get('grn', [LogisticsController::class, 'grnList'])->middleware('permission:logistics.grn.view')->name('grn');
 
             Route::get('grn/{grn}/show', [LogisticsController::class, 'showGrn'])->name('grn.show');
+            Route::get('grn/{grn}/download', [LogisticsController::class, 'downloadGrn'])->name('grn.download');
             Route::get('grn/{shipment}/upload', [LogisticsController::class, 'uploadGrn'])->name('grn.upload');
             Route::post('grn/{shipment}', [LogisticsController::class, 'storeGrn'])->name('grn.store');
             Route::get('asn/{asn}/download', [LogisticsController::class, 'downloadAsn'])->name('asn.download');
@@ -210,6 +212,7 @@ Route::middleware(['auth'])->group(function () {
             Route::get('inventory/ageing', [LogisticsController::class, 'inventoryAgeing'])->name('inventory.ageing');
             Route::get('inventory/allocation', [LogisticsController::class, 'warehouseAllocation'])->name('inventory.allocation');
             Route::post('inventory/transfer', [LogisticsController::class, 'transferInventory'])->name('inventory.transfer');
+            Route::get('inventory/transfer-template', [LogisticsController::class, 'downloadTransferTemplate'])->name('inventory.transfer-template');
             Route::get('warehouse-charges', [LogisticsController::class, 'warehouseCharges'])->name('warehouse-charges');
             Route::get('warehouse-charges/vendor-allocation', [LogisticsController::class, 'vendorChargeAllocation'])->name('warehouse-charges.vendor-allocation');
             Route::post('warehouse-charges/{charge}/receipt', [LogisticsController::class, 'uploadChargeReceipt'])->name('warehouse-charges.receipt');

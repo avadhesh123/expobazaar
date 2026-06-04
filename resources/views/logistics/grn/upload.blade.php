@@ -4,7 +4,7 @@
 
 @section('content')
 <div style="display:flex;gap:.5rem;margin-bottom:1.25rem;">
-    <a href="{{ route('logistics.grn') }}" class="btn btn-outline btn-sm"><i class="fas fa-arrow-left"></i> Back to GRN List</a>
+    <a href="{{ route('logistics.grn') }}" class="btn btn-outline btn-sm"><i class="fas fa-arrow-left"></i> Back to GRN List</a>   
 </div>
 
 {{-- Shipment Info --}}

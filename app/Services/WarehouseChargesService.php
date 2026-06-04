@@ -17,18 +17,30 @@ class WarehouseChargesService
             ? Vendor::where('id', $vendorId)->get()
             : Vendor::active()->get();
 
+        $activeCompany = session('active_company');
         $results = ['created' => 0, 'skipped' => 0, 'errors' => [], 'details' => []];
         $periodEnd = now()->create(null, $month, 1)->endOfMonth()->toDateString();
         $periodStart = now()->create(null, $month, 1)->startOfMonth()->toDateString();
         foreach ($vendors as $vendor) {
-            $rateCard = VendorRateCard::getActive($vendor->id, $periodEnd);
+            $rateCard = VendorRateCard::where('company_code',$activeCompany)->getActive($vendor->id, $periodEnd);
+            
+
+// dd(
+//     \Illuminate\Support\Str::replaceArray(
+//         '?',
+//         $rateCard->getBindings(),
+//         $rateCard->toSql()
+//     )
+// );
+
+
             if (!$rateCard) {
                 $results['skipped']++;
                 $results['errors'][] = "{$vendor->company_name}: No approved rate card";
                 continue;
             }
 
-            $currency = match (session('active_company') ?: $vendor->company_code) {
+            $currency = match ($activeCompany ?: $vendor->company_code) {
                 '2000' => 'INR',
                 '2100' => 'EUR',
                 '2200' => 'USD',

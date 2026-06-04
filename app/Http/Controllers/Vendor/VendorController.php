@@ -341,7 +341,7 @@ class VendorController extends Controller
                         'length'       => $p['length'] ?? null,
                         'width'        => $p['width'] ?? null,
                         'height'       => $p['height'] ?? null,
-                        'weight_grams' => $p['weight'] ?? null,
+                        'weight'       => $p['weight'] ?? null,
                         'vendor_price' => $p['vendor_fob'] ?? 0,
                         'status'       => 'draft',
                     ];
@@ -375,10 +375,10 @@ class VendorController extends Controller
                     'product_details' => [
                         'sno'           => $p['sno'] ?? null,
                         'barcode'       => $barcode ?? null,
-                        'length_inches' => $p['length'] ?? null,
-                        'width_inches'  => $p['width'] ?? null,
-                        'height_inches' => $p['height'] ?? null,
-                        'weight_grams'  => $p['weight'] ?? null,
+                        'length'        => $p['length'] ?? null,
+                        'width'         => $p['width'] ?? null,
+                        'height'        => $p['height'] ?? null,
+                        'weight'        => $p['weight'] ?? null,
                         'material'      => $p['material'] ?? null,
                         'color'         => $p['color'] ?? null,
                         'finish'        => $p['finish'] ?? null,
@@ -770,7 +770,7 @@ class VendorController extends Controller
     /**
      * Download blank offer sheet template (Excel)
      */
-    public function downloadOfferSheetTemplate()
+    public function downloadOfferSheetTemplate1()
     {
         $activeCompany = session('active_company') ?? '2100';
         $templateFiles = [
@@ -783,7 +783,7 @@ class VendorController extends Controller
 
         if (!file_exists($path)) {
             // Fallback: generate CSV template
-            $csv = "S.no,Vendor SKU,Product Name,Product Image,Product Length (In Inches),Product Width (In Inches),Product Height (In Inches),Product Weight (In Gram),Material Composition,Color,Product Finish,Category,Sub Category,Vendor FOB Mumbai,Comments\n";
+            $csv = "S.no,Vendor SKU,Product Name,Product Image,Product Length (In Inches),Product Width (In Inches),Product Height (In Inches),Product Weight (In Gram),Material Composition,Color,Product Finish,Category,Sub Category,Vendor FOB,Comments\n";
             $csv .= "1,EB123,Glass Vase,,10,10,2,200,Glass,Clear,Glossy,Home & Décor,Décor,1,\n";
 
             $fileName = $activeCompany . "_Offer_Sheet_Template.csv";
@@ -795,7 +795,46 @@ class VendorController extends Controller
         }
         return response()->download($path,  $activeCompany . '_Offer_Sheet_Template.xlsx');
     }
+    public function downloadOfferSheetTemplate()
+    {
+        $activeCompany = session('active_company') ?? '2100';
 
+        $templateFiles = [
+            '2100' => 'Offer-Sheet-US.xlsx',
+            '2200' => 'Offer-Sheet-EU.xlsx',
+            '2400' => 'Offer-Sheet-UK.xlsx',
+        ];
+
+        $fileName = $templateFiles[$activeCompany] ?? 'Offer-Sheet-US.xlsx';
+        $path = storage_path('app/public/downloads/' . $fileName);
+
+        // If Excel template exists, download it
+        if (file_exists($path)) {
+            return response()->download($path, $activeCompany . '_Offer_Sheet_Template.xlsx');
+        }
+
+        // ====================== CSV Fallback with Dynamic Units ======================
+        $isUS = ($activeCompany === '2100');
+
+        $currency = trim(config('app.active_currency_symbol')); // $, ₹, €
+
+        $lwhUnit = $isUS ? 'Inches' : 'CM';
+        $weightUnit = $isUS ? 'LBS' : 'KG';   // You can change to LBS if needed for 2100
+
+        $csv = "\xEF\xBB\xBF"; // UTF-8 BOM
+
+        $csv .= "S.no,Vendor SKU,Product Name,Product Image,Product Length ({$lwhUnit}),Product Width ({$lwhUnit}),Product Height ({$lwhUnit}),Product Weight ({$weightUnit}),Material Composition,Color,Product Finish,Category,Sub Category,Vendor FOB{{$currency}},Comments\n";
+
+        // Sample Row
+        $csv .= "1,EB123,Glass Vase,,10,10,12," . ($isUS ? "450" : "0.45") . ",Glass,Clear,Glossy,Home & Décor,Décor,1.25,Sample Comment\n";
+
+        $downloadFileName = $activeCompany . "_Offer_Sheet_Template.csv";
+
+        return response($csv, 200, [
+            'Content-Type' => 'text/csv',
+            'Content-Disposition' => "attachment; filename=\"{$downloadFileName}\"",
+        ]);
+    }
     /**
      * Download submitted offer sheet data as CSV
      */
@@ -806,7 +845,13 @@ class VendorController extends Controller
             abort(403);
         }
 
-        $csv = "S.no,Vendor SKU,Product Name,Product Length (Inches),Product Width (Inches),Product Height (Inches),Product Weight (Grams),Material,Color,Finish,Category,Sub Category,Vendor FOB ($),Comments,Selection\n";
+        $activeCompany = session('active_company') ?? '2100';
+        $isUS = ($activeCompany === '2100');
+        $currency = trim(config('app.active_currency_symbol')); // $, ₹, €
+        $lwhUnit = $isUS ? 'Inches' : 'CM';
+        $weightUnit = $isUS ? 'LBS' : 'KG';   // You can change to LBS if needed for 2100
+        $csv = "\xEF\xBB\xBF"; // UTF-8 BOM    
+        $csv .= "S.no,Vendor SKU,Product Name,Product Length ({$lwhUnit}),Product Width ({$lwhUnit}),Product Height ({$lwhUnit}),Product Weight ({$weightUnit}),Material,Color,Finish,Category,Sub Category,Vendor FOB ({$currency}),Comments,Selection\n";
 
         foreach ($offerSheet->items as $item) {
             $d = $item->product_details ?? [];
@@ -814,10 +859,10 @@ class VendorController extends Controller
                 $d['sno'] ?? $item->id,
                 '"' . str_replace('"', '""', $item->product_sku) . '"',
                 '"' . str_replace('"', '""', $item->product_name) . '"',
-                $d['length_inches'] ?? '',
-                $d['width_inches'] ?? '',
-                $d['height_inches'] ?? '',
-                $d['weight_grams'] ?? '',
+                $d['length'] ?? $d['length_inches'] ?? '',
+                $d['width'] ?? $d['width_inches'] ?? '',
+                $d['height'] ?? $d['height_inches'] ?? '',
+                $d['weight'] ?? $d['weight_grams'] ?? '',
                 '"' . str_replace('"', '""', $d['material'] ?? '') . '"',
                 '"' . str_replace('"', '""', $d['color'] ?? '') . '"',
                 '"' . str_replace('"', '""', $d['finish'] ?? '') . '"',
@@ -1278,7 +1323,12 @@ class VendorController extends Controller
 
         $liveSheet->load('items.product');
 
-        $headers = "S.no,Vendor SKU,Product Name,Product Description (Min 100 words),Product Specification,Hsn & Hts Code,Duty %,Product Length (Inches),Product Width (Inches),Product Height (Inches),Product Weight (Gram),Material Composition,Other Material,Color,Product Finish,Category,Sub Category,Qty In Inner Pack,Inner Carton Length (Inches),Inner Carton Width (Inches),Inner Carton Height (Inches),Inner Carton Weight (Kg),Qty In Master Pack,Master Carton Length (Inches),Master Carton Width (Inches),Master Carton Height (Inches),Master Carton Weight (Kg),No Of Master Carton,Qty Offered (Units/Sets),Vendor FOB({$currency})\n";
+        $activeCompany = session('active_company') ?? '2100';
+        $isUS = ($activeCompany === '2100');
+        $lwhUnit = $isUS ? 'Inches' : 'CM';
+        $weightUnit = $isUS ? 'LBS' : 'KG';   // You can change to LBS if needed for 2100
+
+        $headers = "S.no,Vendor SKU,Product Name,Product Description (Min 100 words),Product Specification,HSN & HTS Code,Duty %,Product Length ({$lwhUnit}),Product Width ({$lwhUnit}),Product Height ({$lwhUnit}),Product Weight ({$weightUnit}),Material Composition,Other Material,Color,Product Finish,Category,Sub Category,Qty In Inner Pack,Inner Carton Length ({$lwhUnit}),Inner Carton Width ({$lwhUnit}),Inner Carton Height ({$lwhUnit}),Inner Carton Weight ({$weightUnit}),Qty In Master Pack,Master Carton Length ({$lwhUnit}),Master Carton Width ({$lwhUnit}),Master Carton Height ({$lwhUnit}),Master Carton Weight ({$weightUnit}),No Of Master Carton,Qty Offered (Units/Sets),Vendor FOB({$currency})\n";
         $csv = "\xEF\xBB\xBF"; // UTF-8 BOM
         $csv .= $headers;
 
@@ -1302,10 +1352,10 @@ class VendorController extends Controller
                 '"' . str_replace('"', '""', $d['specification'] ?? '') . '"', // Specification
                 '"' . str_replace('"', '""', $d['hsn_hts_code'] ?? '') . '"', // HSN
                 $d['duty_percent'] ?? '', // Duty %
-                $d['length_inches'] ?? '',
-                $d['width_inches'] ?? '',
-                $d['height_inches'] ?? '',
-                $d['weight_grams'] ?? '',
+                $d['length'] ?? $d['length_inches'] ?? '',
+                $d['width'] ?? $d['width_inches'] ?? '',
+                $d['height'] ?? $d['height_inches'] ?? '',
+                $d['weight'] ?? $d['weight_grams'] ?? '',
                 '"' . str_replace('"', '""', $d['material'] ?? '') . '"',
                 '', // Other Material
                 '"' . str_replace('"', '""', $d['color'] ?? '') . '"',
@@ -1313,15 +1363,15 @@ class VendorController extends Controller
                 '"' . str_replace('"', '""', $d['category'] ?? '') . '"',
                 '"' . str_replace('"', '""', $d['sub_category'] ?? '') . '"',
                 $d['qty_inner_pack'] ?? '', // Inner pack qty
-                $d['inner_length'] ?? '', // Inner Carton Length
-                $d['inner_width'] ?? '', // Inner Carton Width
-                $d['inner_height'] ?? '', // Inner Carton Height
-                $d['inner_weight_kg'] ?? '', // Inner Carton Weight
+                $d['inner_length'] ?? $d['inner_carton_length'] ?? '', // Inner Carton Length
+                $d['inner_width'] ?? $d['inner_carton_width'] ?? '', // Inner Carton Width
+                $d['inner_height'] ?? $d['inner_carton_height'] ?? '', // Inner Carton Height
+                $d['inner_weight'] ??  $d['inner_carton_weight'] ??  $d['inner_weight_kg'] ?? '', // Inner Carton Weight
                 $d['qty_master_pack'] ?? '', // Qty In Master Pack
-                $d['master_length'] ?? '', // Master Carton Length
-                $d['master_width'] ?? '', // Master Carton Width
-                $d['master_height'] ?? '', // Master Carton Height
-                $d['master_weight_kg'] ?? '', // Master Carton Weight
+                $d['master_length'] ??  $d['master_carton_length'] ?? '', // Master Carton Length
+                $d['master_width'] ??  $d['master_carton_width'] ?? '', // Master Carton Width
+                $d['master_height'] ??  $d['master_carton_height'] ?? '', // Master Carton Height
+                $d['master_weight'] ??  $d['master_carton_weight'] ?? $d['master_weight_kg'] ?? '', // Master Carton Weight
                 $d['no_of_master_carton'] ?? '', // No of Master Cartons
                 $d['qty_offered'] ?? '', // Qty Offered
                 '"' . str_replace('"', '""', $p->vendor_price ?? '') . '"',
@@ -1459,11 +1509,11 @@ class VendorController extends Controller
             $cbmShipment = $totalMasterCartons * $masterCbm;
             $unitPrice = (float)($row['vendor_fob'] ?? $item->unit_price);
             $finalFob = (float)($row['final_fob'] ?? $unitPrice);
-            $weightPerUnit = isset($row['weight_grams']) && $row['weight_grams'] > 0
-                ? round((float)$row['weight_grams'] / 1000, 3)
+            $weightPerUnit = isset($row['weight']) && $row['weight'] > 0
+                ? round((float)$row['weight'] / 1000, 3)
                 : (float)($item->weight_per_unit ?? 0);
 
-            $masterWeight = (float)($row['master_weight_kg'] ?? 0);
+            $masterWeight = (float)($row['master_weight'] ?? 0);
 
             // Track changes BEFORE updating
             try {
@@ -1497,10 +1547,10 @@ class VendorController extends Controller
                     'specification'    => $row['specification'] ?? null,
                     'hsn_hts_code'     => $row['hsn_code'] ?? null,
                     'duty_percent'     => $row['duty_percent'] ?? null,
-                    'length_inches'    => $row['length'] ?? null,
-                    'width_inches'     => $row['width'] ?? null,
-                    'height_inches'    => $row['height'] ?? null,
-                    'weight_grams'     => $row['weight_grams'] ?? null,
+                    'length'    => $row['length'] ?? null,
+                    'width'     => $row['width'] ?? null,
+                    'height'    => $row['height'] ?? null,
+                    'weight'     => $row['weight'] ?? null,
                     'material'         => $row['material'] ?? null,
                     'other_material'   => $row['other_material'] ?? null,
                     'color'            => $row['color'] ?? null,
@@ -1508,15 +1558,15 @@ class VendorController extends Controller
                     'category'         => $row['category'] ?? null,
                     'sub_category'     => $row['sub_category'] ?? null,
                     'qty_inner_pack'   => $row['qty_inner_pack'] ?? null,
-                    'inner_length'     => $row['inner_length'] ?? null,
-                    'inner_width'      => $row['inner_width'] ?? null,
-                    'inner_height'     => $row['inner_height'] ?? null,
-                    'inner_weight_kg'  => $row['inner_weight_kg'] ?? null,
-                    'qty_master_pack'  => $row['qty_master_pack'] ?? null,
-                    'master_length'    => $masterL,
-                    'master_width'     => $masterW,
-                    'master_height'    => $masterH,
-                    'master_weight_kg' => $masterWeight,
+                    'inner_carton_length'     => $row['inner_length'] ?? null,
+                    'inner_carton_width'      => $row['inner_width'] ?? null,
+                    'inner_carton_height'     => $row['inner_height'] ?? null,
+                    'inner_carton_weight'      => $row['inner_weight'] ?? null,
+                    'qty_master_pack'          => $row['qty_master_pack'] ?? null,
+                    'master_carton_length'    => $masterL,
+                    'master_carton_width'     => $masterW,
+                    'master_carton_height'    => $masterH,
+                    'master_carton_weight'     => $masterWeight,
                     'no_of_master_carton' => $row['no_of_master_carton'] ?? null,
                     'qty_offered'      => $row['qty_offered'] ?? null,
                     'vendor_fob'       => $row['vendor_fob'] ?? null
@@ -1634,10 +1684,10 @@ class VendorController extends Controller
                     }
                     if (str_contains($val, 'inner carton weight') || $val === 'inner carton weight (kg)') {
                         file_put_contents(storage_path('logs/live_sheet_upload.log'), $col . '===' .  $val  . "\n", FILE_APPEND);
-                        $colMap['inner_weight_kg'] = $col;
+                        $colMap['inner_weight'] = $col;
                     }
                     if (str_contains($val, 'master') && str_contains($val, 'weight')) {
-                        $colMap['master_weight_kg'] = $col;
+                        $colMap['master_weight'] = $col;
                         file_put_contents(storage_path('logs/live_sheet_upload.log'), $col . '===' .  $val  . "\n", FILE_APPEND);
                     }
 
@@ -1662,7 +1712,7 @@ class VendorController extends Controller
                     } elseif (str_contains($val, 'product height')) {
                         $colMap['height'] = $col;
                     } elseif (str_contains($val, 'product weight') || str_contains($val, 'weight')) {
-                        $colMap['weight_grams'] = $col;
+                        $colMap['weight'] = $col;
                     } elseif (str_contains($val, 'material') && !str_contains($val, 'other')) {
                         $colMap['material'] = $col;
                     } elseif (str_contains($val, 'other material')) {
@@ -1684,7 +1734,7 @@ class VendorController extends Controller
                     } elseif (str_contains($val, 'inner') && str_contains($val, 'height')) {
                         $colMap['inner_height'] = $col;
                     } elseif (str_contains($val, 'inner carton weight') || $val === 'inner carton weight (kg)') {
-                        $colMap['inner_weight_kg'] = $col;
+                        $colMap['inner_weight'] = $col;
                     } elseif (str_contains($val, 'qty in master')) {
                         $colMap['qty_master_pack'] = $col;
                     } elseif (str_contains($val, 'master') && str_contains($val, 'length')) {
@@ -1694,7 +1744,7 @@ class VendorController extends Controller
                     } elseif (str_contains($val, 'master') && str_contains($val, 'height')) {
                         $colMap['master_height'] = $col;
                     } elseif (str_contains($val, 'master') && str_contains($val, 'weight')) {
-                        $colMap['master_weight_kg'] = $col;
+                        $colMap['master_weight'] = $col;
                     } elseif (str_contains($val, 'master') && str_contains($val, 'carton')) {
                         $colMap['no_of_master_carton'] = $col;
                     } elseif (str_contains($val, 'qty offered')) {
@@ -1743,7 +1793,7 @@ class VendorController extends Controller
                     'length'          => $getVal('length'),
                     'width'           => $getVal('width'),
                     'height'          => $getVal('height'),
-                    'weight_grams'    => $getVal('weight_grams'),
+                    'weight'          => $getVal('weight'),
                     'material'        => $getVal('material'),
                     'other_material'  => $getVal('other_material'),
                     'color'           => $getVal('color'),
@@ -1754,12 +1804,12 @@ class VendorController extends Controller
                     'inner_length'    => $getVal('inner_length'),
                     'inner_width'     => $getVal('inner_width'),
                     'inner_height'    => $getVal('inner_height'),
-                    'inner_weight_kg' => $getVal('inner_weight_kg'),
+                    'inner_weight'      => $getVal('inner_weight'),
                     'qty_master_pack' => $getVal('qty_master_pack'),
                     'master_length'   => $getVal('master_length'),
                     'master_width'    => $getVal('master_width'),
                     'master_height'   => $getVal('master_height'),
-                    'master_weight_kg' => $getVal('master_weight_kg'),
+                    'master_weight' => $getVal('master_weight'),
                     'no_of_master_carton' => $getVal('no_of_master_carton'),
                     'qty_offered'     => $getVal('qty_offered'),
                     'vendor_fob'      => $getVal('vendor_fob'),
@@ -1842,25 +1892,7 @@ class VendorController extends Controller
         ]);
         return back()->with('success', 'Inspection report uploaded.');
     }
-    public function uploadCommercialInvoiceBack(Request $request, Consignment $consignment)
-    {
-        $request->validate(['commercial_invoice' => 'nullable|file|max:20480', 'packing_list' => 'nullable|file|max:20480']);
-        print_r($request->all());
-        exit;
-        $path = $request->file('commercial_invoice')->store('inspections/' . $consignment->id, 'public');
-        $path = $request->file('packing_list')->store('inspections/' . $consignment->id, 'public');
 
-        \App\Models\InspectionReport::create([
-            'consignment_id' => $consignment->id,
-            'inspection_type' => $request->inspection_type,
-            'report_file' => $path,
-            'report_name' => $request->file('commercial_invoice')->getClientOriginalName(),
-            'result' => $request->result,
-            'remarks' => $request->remarks,
-            'uploaded_by' => auth()->id(),
-        ]);
-        return back()->with('success', 'Commercial invoice uploaded.');
-    }
 
     public function salesReport(Request $request)
     {
@@ -2238,10 +2270,10 @@ class VendorController extends Controller
         // $path = public_path('downloads/Consignment_Contract_ExpoBazaar.pdf');
 
         $activeCompany = session('active_company');
-        $contractFile = 'EU_Contract.docx';
+        $contractFile = 'EU_Contract.pdf';
         if ($activeCompany === '2100') {
-            $contractFile = 'US_Contract.docx';
-        }
+            $contractFile = 'US_Contract.pdf';
+        } 
 
         $path = storage_path('app/public/downloads/' . $contractFile);
 
@@ -2249,7 +2281,7 @@ class VendorController extends Controller
             return back()->with('error', 'Contract file not found. Please contact support.');
         }
 
-        return response()->download($path, $activeCompany.'_'.$contractFile);
+        return response()->download($path, $activeCompany . '_' . $contractFile);
     }
 
     /**

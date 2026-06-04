@@ -28,16 +28,7 @@
                     <div class="form-group"><label>Contact Person</label><input type="text" name="contact_person"></div>
                     <div class="form-group"><label>Contact Phone</label><input type="text" name="contact_phone"></div>
                 </div>
-                <div class="form-group"><label>Address</label><textarea name="address" rows="2"></textarea></div>
-
-                <div style="font-size:.85rem;font-weight:700;color:#1e3a5f;margin:1rem 0 .5rem;border-top:1px solid #e8ecf1;padding-top:1rem;">Rate Card (per CBM / per unit)</div>
-                <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr 1fr;gap:.75rem;">
-                    <div class="form-group"><label>Inward /CBM</label><input type="number" step="0.01" name="inward_rate_per_cbm" value="0" min="0"></div>
-                    <div class="form-group"><label>Storage /CBM/Month</label><input type="number" step="0.01" name="storage_rate_per_cbm_month" value="0" min="0"></div>
-                    <div class="form-group"><label>Pick & Pack</label><input type="number" step="0.01" name="pick_pack_rate" value="0" min="0"></div>
-                    <div class="form-group"><label>Consumable</label><input type="number" step="0.01" name="consumable_rate" value="0" min="0"></div>
-                    <div class="form-group"><label>Last Mile</label><input type="number" step="0.01" name="last_mile_rate" value="0" min="0"></div>
-                </div>
+                <div class="form-group"><label>Address</label><textarea name="address" rows="2"></textarea></div>             
                 <button type="submit" class="btn btn-primary"><i class="fas fa-save" style="margin-right:.3rem;"></i> Create Warehouse</button>
             </form>
         </div>
@@ -50,7 +41,7 @@
     <div class="card-body" style="padding:0;overflow-x:auto;">
         <table class="data-table">
             <thead>
-                <tr><th>Warehouse</th><th>Company</th><th>Location</th><th>Contact</th><th>Inward</th><th>Storage</th><th>Pick&Pack</th><th>Last Mile</th><th>Sub-Locations</th><th>Status</th></tr>
+                <tr><th>Warehouse</th><th>Company</th><th>Location</th><th>Contact</th><th>Sub-Locations</th><th>Status</th></tr>
             </thead>
             <tbody>
                 @forelse($warehouses as $wh)
@@ -72,12 +63,7 @@
                     <td>
                         <div style="font-size:.8rem;">{{ $wh->contact_person ?? '—' }}</div>
                         @if($wh->contact_phone)<div style="font-size:.68rem;color:#94a3b8;">{{ $wh->contact_phone }}</div>@endif
-                    </td>
-                    <td style="font-family:monospace;font-size:.8rem;font-weight:600;">{{ number_format($wh->inward_rate_per_cbm, 2) }}</td>
-                    <td style="font-family:monospace;font-size:.8rem;font-weight:600;">{{ number_format($wh->storage_rate_per_cbm_month, 2) }}</td>
-                    <td style="font-family:monospace;font-size:.8rem;font-weight:600;">{{ number_format($wh->pick_pack_rate, 2) }}</td>
-                    <td style="font-family:monospace;font-size:.8rem;font-weight:600;">{{ number_format($wh->last_mile_rate, 2) }}</td>
-                    <td>
+                        <td>
                         @if($wh->subWarehouses->count() > 0)
                             <div style="font-size:.78rem;font-weight:600;">{{ $wh->subWarehouses->count() }} sub-WH</div>
                         @endif

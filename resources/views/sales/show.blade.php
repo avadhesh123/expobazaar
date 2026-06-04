@@ -9,7 +9,9 @@
 @php
 $currency = match ($order->company_code) {
 '2000' => 'INR',
+'2100' => 'USD',
 '2200' => 'EUR',
+'2400' =>'GBP',
 default => 'USD',
 };
 
@@ -79,7 +81,7 @@ default => 'USD',
 
     {{-- Tracking --}}
     {{-- Tracking Section - Multiple Trackings --}}
-<div class="card">
+<div class="card"  >
     <div class="card-header">
         <h3><i class="fas fa-truck" style="margin-right:.5rem;color:#e8a838;"></i> Shipment Tracking 
             <span style="font-size:.75rem;font-weight:500;">({{ $order->trackings->count() ?? 0 }})</span>

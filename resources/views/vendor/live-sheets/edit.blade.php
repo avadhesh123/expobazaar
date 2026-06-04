@@ -66,7 +66,11 @@
 </div>
 @endif
 
-
+@php
+$isUS = ($activeCompany === '2100');
+$lwhUnit = $isUS ? 'Inches' : 'CM';
+$weightUnit = $isUS ? 'LBS' : 'KG';
+@endphp
 
 <form method="POST" action="{{ route('vendor.live-sheets.submit', $liveSheet) }}">
     @csrf
@@ -87,10 +91,10 @@
                         <th style="min-width:80px;">Specification</th>
                         <th style="min-width:80px;">HSN/HTS</th>
                         <th style="min-width:55px;">Duty %</th>
-                        <th style="min-width:55px;">L (in)</th>
-                        <th style="min-width:55px;">W (in)</th>
-                        <th style="min-width:55px;">H (in)</th>
-                        <th style="min-width:60px;">Wt (g)</th>
+                        <th style="min-width:55px;">Length ({{ $lwhUnit }})</th>
+                        <th style="min-width:55px;">Width ({{ $lwhUnit }})</th>
+                        <th style="min-width:55px;">Height ({{ $lwhUnit }})</th>
+                        <th style="min-width:60px;">Weight ({{ $weightUnit }})</th>
                         <th style="min-width:90px;">Material</th>
                         <th style="min-width:80px;">Other Mat.</th>
                         <th style="min-width:60px;">Color</th>
@@ -98,15 +102,15 @@
                         <th style="min-width:80px;">Category</th>
                         <th style="min-width:80px;">Sub Cat.</th>
                         <th style="min-width:50px;">Inner Qty</th>
-                        <th style="min-width:55px;">Inner L</th>
-                        <th style="min-width:55px;">Inner W</th>
-                        <th style="min-width:55px;">Inner H</th>
-                        <th style="min-width:60px;">Inner Wt</th>
+                        <th style="min-width:55px;">Inner Carton Length ({{ $lwhUnit }})</th>
+                        <th style="min-width:55px;">Inner Carton Width ({{ $lwhUnit }})</th>
+                        <th style="min-width:55px;">Inner Carton Height ({{ $lwhUnit }})</th>
+                        <th style="min-width:60px;">Inner Carton Weight {{ $weightUnit }}</th>
                         <th style="min-width:55px;">Master Qty</th>
-                        <th style="min-width:55px;">Master L</th>
-                        <th style="min-width:55px;">Master W</th>
-                        <th style="min-width:55px;">Master H</th>
-                        <th style="min-width:65px;">Master Wt</th>
+                        <th style="min-width:55px;">Master Carton Length ({{ $lwhUnit }})</th>
+                        <th style="min-width:55px;">Master Carton Width ({{ $lwhUnit }})</th>
+                        <th style="min-width:55px;">Master Carton Height ({{ $lwhUnit }})</th>
+                        <th style="min-width:65px;">Master Carton Weight ({{ $weightUnit }})</th>
                         <th style="min-width:60px;background:#eff6ff;">Qty Offered*</th>
                         <th style="min-width:70px;background:#eff6ff;">FOB ({{$activeCurrencySymbol}}) *</th>
                         <th style="min-width:70px;">Target FOB</th>
@@ -130,9 +134,9 @@
                     @php
                     $d = $item->product_details ?? [];
                     $dis = $liveSheet->is_locked ? 'disabled' : '';
-                    $masterL = floatval($d['master_length'] ?? 0);
-                    $masterW = floatval($d['master_width'] ?? 0);
-                    $masterH = floatval($d['master_height'] ?? 0);
+                    $masterL = floatval($d['master_carton_length'] ?? $d['master_length'] ?? 0);
+                    $masterW = floatval($d['master_carton_width'] ?? $d['master_width'] ?? 0);
+                    $masterH = floatval($d['master_carton_height'] ?? $d['master_height'] ?? 0);
                     $masterCbm = ($masterL && $masterW && $masterH) ? ($masterL * $masterW * $masterH) / 61023 : 0;
                     $qtyMaster = floatval($d['qty_master_pack'] ?? 1) ?: 1;
                     $finalQty = floatval($d['final_qty'] ?? $item->quantity ?? 0);
@@ -157,10 +161,10 @@
                         <td style="font-size:.7rem;max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="{{ $d['specification'] ?? '' }}">{{ Str::limit($d['specification'] ?? '—', 40) }}</td>
                         <td>{{ $d['hsn_hts_code'] ?? '—' }}</td>
                         <td style="text-align:center;">{{ $d['duty_percent'] ?? '—' }}</td>
-                        <td style="text-align:center;font-family:monospace;">{{ $d['length_inches'] ?? '—' }}</td>
-                        <td style="text-align:center;font-family:monospace;">{{ $d['width_inches'] ?? '—' }}</td>
-                        <td style="text-align:center;font-family:monospace;">{{ $d['height_inches'] ?? '—' }}</td>
-                        <td style="text-align:center;font-family:monospace;">{{ $d['weight_grams'] ?? '—' }}</td>
+                        <td style="text-align:center;font-family:monospace;">{{ $d['length'] ?? $d['length_inches'] ?? '—' }}</td>
+                        <td style="text-align:center;font-family:monospace;">{{ $d['width'] ?? $d['width_inches'] ?? '—' }}</td>
+                        <td style="text-align:center;font-family:monospace;">{{ $d['height'] ?? $d['height_inches'] ?? '—' }}</td>
+                        <td style="text-align:center;font-family:monospace;">{{ $d['weight'] ?? $d['weight_grams'] ?? '—' }}</td>
                         <td>{{ $d['material'] ?? '—' }}</td>
                         <td>{{ $d['other_material'] ?? '—' }}</td>
                         <td>{{ $d['color'] ?? '—' }}</td>
@@ -168,15 +172,15 @@
                         <td>{{ $d['category'] ?? '—' }}</td>
                         <td>{{ $d['sub_category'] ?? '—' }}</td>
                         <td style="text-align:center;">{{ $d['qty_inner_pack'] ?? '—' }}</td>
-                        <td style="text-align:center;font-family:monospace;">{{ $d['inner_length'] ?? '—' }}</td>
-                        <td style="text-align:center;font-family:monospace;">{{ $d['inner_width'] ?? '—' }}</td>
-                        <td style="text-align:center;font-family:monospace;">{{ $d['inner_height'] ?? '—' }}</td>
-                        <td style="text-align:center;font-family:monospace;">{{ $d['inner_weight_kg'] ?? '—' }}P</td>
+                        <td style="text-align:center;font-family:monospace;">{{ $d['inner_carton_length'] ?? $d['inner_length'] ?? '—' }}</td>
+                        <td style="text-align:center;font-family:monospace;">{{ $d['inner_carton_width'] ?? $d['inner_width'] ?? '—' }}</td>
+                        <td style="text-align:center;font-family:monospace;">{{ $d['inner_carton_height'] ?? $d['inner_height'] ?? '—' }}</td>
+                        <td style="text-align:center;font-family:monospace;">{{ $d['inner_carton_weight'] ?? $d['inner_weight_kg'] ?? '—' }}</td>
                         <td style="text-align:center;">{{ $d['qty_master_pack'] ?? '—' }}</td>
-                        <td style="text-align:center;font-family:monospace;">{{ $d['master_length'] ?? '—' }}</td>
-                        <td style="text-align:center;font-family:monospace;">{{ $d['master_width'] ?? '—' }}</td>
-                        <td style="text-align:center;font-family:monospace;">{{ $d['master_height'] ?? '—' }}</td>
-                        <td style="text-align:center;font-family:monospace;">{{ $d['master_weight_kg'] ?? '—' }}</td>
+                        <td style="text-align:center;font-family:monospace;">{{ $d['master_carton_length'] ?? $d['master_length'] ?? '—' }}</td>
+                        <td style="text-align:center;font-family:monospace;">{{ $d['master_carton_width'] ?? $d['master_width'] ?? '—' }}</td>
+                        <td style="text-align:center;font-family:monospace;">{{ $d['master_carton_height'] ?? $d['master_height'] ?? '—' }}</td>
+                        <td style="text-align:center;font-family:monospace;">{{ $d['master_carton_weight'] ?? $d['master_weight_kg'] ?? '—' }}</td>
                         {{-- Editable fields --}}
                         <td style="background:#eff6ff;"><input type="number" name="items[{{ $idx }}][quantity]" value="{{ $item->quantity ?? 0 }}" min="1" required onchange="calcRow({{ $idx }})" style="width:55px;padding:.2rem .3rem;border:1px solid #93c5fd;border-radius:4px;font-size:.78rem;text-align:center;background:#fff;" {{ $dis }}></td>
                         <td style="background:#eff6ff;"><input type="number" step="0.01" name="items[{{ $idx }}][unit_price]" value="{{ $item->unit_price ?? 0 }}" min="0" required onchange="calcRow({{ $idx }})" style="width:65px;padding:.2rem .3rem;border:1px solid #93c5fd;border-radius:4px;font-size:.78rem;font-family:monospace;text-align:right;background:#fff;" {{ $dis }}></td>

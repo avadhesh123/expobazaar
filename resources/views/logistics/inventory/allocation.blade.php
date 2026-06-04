@@ -55,53 +55,74 @@
 </div>
 
 {{-- Transfer Form --}}
+{{-- Transfer Inventory via File Upload --}}
 <div class="card" style="margin-bottom:1.25rem;">
     <div class="card-header">
         <h3><i class="fas fa-exchange-alt" style="margin-right:.5rem;color:#e8a838;"></i> Transfer Inventory</h3>
-        <button type="button" class="btn btn-outline btn-sm" onclick="document.getElementById('transferForm').style.display=document.getElementById('transferForm').style.display==='none'?'block':'none'"><i class="fas fa-chevron-down"></i> Toggle</button>
+        <button type="button" class="btn btn-outline btn-sm" onclick="document.getElementById('transferForm').style.display=document.getElementById('transferForm').style.display==='none'?'block':'none'">
+            <i class="fas fa-chevron-down"></i> Toggle
+        </button>
     </div>
     <div id="transferForm" style="display:none;">
         <div class="card-body">
-            <form method="POST" action="{{ route('logistics.inventory.transfer') }}">
+            <div style="padding:.5rem .8rem;background:#eff6ff;border-radius:6px;border:1px solid #bfdbfe;margin-bottom:.75rem;font-size:.72rem;color:#1e40af;">
+                <i class="fas fa-info-circle"></i>
+                Upload a CSV/XLSX with <strong>SKU</strong> and <strong>Qty</strong> columns. All items are validated before transfer — if any SKU has insufficient stock, the <strong>entire transfer is cancelled</strong>.
+            </div>
+
+            <form method="POST" action="{{ route('logistics.inventory.transfer') }}" enctype="multipart/form-data">
                 @csrf
-                <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr auto auto;gap:.75rem;align-items:flex-end;">
-                    <div class="form-group" style="margin-bottom:0;">
-                        <label>Product (SKU) <span style="color:#dc2626;">*</span></label>
-                        <select name="product_id" required style="font-family:inherit;">
-                            <option value="">Select product...</option>
-                            @foreach(\App\Models\Product::where('stock_quantity', '>', 0)->orderBy('sku')->get() as $p)
-                            <option value="{{ $p->id }}">{{ $p->sku }} — {{ Str::limit($p->name, 30) }}</option>
-                            @endforeach
-                        </select>
-                    </div>
+                {{-- Row 1: Warehouse selection --}}
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:.75rem;margin-bottom:.75rem;">
                     <div class="form-group" style="margin-bottom:0;">
                         <label>From Warehouse <span style="color:#dc2626;">*</span></label>
                         <select name="from_warehouse_id" required>
-                            <option value="">Select...</option>
+                            <option value="">Select source...</option>
                             @foreach($warehouses as $wh)<option value="{{ $wh->id }}">{{ $wh->name }}</option>@endforeach
                         </select>
                     </div>
                     <div class="form-group" style="margin-bottom:0;">
                         <label>To Warehouse <span style="color:#dc2626;">*</span></label>
                         <select name="to_warehouse_id" required>
-                            <option value="">Select...</option>
+                            <option value="">Select destination...</option>
                             @foreach($warehouses as $wh)<option value="{{ $wh->id }}">{{ $wh->name }}</option>@endforeach
                             @foreach($warehouses as $wh)
-                            @foreach($wh->subWarehouses as $sub)
+                            @foreach($wh->subWarehouses ?? [] as $sub)
                             <option value="{{ $sub->id }}">↳ {{ $sub->name }} (sub of {{ $wh->name }})</option>
                             @endforeach
                             @endforeach
                         </select>
                     </div>
-                    <div class="form-group" style="margin-bottom:0;">
-                        <label>Quantity <span style="color:#dc2626;">*</span></label>
-                        <input type="number" name="quantity" required min="1" placeholder="0" style="font-family:monospace;">
-                    </div>
+                </div>
+
+                {{-- Row 2: Costs + Reference --}}
+                <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:.75rem;margin-bottom:.75rem;">
                     <div class="form-group" style="margin-bottom:0;">
                         <label>Transportation Cost <span style="color:#dc2626;">*</span></label>
                         <input type="number" step="0.01" name="transportation_cost" required min="0" placeholder="0.00" style="font-family:monospace;">
                     </div>
-                    <button type="submit" class="btn btn-primary" onclick="return confirm('Transfer this inventory?')"><i class="fas fa-exchange-alt" style="margin-right:.3rem;"></i> Transfer</button>
+                    <div class="form-group" style="margin-bottom:0;">
+                        <label>Pick & Pack Cost <span style="color:#dc2626;">*</span></label>
+                        <input type="number" step="0.01" name="pick_pack_cost" required min="0" placeholder="0.00" style="font-family:monospace;">
+                    </div>
+                    <div class="form-group" style="margin-bottom:0;">
+                        <label>Reference No <span style="color:#dc2626;">*</span></label>
+                        <input type="text" name="reference_no" required placeholder="TRF-001" style="font-family:monospace;">
+                    </div>
+                </div>
+
+                {{-- Row 3: File Upload + Actions --}}
+                <div style="display:flex;gap:.75rem;align-items:flex-end;">
+                    <div class="form-group" style="margin-bottom:0;flex:1;">
+                        <label>Transfer File (SKU, Qty) <span style="color:#dc2626;">*</span></label>
+                        <input type="file" name="transfer_inv_file" required accept=".csv,.xlsx" style="font-size:.82rem;">
+                    </div>
+                    <a href="{{ route('logistics.inventory.transfer-template') }}" class="btn btn-outline btn-sm" style="white-space:nowrap;">
+                        <i class="fas fa-download"></i> Download Template
+                    </a>
+                    <button type="submit" class="btn btn-primary" onclick="return confirm('Transfer inventory? All SKUs will be validated before transfer.')">
+                        <i class="fas fa-exchange-alt" style="margin-right:.3rem;"></i> Transfer
+                    </button>
                     <button type="button" class="btn btn-outline" onclick="document.getElementById('transferForm').style.display='none'">Cancel</button>
                 </div>
             </form>
@@ -109,6 +130,19 @@
     </div>
 </div>
 
+{{-- Transfer Errors --}}
+@if(session('transfer_errors'))
+<div class="card" style="margin-bottom:1.25rem;border-color:#fca5a5;">
+    <div class="card-header" style="background:#fef2f2;"><h3 style="color:#dc2626;"><i class="fas fa-exclamation-triangle"></i> Transfer Errors</h3></div>
+    <div class="card-body" style="padding:.5rem 1rem;">
+        <div style="max-height:150px;overflow-y:auto;font-size:.72rem;">
+            @foreach(session('transfer_errors') as $err)
+            <div style="padding:.2rem 0;border-bottom:1px solid #fecaca;color:#dc2626;">{{ $err }}</div>
+            @endforeach
+        </div>
+    </div>
+</div>
+@endif
 {{-- Movement History --}}
 <div class="card">
     <div class="card-header">

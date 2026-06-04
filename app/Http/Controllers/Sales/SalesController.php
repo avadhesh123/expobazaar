@@ -164,17 +164,87 @@ class SalesController extends Controller
         return view('sales.upload', compact('channels'));
     }
 
+    // public function downloadTemplate()
+    // {
+    //     $csv = "Order Date,PO Number / Order ID,Invoice Number,Sales Channel,Vendor Name,Vendor Type,SAP code,Style Code,Per Unit Sales Price,Order Qty,Order Amount,Warehouse ID Number,Warehouse Name,Shipping Method,Customer Type,Customer Name,Company Name,Shipping Address,City,State,Zip Code,Country,Phone Number,Email\n";
+    //     $csv .= "2026-05-10,70981308,,Amazon,,,,SKU1234,2.40,1,,,,,CFL,John Doe,My Company,123 Main St,New York,NY,10001,US,1234567890,john@example.com\n";
+
+    //     return response($csv, 200, [
+    //         'Content-Type' => 'text/csv',
+    //         'Content-Disposition' => 'attachment; filename="Sales-Upload-Template.csv"',
+    //     ]);
+    // }
     public function downloadTemplate()
     {
-        $csv = "Order Date,PO Number / Order ID,Invoice Number,Sales Channel,Vendor Name,Vendor Type,SAP code,Style Code,Per Unit Sales Price,Order Qty,Order Amount,Warehouse ID Number,Warehouse Name,Shipping Method,Customer Type,Customer Name,Company Name,Shipping Address,City,State,Zip Code,Country,Phone Number,Email\n";
-        $csv .= "2026-05-10,70981308,,Amazon,,,,,SKU1234,2.40,1,,,,CFL,John Doe,My Company,123 Main St,New York,NY,10001,US,1234567890,john@example.com\n";
+       // $csv = "Order Date,PO Number / Order ID,Invoice Number,Sales Channel,Vendor Name,Vendor Type,SAP Code,Style Code / SKU,Per Unit Sales Price,Order Qty,Order Amount,Warehouse ID,Warehouse Name,Shipping Method,Customer Type,Customer Name,Company Name,Shipping Address,City,State / Province,Zip / Postal Code,Country,Phone Number,Email,Notes\n";
+
+        // Sample Data Row
+
+
+        $headers = [
+            'Order Date',
+            'PO Number / Order ID',
+            'Invoice Number',
+            'Sales Channel',
+            'Vendor Name',
+            'Vendor Type',
+            'SAP Code',
+            'Style Code / SKU',
+            'Per Unit Sales Price',
+            'Order Qty',
+            'Order Amount',
+            'Warehouse ID',
+            'Warehouse Name',
+            'Shipping Method',
+            'Customer Type',
+            'Customer Name',
+            'Company Name',
+            'Shipping Address',
+            'City',
+            'State / Province',
+            'Zip / Postal Code',
+            'Country',
+            'Phone Number',
+            'Email',
+            'Notes'
+        ];
+
+        $csv = implode(',', $headers) . "\n";
+        $vals = [
+            '2026-05-10',
+            'PO-ORD-70981308',
+            '', //Invoice Number
+            '', //Sales Channel
+            '', //Vendor Name
+            '', //Vendor Type
+            '', //SAP Code
+            'CCC1234',
+            '2.3',
+            '10',
+            '23',
+            'WH-NL-001',
+            '', //warehouse name
+            'sp/mpl/ebl',
+            'b2b', //Customer Type
+            'Customer Name',
+            'Company Name',
+            'Shipping Address',
+            'City',
+            'State / Province',
+            'Zip / Postal Code',
+            'Country',
+            'Phone Number',
+            'Email',
+            'Notes'
+        ];
+
+        $csv .= implode(',', $vals) . "\n";
 
         return response($csv, 200, [
             'Content-Type' => 'text/csv',
-            'Content-Disposition' => 'attachment; filename="Sales-Upload-Template.csv"',
+            'Content-Disposition' => 'attachment; filename="Sales_Upload_Template.csv"',
         ]);
     }
-
     public function storeSales(Request $request)
     {
         $request->validate([
@@ -519,9 +589,9 @@ class SalesController extends Controller
                 'message' => 'This order cannot be cancelled at its current status.'
             ], 422);
         }
-//         echo '<pre>';
-// print_r($order->items);
-// exit;
+        //         echo '<pre>';
+        // print_r($order->items);
+        // exit;
         $oldStatus = $order->status;
 
         \DB::beginTransaction();
@@ -533,20 +603,20 @@ class SalesController extends Controller
                     ->where('company_code', $order->company_code)
                     ->first();
 
-file_put_contents(storage_path('logs/cancel-orders.log'), print_r($inventory,true). "\n", FILE_APPEND);
+                file_put_contents(storage_path('logs/cancel-orders.log'), print_r($inventory, true) . "\n", FILE_APPEND);
 
                 if ($inventory) {
                     $inventory->increment('quantity', $qty);
                     $inventory->increment('available_quantity', $qty);
 
-                    \App\Models\InventoryLog::record($inventory, 'order_canceled_restock', $qty, [ 
+                    \App\Models\InventoryLog::record($inventory, 'order_canceled_restock', $qty, [
                         'description'    => "Restocked {$qty} units of {$item->sku} from canceled order {$order->order_number}",
                         'reference_type' => 'order_canceled_restock',
                         'reference_id'   => $order->id,
                         'reference_code' => $order->order_number,
                     ]);
 
-file_put_contents(storage_path('logs/cancel-orders.log'), "Restocked {$qty} units of {$item->sku} from canceled order {$order->order_number}". "\n", FILE_APPEND);
+                    file_put_contents(storage_path('logs/cancel-orders.log'), "Restocked {$qty} units of {$item->sku} from canceled order {$order->order_number}" . "\n", FILE_APPEND);
 
                     \App\Models\Product::where('id', $item->product_id)->increment('stock_quantity', $qty);
                 }

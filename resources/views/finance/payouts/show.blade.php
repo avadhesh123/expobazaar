@@ -28,6 +28,15 @@ $monthName = \Carbon\Carbon::create($payout->payout_year, $payout->payout_month)
                 <div style="font-size:.65rem;color:#64748b;font-weight:600;text-transform:uppercase;">Status</div>
                 <div>@php $sc = ['draft'=>'badge-gray','calculated'=>'badge-warning','approved'=>'badge-success','paid'=>'badge-info']; @endphp<span class="badge {{ $sc[$payout->status] ?? 'badge-gray' }}">{{ ucfirst($payout->status) }}</span></div>
             </div>
+            <div>
+
+                <a href="{{ route('finance.payouts.show', $payout) }}?recalculate=1" class="btn btn-outline btn-sm" onclick="return confirm('Recalculate with latest shipped data?')">
+                    <i class="fas fa-sync"></i> Recalculate Live
+                </a>
+                @if($calculatedAt)
+                <span style="font-size:.65rem;color:#94a3b8;">Snapshot from {{ \Carbon\Carbon::parse($calculatedAt)->format('d M Y H:i') }}</span>
+                @endif
+            </div>
         </div>
     </div>
 </div>
@@ -124,7 +133,7 @@ $monthName = \Carbon\Carbon::create($payout->payout_year, $payout->payout_month)
                         <th>Pick & Pack</th>
                         <th>Material</th>
                         <th>Total Charges</th>
-                     </tr>
+                    </tr>
                 </thead>
                 <tbody>
                     @forelse($warehouseCharges as $wc)
@@ -138,7 +147,7 @@ $monthName = \Carbon\Carbon::create($payout->payout_year, $payout->payout_month)
                         <td><span class="badge badge-gray">{{ ucfirst($wc->material_cost ?? '—') }}</span></td>
                         <td><span class="badge badge-gray">{{ ucfirst($wc->total_charges ?? '—') }}</span></td>
 
-                     </tr>
+                    </tr>
                     @empty
                     <tr>
                         <td colspan="8" style="text-align:center;color:#94a3b8;padding:1rem;">No warehouse charges</td>
@@ -198,24 +207,39 @@ $monthName = \Carbon\Carbon::create($payout->payout_year, $payout->payout_month)
 </div>
 
 {{-- Final Payout Summary --}}
+
 @php
-$totalWhCharges = $warehouseCharges->sum(fn($c) => floatval($c->calculated_amount ?? $c->amount ?? 0));
+$totalPayout = $payoutSummary['total_payout'] ?? 0;
+$totalWhCharges = $warehouseCharges->sum(fn($c) => floatval($c->total_charges ?? $c->amount ?? 0));
+
 $totalChargebacks = $chargebacks->sum('amount');
+$netPayout = round($totalPayout - $totalWhCharges - $totalChargebacks, 2);
+
 $finalPayout = $payoutSummary['total_payout'] - $totalWhCharges - $totalChargebacks;
+
 @endphp
 <div class="card">
     <div class="card-header">
         <h3><i class="fas fa-calculator" style="margin-right:.5rem;color:#7c3aed;"></i> Final Payout Summary</h3>
     </div>
     <div class="card-body" style="padding:1rem 1.4rem;">
+
         <table style="width:100%;max-width:500px;font-size:.85rem;">
             <tr>
                 <td style="padding:.4rem 0;">Total Sales (Vendor WSP × QTY)</td>
-                <td style="text-align:right;font-family:monospace;font-weight:600;">{{ $activeCurrencySymbol }}{{ number_format($payoutSummary['total_payout'], 2) }}</td>
+                <td style="text-align:right;font-family:monospace;font-weight:600;">{{ $activeCurrencySymbol }}{{ number_format($payoutSummary['total_sales'] ?? 0, 2) }}</td>
+            </tr>
+            <tr>
+                <td style="padding:.4rem 0;color:#e8a838;">— EB Commission</td>
+                <td style="text-align:right;font-family:monospace;color:#e8a838;">-{{ $activeCurrencySymbol }}{{ number_format($payoutSummary['total_commission'] ?? 0, 2) }}</td>
+            </tr>
+            <tr style="border-top:1px solid #e2e8f0;">
+                <td style="padding:.4rem 0;font-weight:600;">Gross Payout</td>
+                <td style="text-align:right;font-family:monospace;font-weight:600;">{{ $activeCurrencySymbol }}{{ number_format($totalPayout, 2) }}</td>
             </tr>
             <tr>
                 <td style="padding:.4rem 0;color:#dc2626;">— Warehouse Charges</td>
-                <td style="text-align:right;font-family:monospace;color:#dc2626;">{{ $activeCurrencySymbol }}{{ number_format($warehouseCharges->sum(fn($c) => floatval($c->total_charges ?? $c->amount ?? 0)), 2) }}</td>
+                <td style="text-align:right;font-family:monospace;color:#dc2626;">-{{ $activeCurrencySymbol }}{{ number_format($totalWhCharges, 2) }}</td>
             </tr>
             <tr>
                 <td style="padding:.4rem 0;color:#dc2626;">— Chargebacks</td>
@@ -223,7 +247,7 @@ $finalPayout = $payoutSummary['total_payout'] - $totalWhCharges - $totalChargeba
             </tr>
             <tr style="border-top:2px solid #1e3a5f;">
                 <td style="padding:.6rem 0;font-weight:800;font-size:1rem;">NET PAYOUT</td>
-                <td style="text-align:right;font-family:monospace;font-weight:800;font-size:1.1rem;color:#7c3aed;">{{ $activeCurrencySymbol }}{{ number_format($finalPayout, 2) }}</td>
+                <td style="text-align:right;font-family:monospace;font-weight:800;font-size:1.1rem;color:{{ $netPayout >= 0 ? '#7c3aed' : '#dc2626' }};">{{ $activeCurrencySymbol }}{{ number_format($netPayout, 2) }}</td>
             </tr>
         </table>
     </div>

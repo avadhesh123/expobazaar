@@ -13,13 +13,10 @@ class Warehouse extends Model
     protected $fillable = [
         'name', 'code', 'company_code', 'type', 'parent_warehouse_id',
         'address', 'city', 'state', 'country', 'pincode',
-        'contact_person', 'contact_phone', 'contact_email',
-        'inward_rate_per_cbm', 'storage_rate_per_cbm_month', 'pick_pack_rate',
-        'consumable_rate', 'last_mile_rate', 'rate_card', 'is_active','no_of_pallets',
+        'contact_person', 'contact_phone', 'contact_email', 'is_active',
     ];
 
     protected $casts = [
-        'rate_card' => 'array',
         'is_active' => 'boolean',
     ];
 
