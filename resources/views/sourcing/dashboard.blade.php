@@ -4,6 +4,7 @@
 
 @section('content')
 {{-- KPIs --}}
+ 
 <div class="grid-kpi">
     <div class="kpi-card">
         <div style="display:flex;justify-content:space-between;align-items:start;">

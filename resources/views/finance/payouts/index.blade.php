@@ -17,7 +17,11 @@
         <div class="kpi-value" style="color:#e8a838;">{{ $activeCurrencySymbol }}{{ number_format($summary['pending_invoices'], 0) }}</div>
     </div>
 </div>
+@php
 
+phpinfo();
+
+@endphp
 {{-- Filters --}}
 <div class="card" style="margin-bottom:1.25rem;">
     <div class="card-body" style="padding:.85rem 1.4rem;">

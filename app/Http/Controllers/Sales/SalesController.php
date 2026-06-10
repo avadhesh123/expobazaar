@@ -3,7 +3,7 @@
 namespace App\Http\Controllers\Sales;
 
 use App\Http\Controllers\Controller;
-use App\Models\{Order, SalesChannel, OrderTracking};
+use App\Models\{Order, SalesChannel, OrderTracking, Warehouse};
 use App\Services\{SalesService, DashboardService};
 use Illuminate\Http\Request;
 
@@ -160,23 +160,26 @@ class SalesController extends Controller
             return response()->json(['found' => false]);
         }
 
+        $activeCode = session('active_company');
+
+        $warehouses = Warehouse::active()
+            ->when($activeCode, fn($q, $v) => $q->where('company_code', $v))
+            ->withCount(['inventory' => fn($q) => $q->where('quantity', '>', 0)])
+            ->withSum(['inventory' => fn($q) => $q->where('quantity', '>', 0)], 'quantity')
+            ->withSum(['inventory' => fn($q) => $q->where('quantity', '>', 0)], 'available_quantity')
+            ->with(['subWarehouses', 'subLocations'])
+            ->get();
+
+
+
         $channels = SalesChannel::active()->get();
-        return view('sales.upload', compact('channels'));
+        return view('sales.upload', compact('channels', 'warehouses'));
     }
 
-    // public function downloadTemplate()
-    // {
-    //     $csv = "Order Date,PO Number / Order ID,Invoice Number,Sales Channel,Vendor Name,Vendor Type,SAP code,Style Code,Per Unit Sales Price,Order Qty,Order Amount,Warehouse ID Number,Warehouse Name,Shipping Method,Customer Type,Customer Name,Company Name,Shipping Address,City,State,Zip Code,Country,Phone Number,Email\n";
-    //     $csv .= "2026-05-10,70981308,,Amazon,,,,SKU1234,2.40,1,,,,,CFL,John Doe,My Company,123 Main St,New York,NY,10001,US,1234567890,john@example.com\n";
 
-    //     return response($csv, 200, [
-    //         'Content-Type' => 'text/csv',
-    //         'Content-Disposition' => 'attachment; filename="Sales-Upload-Template.csv"',
-    //     ]);
-    // }
     public function downloadTemplate()
     {
-       // $csv = "Order Date,PO Number / Order ID,Invoice Number,Sales Channel,Vendor Name,Vendor Type,SAP Code,Style Code / SKU,Per Unit Sales Price,Order Qty,Order Amount,Warehouse ID,Warehouse Name,Shipping Method,Customer Type,Customer Name,Company Name,Shipping Address,City,State / Province,Zip / Postal Code,Country,Phone Number,Email,Notes\n";
+        // $csv = "Order Date,PO Number / Order ID,Invoice Number,Sales Channel,Vendor Name,Vendor Type,SAP Code,Style Code / SKU,Per Unit Sales Price,Order Qty,Order Amount,Warehouse ID,Warehouse Name,Shipping Method,Customer Type,Customer Name,Company Name,Shipping Address,City,State / Province,Zip / Postal Code,Country,Phone Number,Email,Notes\n";
 
         // Sample Data Row
 
@@ -211,7 +214,7 @@ class SalesController extends Controller
 
         $csv = implode(',', $headers) . "\n";
         $vals = [
-            '2026-05-10',
+            date('Y-m-d'),
             'PO-ORD-70981308',
             '', //Invoice Number
             '', //Sales Channel
@@ -220,22 +223,22 @@ class SalesController extends Controller
             '', //SAP Code
             'CCC1234',
             '2.3',
-            '10',
-            '23',
+            '2',
+            '4.6',
             'WH-NL-001',
             '', //warehouse name
             'sp/mpl/ebl',
             'b2b', //Customer Type
-            'Customer Name',
-            'Company Name',
-            'Shipping Address',
-            'City',
-            'State / Province',
-            'Zip / Postal Code',
-            'Country',
-            'Phone Number',
-            'Email',
-            'Notes'
+            'James',
+            'Brick House',
+            '9/265 Indra Nagra',
+            'Ghaziabad',
+            'Uttar Pradesh',
+            '201301',
+            'India',
+            '9415464698',
+            'james@gmail.com',
+            ''
         ];
 
         $csv .= implode(',', $vals) . "\n";
@@ -307,6 +310,7 @@ class SalesController extends Controller
             'company_code'                      => 'required|in:2000,2100,2200,2400',
             'orders'                            => 'required|array|min:1',
             'orders.*.platform_order_id'        => 'required|string',
+            'orders.*.warehouse_id_number'        => 'required|string',
             'orders.*.order_date'               => 'required|date',
             'orders.*.total_amount'             => 'required|numeric|min:0.01',
             'orders.*.shipping_method'          => 'nullable|in:SP,MPL,EBL',
@@ -325,6 +329,7 @@ class SalesController extends Controller
             'orders.*.items.*.sku'              => 'required|string',
             'orders.*.items.*.quantity'          => 'required|integer|min:1',
             'orders.*.items.*.unit_price'        => 'required|numeric|min:0',
+
         ]);
 
         $result = $this->salesService->processManualOrders($request->orders, $request->company_code);

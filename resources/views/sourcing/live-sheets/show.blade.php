@@ -323,7 +323,7 @@ $disabled = $liveSheet->is_locked ? 'disabled' : '';
                         <td style="text-align:center;font-family:monospace;">{{ $masterH ?: '—' }}</td>
                         <td style="text-align:center;font-family:monospace;">{{ $d['master_carton_weight'] ?? $d['master_weight_kg'] ?? '—' }}</td>
                         <td style="text-align:center;">{{ $item->quantity }}</td>
-                        <td style="font-family:monospace;">{{$activeCurrencySymbol}}{{ number_format($item->unit_price, 2) }}</td>
+                        <td style="font-family:monospace;">{{$activeCurrencySymbol}}{{ number_format($d['vendor_fob'], 2) }}</td>
                         {{-- EDITABLE: Target FOB --}}
                         <td style="background:#eff6ff;"><input {{$disabled }} type="number" step="0.01" name="items[{{ $idx }}][target_fob]" value="{{ $d['target_fob'] ?? '' }}" placeholder="0.00" style="width:70px;padding:.2rem .3rem;border:1px solid #93c5fd;border-radius:4px;font-size:.78rem;font-family:monospace;text-align:right;background:#fff;"></td>
                         {{-- EDITABLE: Final Qty --}}

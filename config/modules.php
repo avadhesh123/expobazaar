@@ -122,7 +122,7 @@ return [
             'rate-card'   => ['label' => 'Rate Card',               'actions' => ['view'], 'route' => 'vendor.rate-card',     'icon' => 'fas fa-file-invoice-dollar'],
             'payout'      => ['label' => 'Payouts',                 'actions' => ['view', 'invoice'], 'route' => 'vendor.payouts', 'icon' => 'fas fa-money-check-alt'],
             'chargeback'  => ['label' => 'Chargebacks',             'actions' => ['view'], 'route' => 'vendor.chargebacks',   'icon' => 'fas fa-exclamation-triangle'],
-            'sale'        => ['label' => 'Sales Report',            'actions' => ['view'], 'route' => 'vendor.sales',         'icon' => 'fas fa-chart-bar'],
+           // 'sale'        => ['label' => 'Sales Report',            'actions' => ['view'], 'route' => 'vendor.sales',         'icon' => 'fas fa-chart-bar'],
         ],
     ],
 ];

@@ -130,7 +130,7 @@ $types = [
             </div>
             <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:1rem;">
 
-                <div class="form-group">
+                <!-- <div class="form-group">
                     <label>Commercial Invoice </label>
                     <input type="file" accept=".pdf,.jpg,.jpeg,.png,.doc,.docx,.xlsx" name="commercial_invoice" style="font: size 0.82em;">
                     <div style="font-size:.65rem;color:#94a3b8;margin-top:.2rem;">PDF, JPG, PNG, DOC, XLSX — Max 20MB</div>
@@ -139,7 +139,7 @@ $types = [
                     <label>Packing List </label>
                     <input type="file" accept=".pdf,.jpg,.jpeg,.png,.doc,.docx,.xlsx" name="packing_list" style="font-size:.82rem;">
                     <div style="font-size:.65rem;color:#94a3b8;margin-top:.2rem;">PDF, JPG, PNG, DOC, XLSX — Max 20MB</div>
-                </div>
+                </div> -->
                 <div class="form-group">
                     <label>Product (Optional — for product-specific inspection)</label>
                     <select name="product_id" style="font-family:inherit;">
@@ -151,12 +151,13 @@ $types = [
                         @endif
                     </select>
                 </div>
-            </div>
-
-            <div class="form-group" style="margin-top:.5rem;">
+                 <div class="form-group"  >
                 <label>Remarks / Findings</label>
                 <textarea name="remarks" rows="3" placeholder="Describe inspection findings, defects found, corrective actions needed..." style="font-family:inherit;font-size:.82rem;width:100%;padding:.5rem .65rem;border:1px solid #d1d5db;border-radius:8px;resize:vertical;"></textarea>
             </div>
+            </div>
+
+           
             <div style="display:flex;gap:.5rem;margin-top:.75rem;">
                 <button type="submit" class="btn btn-primary"><i class="fas fa-upload" style="margin-right:.3rem;"></i> Upload Report</button>
                 <a href="{{ route('sourcing.inspections') }}" class="btn btn-outline">Cancel</a>

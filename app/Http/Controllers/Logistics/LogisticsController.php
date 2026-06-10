@@ -32,7 +32,7 @@ class LogisticsController extends Controller
         $consignments = Consignment::with('vendor', 'liveSheet')
             ->where('status', 'created')
             ->where('company_code', $activeCode)
-          //  ->when($request->company_code, fn($q, $v) => $q->where('company_code', $v))
+            //  ->when($request->company_code, fn($q, $v) => $q->where('company_code', $v))
             ->whereDoesntHave('shipments')
             ->when($request->company_code, fn($q, $v) => $q->where('company_code', $v))
             ->get();
@@ -1243,7 +1243,212 @@ class LogisticsController extends Controller
 
     // ═══ WAREHOUSE MONTHLY CHARGES (Calculation + Invoice + Variance) ═══
 
+    /**
+     * REPLACE these methods in LogisticsController.php
+     * 
+     * Methods updated:
+     * 1. warehouseMonthlyCharges() - passes strategy to view
+     * 2. runWarehouseCharges() - shows strategy in success message
+     * 3. enterWarehouseInvoice() - supports 6 charge heads (US & EU)
+     * 4. approveWarehouseCharge() - checks 6 heads for variance
+     * 5. saveVarianceExplanations() - checks 6 heads
+     */
+
+    // ─── LIST WAREHOUSE MONTHLY CHARGES ──────────────────────────
+
     public function warehouseMonthlyCharges(Request $request)
+    {
+        $activeCode = session('active_company');
+        $month = $request->get('month', now()->month);
+        $year = $request->get('year', now()->year);
+
+        $charges = \App\Models\WarehouseMonthlyCharge::with(['warehouse', 'rateCard'])
+            ->where('company_code', $activeCode)
+            ->byMonth($month, $year)
+            ->orderBy('warehouse_id')
+            ->get();
+
+        $warehouses = Warehouse::active()
+            ->when($activeCode, fn($q) => $q->where('company_code', $activeCode))
+            ->orderBy('name')->get();
+
+        // Charge heads vary by strategy — pass to view
+        $chargeHeads = [
+            'unloading'        => 'Unloading',
+            'putaway'          => 'Putaway',
+            'storage'          => 'Storage',
+            'order_processing' => 'Order Processing',
+            'pick_pack'        => 'Pick & Pack',
+            'return_inward'    => 'Return Inward',
+        ];
+
+        return view('logistics.warehouse-monthly-charges.index', compact('charges', 'warehouses', 'month', 'year', 'chargeHeads'));
+    }
+
+    // ─── CALCULATE CHARGES ───────────────────────────────────────
+
+    public function runWarehouseCharges(Request $request)
+    {
+        $request->validate([
+            'month'        => 'required|integer|min:1|max:12',
+            'year'         => 'required|integer|min:2024',
+            'warehouse_id' => 'required|exists:warehouses,id',
+        ]);
+
+        $service = new \App\Services\WarehouseChargeCalculationService();
+        $result = $service->calculateMonthlyCharges(
+            $request->warehouse_id,
+            $request->month,
+            $request->year,
+            auth()->id(),
+            (bool) $request->dry_run
+        );
+
+        if ($result['success']) {
+            $currency = $result['currency'] ?? '$';
+            $strategy = strtoupper($result['strategy'] ?? 'unknown');
+            $details = $result['details'] ?? [];
+
+            // Build breakdown message
+            $parts = [];
+            foreach ($details as $key => $val) {
+                $amount = is_array($val) ? ($val['charge'] ?? 0) : $val;
+                if ($amount > 0) {
+                    $parts[] = ucwords(str_replace('_', ' ', $key)) . ": {$currency}" . number_format($amount, 2);
+                }
+            }
+
+            $msg = "Calculated ({$strategy} strategy). Total: {$currency}" . number_format($result['expected_total'], 2);
+            if (!empty($parts)) {
+                $msg .= " — " . implode(', ', $parts);
+            }
+
+            return back()->with('success', $msg);
+        }
+
+        return back()->with('error', $result['error']);
+    }
+
+    // ─── ENTER WAREHOUSE INVOICE ─────────────────────────────────
+
+    public function enterWarehouseInvoice(Request $request, \App\Models\WarehouseMonthlyCharge $warehouseMonthlyCharge)
+    {
+        $request->validate([
+            'invoice_number'           => 'required|string|max:100',
+            'invoice_date'             => 'required|date',
+            'actual_unloading'         => 'required|numeric|min:0',
+            'actual_putaway'           => 'required|numeric|min:0',
+            'actual_storage'           => 'required|numeric|min:0',
+            'actual_order_processing'  => 'required|numeric|min:0',
+            'actual_pick_pack'         => 'required|numeric|min:0',
+            'actual_return_inward'     => 'required|numeric|min:0',
+            'actual_other'             => 'nullable|numeric|min:0',
+            'invoice_file'             => 'nullable|file|max:10240|mimes:pdf,jpg,jpeg,png',
+        ]);
+
+        $chargeFields = ['actual_unloading', 'actual_putaway', 'actual_storage', 'actual_order_processing', 'actual_pick_pack', 'actual_return_inward', 'actual_other'];
+        $data = $request->only(array_merge(['invoice_number', 'invoice_date'], $chargeFields));
+
+        // Also map to old fields for backward compatibility
+        $data['actual_inward'] = floatval($data['actual_unloading'] ?? 0) + floatval($data['actual_putaway'] ?? 0);
+        $data['actual_fulfillment'] = floatval($data['actual_order_processing'] ?? 0);
+
+        // Calculate total
+        $data['actual_total'] = floatval($data['actual_unloading'] ?? 0)
+            + floatval($data['actual_putaway'] ?? 0)
+            + floatval($data['actual_storage'] ?? 0)
+            + floatval($data['actual_order_processing'] ?? 0)
+            + floatval($data['actual_pick_pack'] ?? 0)
+            + floatval($data['actual_return_inward'] ?? 0)
+            + floatval($data['actual_other'] ?? 0);
+
+        $data['status'] = 'invoice_entered';
+        $data['invoice_entered_by'] = auth()->id();
+        $data['remarks'] = $request->remarks;
+
+        if ($request->hasFile('invoice_file')) {
+            $data['invoice_file'] = $request->file('invoice_file')->store("warehouse-invoices/{$warehouseMonthlyCharge->warehouse_id}", 'public');
+        }
+
+        $warehouseMonthlyCharge->update($data);
+
+        // Calculate variances for all 6 heads
+        $variances = [];
+        $varTotal = 0;
+        foreach (['unloading', 'putaway', 'storage', 'order_processing', 'pick_pack', 'return_inward'] as $head) {
+            $exp = floatval($warehouseMonthlyCharge->{'expected_' . $head} ?? 0);
+            $act = floatval($warehouseMonthlyCharge->{'actual_' . $head} ?? 0);
+            $var = round($act - $exp, 2);
+            $variances[$head] = $var;
+            $varTotal += $var;
+        }
+        $warehouseMonthlyCharge->update([
+            'variance_total' => round($varTotal, 2),
+        ]);
+
+        $currency = match ($warehouseMonthlyCharge->company_code) {
+            '2000' => '₹',
+            '2200' => '€',
+            '2400' => '£',
+            default => '$',
+        };
+
+        ActivityLog::log(
+            'invoice_entered',
+            'warehouse_monthly_charge',
+            $warehouseMonthlyCharge,
+            null,
+            $data,
+            "Invoice #{$request->invoice_number} entered. Variance: {$currency}" . number_format(abs($varTotal), 2)
+        );
+
+        return back()->with('success', "Invoice entered. Total: {$currency}" . number_format($data['actual_total'], 2) . " | Variance: {$currency}" . number_format($varTotal, 2));
+    }
+
+    // ─── APPROVE WAREHOUSE CHARGE ────────────────────────────────
+
+    public function approveWarehouseCharge(\App\Models\WarehouseMonthlyCharge $warehouseMonthlyCharge)
+    {
+        $explanations = $warehouseMonthlyCharge->variance_explanations ?? [];
+        $chargeHeads = ['unloading', 'putaway', 'storage', 'order_processing', 'pick_pack', 'return_inward'];
+
+        // Check all over-limit variances have explanations
+        foreach ($chargeHeads as $head) {
+            $exp = floatval($warehouseMonthlyCharge->{'expected_' . $head} ?? 0);
+            $act = floatval($warehouseMonthlyCharge->{'actual_' . $head} ?? 0);
+            $isOver = $exp > 0 && abs($act - $exp) > ($exp * 0.1);
+
+            if ($isOver && empty($explanations[$head])) {
+                $label = ucwords(str_replace('_', ' ', $head));
+                return back()->with('error', "Over-limit variance on '{$label}' requires an explanation before approval.");
+            }
+        }
+
+        $warehouseMonthlyCharge->update([
+            'status'      => 'approved',
+            'approved_by' => auth()->id(),
+            'approved_at' => now(),
+        ]);
+
+        ActivityLog::log('approved', 'warehouse_monthly_charge', $warehouseMonthlyCharge);
+        return back()->with('success', 'Reconciliation approved and locked.');
+    }
+
+    // ─── SAVE VARIANCE EXPLANATIONS ──────────────────────────────
+
+    public function saveVarianceExplanations(Request $request, \App\Models\WarehouseMonthlyCharge $warehouseMonthlyCharge)
+    {
+        $request->validate(['explanations' => 'required|array']);
+
+        $warehouseMonthlyCharge->update([
+            'variance_explanations' => $request->explanations,
+            'status'                => 'under_review',
+            'reviewed_by'           => auth()->id(),
+        ]);
+
+        return back()->with('success', 'Variance explanations saved. Ready for approval.');
+    }
+    public function warehouseMonthlyCharges1(Request $request)
     {
 
         $user = auth()->user();
@@ -1272,7 +1477,7 @@ class LogisticsController extends Controller
         return view('logistics.warehouse-monthly-charges.index', compact('charges', 'warehouses', 'month', 'year'));
     }
 
-    public function runWarehouseCharges(Request $request)
+    public function runWarehouseCharges1(Request $request)
     {
         $request->validate(['month' => 'required|integer|min:1|max:12', 'year' => 'required|integer|min:2024', 'warehouse_id' => 'required|exists:warehouses,id']);
         $service = new \App\Services\WarehouseChargeCalculationService();
@@ -1288,7 +1493,7 @@ class LogisticsController extends Controller
     }
 
 
-    public function enterWarehouseInvoice(Request $request, \App\Models\WarehouseMonthlyCharge $warehouseMonthlyCharge)
+    public function enterWarehouseInvoice1(Request $request, \App\Models\WarehouseMonthlyCharge $warehouseMonthlyCharge)
     {
         $request->validate([
             'invoice_number'     => 'required|string|max:100',
@@ -1319,7 +1524,7 @@ class LogisticsController extends Controller
         return back()->with('success', "Invoice entered. Variance: \$" . number_format(abs(floatval($warehouseMonthlyCharge->variance_total)), 2));
     }
 
-    public function approveWarehouseCharge(\App\Models\WarehouseMonthlyCharge $warehouseMonthlyCharge)
+    public function approveWarehouseCharge1(\App\Models\WarehouseMonthlyCharge $warehouseMonthlyCharge)
     {
         // Check all over-limit variances have explanations
         $explanations = $warehouseMonthlyCharge->variance_explanations ?? [];
@@ -1333,7 +1538,7 @@ class LogisticsController extends Controller
         return back()->with('success', 'Reconciliation approved and locked.');
     }
 
-    public function saveVarianceExplanations(Request $request, \App\Models\WarehouseMonthlyCharge $warehouseMonthlyCharge)
+    public function saveVarianceExplanations1(Request $request, \App\Models\WarehouseMonthlyCharge $warehouseMonthlyCharge)
     {
         $request->validate(['explanations' => 'required|array']);
         $warehouseMonthlyCharge->update(['variance_explanations' => $request->explanations, 'status' => 'under_review', 'reviewed_by' => auth()->id()]);

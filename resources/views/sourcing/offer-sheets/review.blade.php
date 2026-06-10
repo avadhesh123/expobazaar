@@ -82,7 +82,11 @@
             </div>
         </div>
     </div>
-
+ @php
+    $isUS = ($activeCompany === '2100');
+    $lwhUnit = $isUS ? 'Inches' : 'CM';
+    $weightUnit = $isUS ? 'LBS' : 'KG';
+    @endphp
     {{-- ══════════════ TILE VIEW ══════════════ --}}
     <div id="viewTile" class="card-body" style="padding:1rem;">
         <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:1rem;">
@@ -126,12 +130,12 @@
                     <div style="font-size:.82rem;font-weight:700;color:#0d1b2a;line-height:1.3;margin-bottom:.4rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="{{ $item->product_name }}">{{ $item->product_name }}</div>
                     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.35rem;">
                         <span style="font-size:.72rem;color:#64748b;">{{ $d['category'] ?? ($item->category->name ?? '—') }}</span>
-                        <span style="font-size:.85rem;font-weight:800;color:#166534;font-family:monospace;">${{ number_format($item->vendor_price, 2) }}</span>
+                        <span style="font-size:.85rem;font-weight:800;color:#166534;font-family:monospace;">{{$activeCurrencySymbol}}{{ number_format($item->vendor_price, 2) }}</span>
                     </div>
                     <div style="display:flex;gap:.3rem;font-size:.68rem;color:#94a3b8;flex-wrap:wrap;">
-                        @if(!empty($d['length_inches'])) <span style="background:#f1f5f9;padding:.1rem .35rem;border-radius:4px;">{{ $d['length_inches'] }}"L</span> @endif
-                        @if(!empty($d['width_inches']))  <span style="background:#f1f5f9;padding:.1rem .35rem;border-radius:4px;">{{ $d['width_inches'] }}"W</span>  @endif
-                        @if(!empty($d['height_inches'])) <span style="background:#f1f5f9;padding:.1rem .35rem;border-radius:4px;">{{ $d['height_inches'] }}"H</span> @endif
+                        @if(!empty($d['length'])) <span style="background:#f1f5f9;padding:.1rem .35rem;border-radius:4px;">{{ $d['length'] }}"L</span> @endif
+                        @if(!empty($d['width']))  <span style="background:#f1f5f9;padding:.1rem .35rem;border-radius:4px;">{{ $d['width'] }}"W</span>  @endif
+                        @if(!empty($d['height'])) <span style="background:#f1f5f9;padding:.1rem .35rem;border-radius:4px;">{{ $d['height'] }}"H</span> @endif
                         @if(!empty($d['color']))         <span style="background:#f1f5f9;padding:.1rem .35rem;border-radius:4px;">{{ $d['color'] }}</span>              @endif
                     </div>
                 </div>
@@ -139,7 +143,7 @@
             @endforeach
         </div>
     </div>
-
+ 
     {{-- ══════════════ TABLE VIEW ══════════════ --}}
     <div id="viewTable" class="card-body" style="padding:0;overflow-x:auto;display:none;">
         <table class="data-table" style="min-width:1200px;">
@@ -154,14 +158,14 @@
                     <th style="min-width:100px;">SKU</th>
                     <th style="min-width:180px;">Product Name</th>
                     <th style="width:60px;">Image</th>
-                    <th>L (in)</th>
-                    <th>W (in)</th>
-                    <th>H (in)</th>
-                    <th>Wt (g)</th>
+                    <th>Length ({{$lwhUnit}})</th>
+                    <th>Width ({{$lwhUnit}})</th>
+                    <th>Height ({{$lwhUnit}})</th>
+                    <th>Weight ({{$weightUnit}})</th>
                     <th>Material</th>
                     <th>Color</th>
                     <th>Category</th>
-                    <th>FOB ($)</th>
+                    <th>FOB</th>
                 </tr>
             </thead>
             <tbody>
@@ -196,14 +200,14 @@
                             <i class="fas fa-image" style="color:#d1d5db;"></i>
                         @endif
                     </td>
-                    <td style="text-align:center;font-family:monospace;font-size:.82rem;">{{ $d['length_inches'] ?? '—' }}</td>
-                    <td style="text-align:center;font-family:monospace;font-size:.82rem;">{{ $d['width_inches'] ?? '—' }}</td>
-                    <td style="text-align:center;font-family:monospace;font-size:.82rem;">{{ $d['height_inches'] ?? '—' }}</td>
-                    <td style="text-align:center;font-family:monospace;font-size:.82rem;">{{ $d['weight_grams'] ?? '—' }}</td>
+                    <td style="text-align:center;font-family:monospace;font-size:.82rem;">{{ $d['length'] ?? $d['length_inches'] ?? '—' }}</td>
+                    <td style="text-align:center;font-family:monospace;font-size:.82rem;">{{ $d['width'] ?? $d['width_inches'] ?? '—' }}</td>
+                    <td style="text-align:center;font-family:monospace;font-size:.82rem;">{{ $d['height'] ?? $d['height_inches'] ?? '—' }}</td>
+                    <td style="text-align:center;font-family:monospace;font-size:.82rem;">{{ $d['weight'] ?? $d['weight_grams'] ?? '—' }}</td>
                     <td style="font-size:.82rem;">{{ $d['material'] ?? '—' }}</td>
                     <td style="font-size:.82rem;">{{ $d['color'] ?? '—' }}</td>
                     <td style="font-size:.82rem;">{{ $d['category'] ?? ($item->category->name ?? '—') }}</td>
-                    <td style="font-family:monospace;font-weight:700;color:#166534;">${{ number_format($item->vendor_price, 2) }}</td>
+                    <td style="font-family:monospace;font-weight:700;color:#166534;">{{$activeCurrencySymbol}}{{ number_format($item->vendor_price, 2) }}</td>
                 </tr>
                 @endforeach
             </tbody>

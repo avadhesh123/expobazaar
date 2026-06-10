@@ -11,7 +11,9 @@
 {{-- Upload Errors from previous submission --}}
 @if(session('upload_errors') && count(session('upload_errors')) > 0)
 <div class="card" style="margin-bottom:1.25rem;border-color:#fca5a5;">
-    <div class="card-header" style="background:#fef2f2;"><h3 style="color:#dc2626;"><i class="fas fa-exclamation-triangle" style="margin-right:.5rem;"></i> Upload Errors ({{ count(session('upload_errors')) }})</h3></div>
+    <div class="card-header" style="background:#fef2f2;">
+        <h3 style="color:#dc2626;"><i class="fas fa-exclamation-triangle" style="margin-right:.5rem;"></i> Upload Errors ({{ count(session('upload_errors')) }})</h3>
+    </div>
     <div class="card-body" style="padding:.75rem 1.4rem;max-height:200px;overflow-y:auto;">
         @foreach(session('upload_errors') as $err)
         <div style="font-size:.78rem;color:#991b1b;padding:.2rem 0;border-bottom:1px solid #fee2e2;">{{ $err }}</div>
@@ -53,7 +55,7 @@
         </form>
     </div>
 </div>
-{{-- Manual Entry Form --}} 
+{{-- Manual Entry Form --}}
 <form method="POST" action="{{ route('sales.upload.manual') }}" id="salesForm">
     @csrf
 
@@ -83,8 +85,15 @@
                     <div>
                         <label style="font-size:.65rem;font-weight:600;color:#64748b;display:block;margin-bottom:.2rem;">Sales Channel *</label>
                         <select name="orders[0][sales_channel]" required style="width:100%;padding:.3rem .4rem;border:1px solid #d1d5db;border-radius:6px;font-size:.78rem;">
-                            <option value="">Select...</option>
+                            <option value="">Select Channel...</option>
                             @foreach($channels as $ch)<option value="{{ $ch->name }}">{{ $ch->name }}</option>@endforeach
+                        </select>
+                    </div>
+                    <div>
+                        <label style="font-size:.65rem;font-weight:600;color:#64748b;display:block;margin-bottom:.2rem;">Warehouse *</label>
+                        <select name="orders[0][warehouse_id_number]" required style="width:100%;padding:.3rem .4rem;border:1px solid #d1d5db;border-radius:6px;font-size:.78rem;">
+                            <option value="">Select Warehouse...</option>
+                            @foreach($warehouses as $wh)<option value="{{ $wh->code }}">{{ $wh->name }}</option>@endforeach
                         </select>
                     </div>
                     <div>
@@ -99,9 +108,9 @@
                         <label style="font-size:.65rem;font-weight:600;color:#64748b;display:block;margin-bottom:.2rem;">Shipping Method</label>
                         <select name="orders[0][shipping_method]" style="width:100%;padding:.3rem .4rem;border:1px solid #d1d5db;border-radius:6px;font-size:.78rem;">
                             <option value="">Select...</option>
-                            <option value="SP">SP – Store Pickup</option>
-                            <option value="MPL">MPL – Marketplace Label</option>
-                            <option value="EBL">EBL – EB Label</option>
+                            <option value="SP">SP - Store Pickup</option>
+                            <option value="MPL">MPL - Marketplace Label</option>
+                            <option value="EBL">EBL - EB Label</option>
                         </select>
                     </div>
                     <div>
@@ -113,16 +122,20 @@
                             <option value="refunded">Refunded</option>
                         </select>
                     </div>
-                    <div>
-                        <label style="font-size:.65rem;font-weight:600;color:#64748b;display:block;margin-bottom:.2rem;">Currency</label>
-                        <select name="orders[0][currency]" style="width:100%;padding:.3rem .4rem;border:1px solid #d1d5db;border-radius:6px;font-size:.78rem;">
-                            <option value="USD">USD</option><option value="EUR">EUR</option><option value="INR">INR</option>
-                        </select>
-                    </div>
+
                 </div>
 
                 {{-- Order Header Row 2 — Customer --}}
                 <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr 1fr 1fr;gap:.6rem;margin-bottom:.6rem;">
+                    <div>
+                        <label style="font-size:.65rem;font-weight:600;color:#64748b;display:block;margin-bottom:.2rem;">Currency</label>
+                        <select name="orders[0][currency]" style="width:100%;padding:.3rem .4rem;border:1px solid #d1d5db;border-radius:6px;font-size:.78rem;">
+                            <option value="USD">USD</option>
+                            <option value="EUR">EUR</option>
+                            <option value="GBP">GBP</option>
+                        </select>
+
+                    </div>
                     <div>
                         <label style="font-size:.65rem;font-weight:600;color:#64748b;display:block;margin-bottom:.2rem;">Customer Name</label>
                         <input type="text" name="orders[0][customer_name]" placeholder="Name..." style="width:100%;padding:.3rem .4rem;border:1px solid #d1d5db;border-radius:6px;font-size:.78rem;">
@@ -145,7 +158,7 @@
                             <option value="Wholesale">Wholesale</option>
                         </select>
                     </div>
-                    <div style="grid-column:span 2;">
+                    <div>
                         <label style="font-size:.65rem;font-weight:600;color:#64748b;display:block;margin-bottom:.2rem;">Company Name</label>
                         <input type="text" name="orders[0][company_name]" placeholder="Company..." style="width:100%;padding:.3rem .4rem;border:1px solid #d1d5db;border-radius:6px;font-size:.78rem;">
                     </div>
@@ -180,12 +193,12 @@
                     <thead>
                         <tr style="background:#f0f4f8;">
                             <th style="width:30px;">#</th>
-                            <th style="min-width:130px;">SKU *</th>
+                            <th style="width:200px;min-width:130px;">SKU *</th>
                             <th style="width:200px;">Product Name</th>
-                            <th style="width:60px;">Qty *</th>
+                            <th style="width:70px;">Qty *</th>
                             <th style="width:90px;">Unit Price *</th>
-                            <th style="width:90px;">Line Total</th>
-                            <th style="width:40px;"></th>
+                            <th style="width:100px;text-align: right;">Line Total</th>
+                            <th style="width:10px;"></th>
                         </tr>
                     </thead>
                     <tbody class="items-body">
@@ -232,169 +245,171 @@
 
 @push('scripts')
 <script>
-var orderCount = 1;
-var channelOptions = '{!! $channels->map(fn($c) => "<option value=\"" . e($c->name) . "\">" . e($c->name) . "</option>")->implode("") !!}';
-var skuCache = {};
-var skuTimer = null;
+    var orderCount = 1;
+    var channelOptions = '{!! $channels->map(fn($c) => "<option value=\"" . e($c->name) . "\">" . e($c->name) . "</option>")->implode("") !!}';
+    var skuCache = {};
+    var skuTimer = null;
 
-// ── SKU Validation (debounced) ──
-$(document).on('input', '.sku-input', function() {
-    var input = $(this);
-    var sku = input.val().trim();
-    var statusDiv = input.closest('td').find('.sku-status');
-    var nameCell = input.closest('tr').find('.product-name');
+    // ── SKU Validation (debounced) ──
+    $(document).on('input', '.sku-input', function() {
+        var input = $(this);
+        var sku = input.val().trim();
+        var statusDiv = input.closest('td').find('.sku-status');
+        var nameCell = input.closest('tr').find('.product-name');
 
-    if (sku.length < 2) {
-        statusDiv.html('');
-        nameCell.text('—');
-        input.css('border-color', '#d1d5db');
-        return;
-    }
-
-    clearTimeout(skuTimer);
-    skuTimer = setTimeout(function() {
-        if (skuCache[sku] !== undefined) {
-            applySkuResult(input, skuCache[sku]);
+        if (sku.length < 2) {
+            statusDiv.html('');
+            nameCell.text('—');
+            input.css('border-color', '#d1d5db');
             return;
         }
 
-        statusDiv.html('<span style="color:#e8a838;"><i class="fas fa-spinner fa-spin"></i> Checking...</span>');
+        clearTimeout(skuTimer);
+        skuTimer = setTimeout(function() {
+            if (skuCache[sku] !== undefined) {
+                applySkuResult(input, skuCache[sku]);
+                return;
+            }
 
-        $.get("{{ route('sales.upload') }}", { check_sku: sku }, function(data) {
-            skuCache[sku] = data;
-            applySkuResult(input, data);
-        }).fail(function() {
-            statusDiv.html('<span style="color:#dc2626;"><i class="fas fa-times-circle"></i> Error checking SKU</span>');
-        });
-    }, 400);
-});
+            statusDiv.html('<span style="color:#e8a838;"><i class="fas fa-spinner fa-spin"></i> Checking...</span>');
 
-function applySkuResult(input, data) {
-    var statusDiv = input.closest('td').find('.sku-status');
-    var nameCell = input.closest('tr').find('.product-name');
-
-    if (data.found) {
-        input.css('border-color', '#16a34a');
-        statusDiv.html('<span style="color:#16a34a;"><i class="fas fa-check-circle"></i> ' + (data.sap_code || 'No SAP') + ' · Stock: ' + data.stock + '</span>');
-        nameCell.text(data.name || '—');
-    } else {
-        input.css('border-color', '#dc2626');
-        statusDiv.html('<span style="color:#dc2626;"><i class="fas fa-times-circle"></i> SKU not found</span>');
-        nameCell.text('—');
-    }
-}
-
-// ── Auto-calculate line totals ──
-$(document).on('input', '.qty-input, .price-input', function() {
-    var row = $(this).closest('tr');
-    var qty = parseFloat(row.find('.qty-input').val()) || 0;
-    var price = parseFloat(row.find('.price-input').val()) || 0;
-    var total = (qty * price).toFixed(2);
-    row.find('.line-total').text('$' + total);
-    recalcOrderTotal($(this).closest('.order-block'));
-});
-
-function recalcOrderTotal(block) {
-    var total = 0;
-    block.find('.line-total').each(function() {
-        total += parseFloat($(this).text().replace('$', '')) || 0;
+            $.get("{{ route('sales.upload') }}", {
+                check_sku: sku
+            }, function(data) {
+                skuCache[sku] = data;
+                applySkuResult(input, data);
+            }).fail(function() {
+                statusDiv.html('<span style="color:#dc2626;"><i class="fas fa-times-circle"></i> Error checking SKU</span>');
+            });
+        }, 400);
     });
-    block.find('.order-total').text('$' + total.toFixed(2));
-    block.find('.order-total-input').val(total.toFixed(2));
-}
 
-// ── Add Item Row to an Order ──
-function addItemRow(btn) {
-    var block = $(btn).closest('.order-block');
-    var orderIdx = block.data('order-idx');
-    var itemCount = block.find('.item-row').length;
+    function applySkuResult(input, data) {
+        var statusDiv = input.closest('td').find('.sku-status');
+        var nameCell = input.closest('tr').find('.product-name');
 
-    var row = $('<tr class="item-row">').html(
-        '<td style="text-align:center;color:#94a3b8;font-weight:600;">' + (itemCount + 1) + '</td>' +
-        '<td>' +
+        if (data.found) {
+            input.css('border-color', '#16a34a');
+            statusDiv.html('<span style="color:#16a34a;"><i class="fas fa-check-circle"></i> ' + (data.sap_code || 'No SAP') + ' · Stock: ' + data.stock + '</span>');
+            nameCell.text(data.name || '—');
+        } else {
+            input.css('border-color', '#dc2626');
+            statusDiv.html('<span style="color:#dc2626;"><i class="fas fa-times-circle"></i> SKU not found</span>');
+            nameCell.text('—');
+        }
+    }
+
+    // ── Auto-calculate line totals ──
+    $(document).on('input', '.qty-input, .price-input', function() {
+        var row = $(this).closest('tr');
+        var qty = parseFloat(row.find('.qty-input').val()) || 0;
+        var price = parseFloat(row.find('.price-input').val()) || 0;
+        var total = (qty * price).toFixed(2);
+        row.find('.line-total').text('$' + total);
+        recalcOrderTotal($(this).closest('.order-block'));
+    });
+
+    function recalcOrderTotal(block) {
+        var total = 0;
+        block.find('.line-total').each(function() {
+            total += parseFloat($(this).text().replace('$', '')) || 0;
+        });
+        block.find('.order-total').text('$' + total.toFixed(2));
+        block.find('.order-total-input').val(total.toFixed(2));
+    }
+
+    // ── Add Item Row to an Order ──
+    function addItemRow(btn) {
+        var block = $(btn).closest('.order-block');
+        var orderIdx = block.data('order-idx');
+        var itemCount = block.find('.item-row').length;
+
+        var row = $('<tr class="item-row">').html(
+            '<td style="text-align:center;color:#94a3b8;font-weight:600;">' + (itemCount + 1) + '</td>' +
+            '<td>' +
             '<input type="text" name="orders[' + orderIdx + '][items][' + itemCount + '][sku]" required placeholder="Type SKU..." class="sku-input" data-order="' + orderIdx + '" data-item="' + itemCount + '" style="width:100%;padding:.3rem .4rem;border:1px solid #d1d5db;border-radius:6px;font-size:.78rem;font-family:monospace;">' +
             '<div class="sku-status" style="font-size:.6rem;margin-top:.15rem;"></div>' +
-        '</td>' +
-        '<td class="product-name" style="font-size:.72rem;color:#64748b;">—</td>' +
-        '<td><input type="number" name="orders[' + orderIdx + '][items][' + itemCount + '][quantity]" value="1" min="1" required class="qty-input" style="width:100%;padding:.3rem .4rem;border:1px solid #d1d5db;border-radius:6px;font-size:.78rem;text-align:center;"></td>' +
-        '<td><input type="number" step="0.01" name="orders[' + orderIdx + '][items][' + itemCount + '][unit_price]" placeholder="0.00" required class="price-input" style="width:100%;padding:.3rem .4rem;border:1px solid #d1d5db;border-radius:6px;font-size:.78rem;font-family:monospace;text-align:right;"></td>' +
-        '<td class="line-total" style="text-align:right;font-family:monospace;font-weight:600;">$0.00</td>' +
-        '<td><button type="button" class="btn btn-outline btn-sm" onclick="removeItemRow(this)" style="color:#dc2626;border-color:#dc2626;padding:.15rem .3rem;"><i class="fas fa-times"></i></button></td>'
-    );
+            '</td>' +
+            '<td class="product-name" style="font-size:.72rem;color:#64748b;">—</td>' +
+            '<td><input type="number" name="orders[' + orderIdx + '][items][' + itemCount + '][quantity]" value="1" min="1" required class="qty-input" style="width:100%;padding:.3rem .4rem;border:1px solid #d1d5db;border-radius:6px;font-size:.78rem;text-align:center;"></td>' +
+            '<td><input type="number" step="0.01" name="orders[' + orderIdx + '][items][' + itemCount + '][unit_price]" placeholder="0.00" required class="price-input" style="width:100%;padding:.3rem .4rem;border:1px solid #d1d5db;border-radius:6px;font-size:.78rem;font-family:monospace;text-align:right;"></td>' +
+            '<td class="line-total" style="text-align:right;font-family:monospace;font-weight:600;">$0.00</td>' +
+            '<td><button type="button" class="btn btn-outline btn-sm" onclick="removeItemRow(this)" style="color:#dc2626;border-color:#dc2626;padding:.15rem .3rem;"><i class="fas fa-times"></i></button></td>'
+        );
 
-    block.find('.items-body').append(row);
-}
-
-function removeItemRow(btn) {
-    var block = $(btn).closest('.order-block');
-    if (block.find('.item-row').length > 1) {
-        $(btn).closest('tr').remove();
-        renumberItems(block);
-        recalcOrderTotal(block);
+        block.find('.items-body').append(row);
     }
-}
 
-function renumberItems(block) {
-    block.find('.item-row').each(function(i) {
-        $(this).find('td:first').text(i + 1);
-    });
-}
-
-// ── Add Another Order ──
-function addOrder() {
-    var idx = orderCount;
-    var html = $('.order-block:first')[0].outerHTML;
-
-    // Replace all [0] with [idx]
-    html = html.replace(/orders\[0\]/g, 'orders[' + idx + ']');
-    html = html.replace(/data-order-idx="0"/g, 'data-order-idx="' + idx + '"');
-    html = html.replace(/data-order="0"/g, 'data-order="' + idx + '"');
-    html = html.replace('Order #1', 'Order #' + (idx + 1));
-
-    var newBlock = $(html);
-    // Clear values
-    newBlock.find('input[type="text"], input[type="email"], input[type="number"]').val('');
-    newBlock.find('input[type="date"]').val('{{ date("Y-m-d") }}');
-    newBlock.find('.qty-input').val('1');
-    newBlock.find('select').prop('selectedIndex', 0);
-    newBlock.find('.sku-status').html('');
-    newBlock.find('.product-name').text('—');
-    newBlock.find('.line-total').text('{{$activeCurrencySymbol}}0.00');
-    newBlock.find('.order-total').text('{{$activeCurrencySymbol}}0.00');
-    newBlock.find('.order-total-input').val('0');
-    // Show remove button
-    newBlock.find('h4').next('button').show();
-    // Remove extra item rows (keep only first)
-    newBlock.find('.item-row:not(:first)').remove();
-
-    $('#ordersContainer').append(newBlock);
-    orderCount++;
-}
-
-function removeOrder(btn) {
-    if ($('.order-block').length > 1) {
-        $(btn).closest('.order-block').remove();
-    }
-}
-
-// ── Validate before submit ──
-function validateSales() {
-    var hasError = false;
-    $('.sku-input').each(function() {
-        var sku = $(this).val().trim();
-        if (sku && skuCache[sku] && !skuCache[sku].found) {
-            hasError = true;
-            $(this).css('border-color', '#dc2626');
+    function removeItemRow(btn) {
+        var block = $(btn).closest('.order-block');
+        if (block.find('.item-row').length > 1) {
+            $(btn).closest('tr').remove();
+            renumberItems(block);
+            recalcOrderTotal(block);
         }
-    });
-    if (hasError) {
-        alert('Some SKUs are invalid. Please fix them before submitting.');
-        return false;
     }
 
-    var orderCount = $('.order-block').length;
-    return confirm('Create ' + orderCount + ' order(s)?');
-}
+    function renumberItems(block) {
+        block.find('.item-row').each(function(i) {
+            $(this).find('td:first').text(i + 1);
+        });
+    }
+
+    // ── Add Another Order ──
+    function addOrder() {
+        var idx = orderCount;
+        var html = $('.order-block:first')[0].outerHTML;
+
+        // Replace all [0] with [idx]
+        html = html.replace(/orders\[0\]/g, 'orders[' + idx + ']');
+        html = html.replace(/data-order-idx="0"/g, 'data-order-idx="' + idx + '"');
+        html = html.replace(/data-order="0"/g, 'data-order="' + idx + '"');
+        html = html.replace('Order #1', 'Order #' + (idx + 1));
+
+        var newBlock = $(html);
+        // Clear values
+        newBlock.find('input[type="text"], input[type="email"], input[type="number"]').val('');
+        newBlock.find('input[type="date"]').val('{{ date("Y-m-d") }}');
+        newBlock.find('.qty-input').val('1');
+        newBlock.find('select').prop('selectedIndex', 0);
+        newBlock.find('.sku-status').html('');
+        newBlock.find('.product-name').text('—');
+        newBlock.find('.line-total').text('{{$activeCurrencySymbol}}0.00');
+        newBlock.find('.order-total').text('{{$activeCurrencySymbol}}0.00');
+        newBlock.find('.order-total-input').val('0');
+        // Show remove button
+        newBlock.find('h4').next('button').show();
+        // Remove extra item rows (keep only first)
+        newBlock.find('.item-row:not(:first)').remove();
+
+        $('#ordersContainer').append(newBlock);
+        orderCount++;
+    }
+
+    function removeOrder(btn) {
+        if ($('.order-block').length > 1) {
+            $(btn).closest('.order-block').remove();
+        }
+    }
+
+    // ── Validate before submit ──
+    function validateSales() {
+        var hasError = false;
+        $('.sku-input').each(function() {
+            var sku = $(this).val().trim();
+            if (sku && skuCache[sku] && !skuCache[sku].found) {
+                hasError = true;
+                $(this).css('border-color', '#dc2626');
+            }
+        });
+        if (hasError) {
+            alert('Some SKUs are invalid. Please fix them before submitting.');
+            return false;
+        }
+
+        var orderCount = $('.order-block').length;
+        return confirm('Create ' + orderCount + ' order(s)?');
+    }
 </script>
 
 @endpush

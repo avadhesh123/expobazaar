@@ -8,8 +8,10 @@ class WarehouseMonthlyCharge extends Model
 {
     protected $fillable = [
         'warehouse_id', 'company_code', 'currency', 'charge_month', 'charge_year', 'rate_card_id',
-        'expected_inward', 'expected_storage', 'expected_fulfillment', 'expected_pick_pack', 'expected_total',
-        'actual_inward', 'actual_storage', 'actual_fulfillment', 'actual_pick_pack', 'actual_other', 'actual_total',
+        'expected_inward', 'expected_storage', 'expected_fulfillment', 'expected_pick_pack','expected_return_inward',
+        'expected_putaway','expected_unloading','expected_order_processing','expected_total',
+        'actual_inward', 'actual_storage', 'actual_fulfillment', 'actual_pick_pack', 'actual_return_inward',
+        'actual_order_processing','actual_putaway','actual_unloading','actual_other', 'actual_total',        
         'variance_inward', 'variance_storage', 'variance_fulfillment', 'variance_pick_pack', 'variance_total',
         'invoice_number', 'invoice_date', 'invoice_file', 'variance_explanations',
         'status', 'tolerance_pct', 'tolerance_abs', 'calculation_snapshot',

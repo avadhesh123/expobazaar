@@ -53,16 +53,17 @@
                 // Max inspection = Goods Ready Date + 7 days (or today + 75 as fallback before Goods Ready Date is set)
                 // $maxInspection = $exFactory ? \Carbon\Carbon::parse($exFactory)->addDays(7)->toDateString() : '';
                 // For client-side validation, we only need to validate that the maximum inspection date is within the selected ex-factory date. The server-side validation will also enforce this rule.
+                       
+                $minInspection = $ls->ex_factory_date
+                                    ? $ls->ex_factory_date->subDays(8)->toDateString()
+                                    : $exFactoryDate->copy()->subDays(8)->toDateString();                
+                                    // You can change 3 to any number 1-7 
 
-                $maxInspection = $exFactory ?? $maxExFactory;                
-                $minInspection = $exFactoryDate
-                                ->copy()
-                                ->subDays(8)        // You can change 3 to any number 1-7
-                                ->toDateString();
+                $maxInspection = $exFactory ?? $maxExFactory;
 
                 @endphp
                 <tr id="row-{{ $ls->id }}">
-                    <td style="font-family:monospace;font-weight:700;">{{ $ls->live_sheet_number }}</td>
+                    <td style="font-family:monospace;font-weight:700;">{{ $ls->live_sheet_number }} </td>
                     <td style="font-size:.82rem;color:#64748b;">{{ $ls->offerSheet->offer_sheet_number ?? '—' }}</td>
                     <td style="text-align:center;font-weight:600;">{{ $ls->items->count() }}</td>
                     <td style="font-family:monospace;">{{ number_format($ls->total_cbm, 3) }}</td>

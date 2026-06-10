@@ -195,7 +195,7 @@ class SalesService
             'order_date'    => ['order date', 'date', 'order_date'],
             'po_number'     => ['po number / order id', 'po number', 'order id', 'po_number', 'order_id'],
             'channel'       => ['sales channel', 'channel', 'platform'],
-            'sku'           => ['style code', 'sku', 'style_code', 'vendor sku'],
+            'sku'           => ['style code', 'sku', 'style_code', 'vendor sku', 'style code / sku'],
             'unit_price'    => ['per unit sales price', 'unit price', 'price', 'unit_price', 'sales price'],
             'qty'           => ['order qty', 'qty', 'quantity', 'order_qty'],
             'ship_method'   => ['shipping method', 'ship method', 'shipping_method'],
@@ -209,7 +209,7 @@ class SalesService
             'country'       => ['country'],
             'phone'         => ['phone number', 'phone', 'phone_number'],
             'email'         => ['email'],
-            'warehouse_id_number' => ['warehouse id number', 'warehouse number'],
+            'warehouse_id_number' => ['warehouse id number', 'warehouse number', 'warehouse id'],
         ];
 
         foreach ($colAliases as $key => $aliases) {
@@ -602,10 +602,22 @@ class SalesService
         foreach ($ordersData as $idx => $orderData) {
             $rowNum = $idx + 1;
             $poNumber = trim($orderData['platform_order_id']);
-
+            $warehouseIdNumber = trim($orderData['warehouse_id_number']);
             $existing = Order::where('platform_order_id', $poNumber)->where('company_code', $companyCode)->first();
             if ($existing) {
                 $errors[] = "Row {$rowNum}: PO '{$poNumber}' already exists.";
+                continue;
+            }
+
+            $warehouseId = \App\Models\Warehouse::where('code', $warehouseIdNumber)
+                ->when($companyCode, function ($query, $companyCode) {
+                    $query->where('company_code', $companyCode);
+                })
+                ->value('id');
+
+            if (empty($warehouseId)) {
+                $companyNote = $companyCode ? " for company " . $companyCode : '';
+                $errors[] = "Row {$rowNum}: Warehouse Number '{$warehouseIdNumber}' does not exist{$companyNote}.";
                 continue;
             }
 
@@ -630,13 +642,24 @@ class SalesService
                     break;
                 }
 
-                $availableStock = Inventory::where('product_id', $product->id)
+                //   $warehouseId = \App\Models\Warehouse::where('code', $warehouseIdNumber)->value('id');
+                $qty = intval($qty);
+                $availableStock = \App\Models\Inventory::where('product_id', $product->id)
+                    ->where('warehouse_id ', $warehouseId)
                     ->where('company_code', $companyCode)->sum('available_quantity');
                 if ($availableStock < $qty) {
                     $errors[] = "Row {$rowNum}: SKU '{$sku}' insufficient inventory. Available: {$availableStock}, Ordered: {$qty}.";
                     $hasError = true;
                     break;
                 }
+
+                // $availableStock = Inventory::where('product_id', $product->id)
+                //     ->where('company_code', $companyCode)->sum('available_quantity');
+                // if ($availableStock < $qty) {
+                //     $errors[] = "Row {$rowNum}: SKU '{$sku}' insufficient inventory. Available: {$availableStock}, Ordered: {$qty}.";
+                //     $hasError = true;
+                //     break;
+                // }
 
                 $lineTotal = round($unitPrice * $qty, 2);
                 $totalAmount += $lineTotal;
@@ -657,6 +680,7 @@ class SalesService
             try {
                 $this->createOrder([
                     'platform_order_id' => $poNumber,
+                    'warehouse_id_number' => $warehouseIdNumber,
                     'order_date'        => $orderData['order_date'],
                     'total_amount'      => floatval($orderData['total_amount']),
                     'subtotal'          => $totalAmount,
@@ -674,6 +698,7 @@ class SalesService
                     'shipping_country'  => $orderData['shipping_country'] ?? null,
                     'shipping_pincode'  => $orderData['shipping_pincode'] ?? null,
                     'payment_status'    => $orderData['payment_status'] ?? 'unpaid',
+                    'status' => 'open',
                 ], $orderItems, $companyCode, $warehouseId ?? 0);
 
                 $created++;

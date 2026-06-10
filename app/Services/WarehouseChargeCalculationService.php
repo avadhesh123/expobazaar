@@ -2,20 +2,19 @@
 
 namespace App\Services;
 
-use App\Models\{WarehouseRateCard, WarehouseMonthlyCharge, Warehouse, Grn, Order, Shipment, ActivityLog};
+use App\Models\{WarehouseRateCard, WarehouseMonthlyCharge, Warehouse, Grn, Order, OrderItem, Shipment, ActivityLog};
 use Illuminate\Support\Facades\DB;
 
 class WarehouseChargeCalculationService
 {
     public function calculateMonthlyCharges(int $warehouseId, int $month, int $year, int $userId, bool $dryRun = false): array
     {
+        //$dryRun = true;
         $warehouse = Warehouse::findOrFail($warehouseId);
         $rateCard = WarehouseRateCard::where('warehouse_id', $warehouseId)
             ->where('status', 'approved')
             ->orderByDesc('effective_from')
             ->first();
-
-        $this->log("\n=== Calculating {$warehouse->name} — {$month}/{$year} ===" . "\n");
 
         $currency = match ($warehouse->company_code) {
             '2000' => 'INR',
@@ -36,24 +35,28 @@ class WarehouseChargeCalculationService
         $periodStart = now()->create(null, $month, 1)->startOfMonth();
         $periodEnd   = now()->create(null, $month, 1)->endOfMonth();
 
-        $this->log("===  {$warehouse->name} — {$month}/{$year} ===");
+        $this->log("=== Calculating {$warehouse->name} ({$warehouse->company_code}) — {$month}/{$year} ===");
 
-        $unloading       = $this->calculateUnloading($warehouseId, $rateCard, $month, $year);
-        $putaway          = $this->calculatePutaway($warehouseId, $rateCard, $month, $year);
-        $storage          = $this->calculateStorage($warehouseId, $rateCard, $month, $year);
-        $orderProcessing  = $this->calculateOrderProcessing($warehouseId, $rateCard, $periodStart, $periodEnd);
-        $pickPack         = $this->calculatePickPack($warehouseId, $rateCard, $periodStart, $periodEnd);
-        $returnInward     = $this->calculateReturnInward($warehouseId, $rateCard, $periodStart, $periodEnd);
+        // Route to correct strategy based on company code
+        $strategy = $this->getStrategy($warehouse->company_code);
+
+        $unloading    = $this->calculateUnloading($warehouseId, $rateCard, $month, $year);
+        $putaway      = $this->calculatePutaway($warehouseId, $rateCard, $month, $year);
+        $storage      = $this->{$strategy . 'Storage'}($warehouseId, $rateCard, $month, $year);
+        $fulfillment  = $this->{$strategy . 'Fulfillment'}($warehouseId, $rateCard, $periodStart, $periodEnd);
+        $pickPack     = $this->{$strategy . 'PickPack'}($warehouseId, $rateCard, $periodStart, $periodEnd);
+        $returnInward = $this->calculateReturnInward($warehouseId, $rateCard, $periodStart, $periodEnd);
 
         $totals = [
             'unloading'        => $unloading['charge'],
             'putaway'          => $putaway['charge'],
             'storage'          => $storage['charge'],
-            'order_processing' => $orderProcessing['charge'],
+            'order_processing' => $fulfillment['charge'],
             'pick_pack'        => $pickPack['charge'],
             'return_inward'    => $returnInward['charge'],
         ];
         $expectedTotal = round(array_sum($totals), 2);
+        $details = compact('unloading', 'putaway', 'storage', 'fulfillment', 'pickPack', 'returnInward');
 
         $this->log("TOTALS: " . json_encode($totals) . " = {$expectedTotal}");
 
@@ -64,7 +67,8 @@ class WarehouseChargeCalculationService
                 'expected' => $totals,
                 'expected_total' => $expectedTotal,
                 'currency' => $currency,
-                'details' => compact('unloading', 'putaway', 'storage', 'orderProcessing', 'pickPack', 'returnInward'),
+                'strategy' => $strategy,
+                'details' => $details,
             ];
         }
 
@@ -91,19 +95,10 @@ class WarehouseChargeCalculationService
                 'calculated_by'             => $userId,
                 'calculated_at'             => now(),
                 'calculation_snapshot'       => [
-                    'rates' => $rateCard->only([
-                        'unloading_fcl_rate',
-                        'unloading_lcl_palletize',
-                        'unloading_carton',
-                        'putaway_per_carton',
-                        'storage_per_pallet',
-                        'order_processing_palletize',
-                        'order_processing_non_palletize',
-                        'pick_pack_palletize',
-                        'pick_pack_non_palletize',
-                        'return_inward_per_qty',
-                    ]),
-                    'details' => compact('unloading', 'putaway', 'storage', 'orderProcessing', 'pickPack', 'returnInward'),
+                    'strategy' => $strategy,
+                    'company_code' => $warehouse->company_code,
+                    'rates' => $rateCard->toArray(),
+                    'details' => $details,
                     'calculated_at' => now()->toISOString(),
                 ],
             ]);
@@ -116,12 +111,13 @@ class WarehouseChargeCalculationService
 
             ActivityLog::log('calculated', 'warehouse_monthly_charges', $monthlyCharge, null, [
                 'warehouse' => $warehouse->name,
+                'strategy' => $strategy,
                 'month' => $month,
                 'year' => $year,
                 'expected_total' => $expectedTotal,
-            ], "Warehouse charges: {$warehouse->name} — {$month}/{$year}: {$currency} {$expectedTotal}");
+            ], "WH charges ({$strategy}): {$warehouse->name} — {$month}/{$year}: {$currency} {$expectedTotal}");
 
-            return ['success' => true, 'charge_id' => $monthlyCharge->id, 'expected_total' => $expectedTotal, 'details' => $totals];
+            return ['success' => true, 'charge_id' => $monthlyCharge->id, 'expected_total' => $expectedTotal, 'details' => $totals, 'strategy' => $strategy];
         } catch (\Exception $e) {
             DB::rollBack();
             \Log::error("Warehouse charge calc failed: " . $e->getMessage());
@@ -129,34 +125,46 @@ class WarehouseChargeCalculationService
         }
     }
 
+    // ─── STRATEGY ROUTER ──────────────────────────────────────────
+
+    private function getStrategy(string $companyCode): string
+    {
+        return match ($companyCode) {
+            '2100' => 'usa',
+            '2200' => 'eu',
+            '2400' => 'eu',   // UK uses EU logic
+            '2000' => 'eu',   // India uses EU logic
+            default => 'eu',
+        };
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    //  SHARED — Unloading, Putaway, Return Inward (same for all)
+    // ═══════════════════════════════════════════════════════════════
+
     /**
-     * UNLOADING — one-time per GRN, based on shipment type
-     * FCL: No of GRNs × unloading_fcl_rate
-     * LCL: No of pallets × unloading_lcl_palletize
-     * AIR: No of cartons × unloading_carton
+     * UNLOADING — one-time per GRN based on shipment type
+     * FCL: count of GRNs × unloading_fcl_rate
+     * LCL: no_of_pallets (shipment) × unloading_lcl_palletize
+     * AIR: master cartons (live sheet) × unloading_carton
      */
     private function calculateUnloading(int $warehouseId, $rc, int $month, int $year): array
     {
-        // $grns = Grn::where('warehouse_id', $warehouseId)
-        //     ->where(function($q) { $q->where('inward_charged', false)->orWhereNull('inward_charged'); })
-        //     ->whereMonth('receipt_date', $month)
-        //     ->whereYear('receipt_date', $year)
-        //     ->with('shipment')
-        //     ->get();
-
         $grns = Grn::where('warehouse_id', $warehouseId)
             ->where(function ($q) {
                 $q->where('inward_charged', false)->orWhereNull('inward_charged');
             })
             ->whereMonth('receipt_date', $month)
             ->whereYear('receipt_date', $year)
-            ->with('shipment.consignments.liveSheet.items')  // added for AIR carton count
+            ->with('shipment.consignments.liveSheet.items')
             ->get();
-
 
         $totalCharge = 0;
         $breakdown = [];
         $grnIds = [];
+
+        // Group GRNs by shipment to count correctly
+        $grnsByShipment = $grns->groupBy(fn($g) => $g->shipment_id ?? 'none');
 
         foreach ($grns as $grn) {
             $shipment = $grn->shipment;
@@ -168,8 +176,8 @@ class WarehouseChargeCalculationService
 
             switch ($type) {
                 case 'FCL':
-                    $qty = 1;
-                    $rate = floatval($rc->unloading_fcl ?? 0);
+                    $qty = 1; // Each GRN counts as 1
+                    $rate = floatval($rc->unloading_fcl_rate ?? 0);
                     $unit = 'GRN';
                     break;
                 case 'LCL':
@@ -178,45 +186,34 @@ class WarehouseChargeCalculationService
                     $unit = 'pallets';
                     break;
                 case 'AIR':
-                    // Get master cartons from live sheet items
                     $qty = 0;
-                    foreach ($grn->shipment->consignments ?? [] as $con) {
+                    foreach ($shipment->consignments ?? [] as $con) {
                         if (!$con->liveSheet) continue;
                         foreach ($con->liveSheet->items as $item) {
                             $d = $item->product_details ?? [];
-                            $qty += intval($d['qty_master_pack'] ?? $d['no_of_master_cartons'] ?? 0);
+                            $qty += intval($d['master_cartons'] ?? $d['no_of_master_cartons'] ?? 0);
                         }
                     }
                     $rate = floatval($rc->unloading_carton ?? 0);
                     $unit = 'master cartons';
                     break;
-                    // case 'AIR':
-                    //     $qty = intval($shipment->no_of_cartons ?? 0);
-                    //     $rate = floatval($rc->unloading_carton ?? 0);
-                    //     $unit = 'cartons';
-                    //     break;
             }
 
             $charge = round($qty * $rate, 2);
             $totalCharge += $charge;
             $grnIds[] = $grn->id;
-            $breakdown[] = ['grn_id' => $grn->id, 'type' => $type, 'qty' => $qty, 'rate' => $rate, 'unit' => $unit, 'charge' => $charge];
-
-            $this->log("UNLOADING GRN#{$grn->id}: {$type} - Qty:{$qty} Unit:{$unit} X Rate{$rate} = Charge{$charge}");
+            $breakdown[] = ['grn_id' => $grn->id,'grn_no' => $grn->grn_number, 'type' => $type, 'qty' => $qty, 'rate' => $rate, 'unit' => $unit, 'charge' => $charge];
+            $this->log("UNLOADING GRN#{$grn->id} NO-{$grn->grn_number}: {$type} — {$qty} {$unit} x {$rate} = {$charge}");
         }
 
-        $this->log("UNLOADING GRNs ==== " . json_encode([
-            'total_charge' => round($totalCharge ?? 0, 2),
-            'grn_count'    => count($grns),
-            'grn_ids'      => $grnIds ?? [],
-            'breakdown'    => $breakdown ?? []
-        ], JSON_PRETTY_PRINT));
+        $fclCount = collect($breakdown)->where('type', 'FCL')->count();
+        $this->log("UNLOADING SUMMARY: FCL={$fclCount} GRNs, Total={$totalCharge}");
 
         return ['charge' => round($totalCharge, 2), 'grn_count' => count($grns), 'grn_ids' => $grnIds, 'breakdown' => $breakdown];
     }
 
     /**
-     * PUTAWAY — putaway_per_carton × total master cartons from live sheet items
+     * PUTAWAY — putaway_per_carton × master cartons from live sheet
      */
     private function calculatePutaway(int $warehouseId, $rc, int $month, int $year): array
     {
@@ -238,24 +235,171 @@ class WarehouseChargeCalculationService
                 if (!$con->liveSheet) continue;
                 foreach ($con->liveSheet->items as $item) {
                     $d = $item->product_details ?? [];
-                    $totalCartons += intval($d['qty_master_pack'] ?? $d['no_of_master_cartons'] ?? 0);
+                    $totalCartons += intval($d['master_cartons'] ?? $d['no_of_master_cartons'] ?? 0);
                 }
             }
         }
 
         $charge = round($rate * $totalCartons, 2);
-        $this->log("PUTAWAY: {$totalCartons} cartons x {$rate} rate = charge {$charge}");
+        $this->log("PUTAWAY: {$totalCartons} cartons × {$rate} = {$charge}");
 
         return ['charge' => $charge, 'total_cartons' => $totalCartons, 'rate' => $rate];
     }
 
     /**
-     * STORAGE — storage_per_pallet × monthly average pallets
-     * Uses WarehousePalletLog daily entries, weighted average
+     * RETURN INWARD — return_inward_per_qty × returned qty
      */
-    private function calculateStorage(int $warehouseId, $rc, int $month, int $year): array
+    private function calculateReturnInward(int $warehouseId, $rc, $periodStart, $periodEnd): array
     {
-        $rate = floatval($rc->storage_per_pallet ?? 0) * 4.25;
+        $rate = floatval($rc->return_inward_per_qty ?? 0);
+
+        $returnQty = \App\Models\OrderReturnItem::whereHas('orderReturn', function ($q) use ($warehouseId, $periodStart, $periodEnd) {
+            $q->where('warehouse_id', $warehouseId)
+                ->whereBetween('return_date', [$periodStart, $periodEnd])
+                ->whereIn('status', ['received', 'inspected', 'approved', 'refunded', 'restocked']);
+        })->sum('return_qty');
+
+        $charge = round($rate * $returnQty, 2);
+        $this->log("RETURN INWARD: {$returnQty} qty × {$rate} = {$charge}");
+
+        return ['charge' => $charge, 'return_qty' => intval($returnQty), 'rate' => $rate];
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    //  USA WAREHOUSE — CFT storage, threshold-based fulfillment
+    // ═══════════════════════════════════════════════════════════════
+
+    /**
+     * USA STORAGE — CFT of inventory on 1st of month × storage_per_cft
+     * CFT comes from live sheet items product dimensions
+     */
+    private function usaStorage(int $warehouseId, $rc, int $month, int $year): array
+    {
+        $rate = floatval($rc->storage_per_cft ?? 0);
+
+        // Get inventory as of 1st day of current month
+        // Calculate total CFT from products in this warehouse
+        $inventories = \App\Models\Inventory::where('warehouse_id', $warehouseId)
+            ->where('quantity', '>', 0)
+            ->with('product')
+            ->get();
+
+        $totalCft = 0;
+        $breakdown = [];
+
+        foreach ($inventories as $inv) {
+            $p = $inv->product;
+            if (!$p) continue;
+
+            // CFT = (L × W × H in cm) / 28316.85 OR (L × W × H in inches) / 1728
+            $lengthCm = floatval($p->length_cm ?? $p->length ?? 0);
+            $widthCm = floatval($p->width_cm ?? $p->width ?? 0);
+            $heightCm = floatval($p->height_cm ?? $p->height ?? 0);
+
+            if ($lengthCm > 0 && $widthCm > 0 && $heightCm > 0) {
+                //   $cftPerUnit = (($lengthCm * $widthCm * $heightCm) / 61024) * 35.3147; if LxWxH in cm
+                $cftPerUnit = ($lengthCm * $widthCm * $heightCm) / 28316.85; //L × W × H in inches
+            } else {
+                $cftPerUnit = 0;
+            }
+
+            $qty = intval($inv->quantity);
+            $itemCft = round($cftPerUnit * $qty, 4);
+            $totalCft += $itemCft;
+
+            if ($itemCft > 0) {
+                $breakdown[] = ['sku' => $p->sku, 'qty' => $qty, 'cft_per_unit' => round($cftPerUnit, 4), 'total_cft' => $itemCft];
+            }
+        }
+
+        $charge = round($rate * $totalCft, 2);
+        $this->log("USA STORAGE: {$totalCft} CFT x {$rate}/CFT = {$charge} ({$inventories->count()} SKUs)");
+
+        return ['charge' => $charge, 'total_cft' => round($totalCft, 4), 'rate' => $rate, 'method' => 'cft_based', 'sku_count' => count($breakdown), 'breakdown' => $breakdown];
+    }
+
+    /**
+     * USA FULFILLMENT — threshold-based per order
+     * If order qty > threshold → qty × upper rate
+     * If order qty <= threshold → qty × lower rate
+     */
+    private function usaFulfillment(int $warehouseId, $rc, $periodStart, $periodEnd): array
+    {
+        $threshold = max(1, intval($rc->fulfillment_qty_threshold ?? 10));
+        $lowerRate = floatval($rc->fulfillment_rate_lower ?? 0);
+        $upperRate = floatval($rc->fulfillment_rate_upper ?? 0);
+
+        $orders = Order::where('warehouse_id', $warehouseId)
+            ->whereBetween('order_date', [$periodStart, $periodEnd])
+            ->whereNotIn('status', ['cancelled'])
+            ->with('items')
+            ->get();
+
+        $smallOrders = 0;
+        $largeOrders = 0;
+        $smallQty = 0;
+        $largeQty = 0;
+
+        foreach ($orders as $order) {
+            $orderQty = $order->items->sum('quantity');
+            if ($orderQty > $threshold) {
+                $largeOrders++;
+                $largeQty += $orderQty;
+            } else {
+                $smallOrders++;
+                $smallQty += $orderQty;
+            }
+        }
+
+        $smallCharge = round($smallQty * $lowerRate, 2);
+        $largeCharge = round($largeQty * $upperRate, 2);
+        $charge = $smallCharge + $largeCharge;
+
+        $this->log("USA FULFILLMENT: ≤{$threshold}: {$smallQty}qty x {$lowerRate} = {$smallCharge} | >{$threshold}: {$largeQty}qty × {$upperRate} = {$largeCharge}");
+
+        return [
+            'charge' => round($charge, 2),
+            'threshold' => $threshold,
+            'small_orders' => $smallOrders,
+            'small_qty' => $smallQty,
+            'lower_rate' => $lowerRate,
+            'small_charge' => $smallCharge,
+            'large_orders' => $largeOrders,
+            'large_qty' => $largeQty,
+            'upper_rate' => $upperRate,
+            'large_charge' => $largeCharge,
+        ];
+    }
+
+    /**
+     * USA PICK & PACK — per unit sold
+     */
+    private function usaPickPack(int $warehouseId, $rc, $periodStart, $periodEnd): array
+    {
+        $rate = floatval($rc->pick_pack_rate_per_unit ?? 0);
+
+        $totalUnits = OrderItem::whereHas('order', function ($q) use ($warehouseId, $periodStart, $periodEnd) {
+            $q->where('warehouse_id', $warehouseId)
+                ->whereBetween('order_date', [$periodStart, $periodEnd])
+                ->whereNotIn('status', ['cancelled']);
+        })->sum('quantity');
+
+        $charge = round($rate * $totalUnits, 2);
+        $this->log("USA PICK-PACK: {$totalUnits} units x {$rate} = {$charge}");
+
+        return ['charge' => $charge, 'total_units' => intval($totalUnits), 'rate' => $rate];
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    //  EU WAREHOUSE — Pallet storage, palletize/non-palletize orders
+    // ═══════════════════════════════════════════════════════════════
+
+    /**
+     * EU STORAGE — storage_per_pallet × average pallets (from daily pallet logs)
+     */
+    private function euStorage(int $warehouseId, $rc, int $month, int $year): array
+    {
+        $rate = floatval($rc->storage_per_pallet ?? 0);
 
         $palletLogs = \App\Models\WarehousePalletLog::where('warehouse_id', $warehouseId)
             ->whereMonth('entry_date', $month)
@@ -274,46 +418,33 @@ class WarehouseChargeCalculationService
             $dailyTotal = 0;
             for ($day = 1; $day <= $daysInMonth; $day++) {
                 $date = sprintf('%04d-%02d-%02d', $year, $month, $day);
-                // $entry = $palletLogs->firstWhere('entry_date', $date);
-
                 $entry = $palletLogs->first(fn($log) => $log->entry_date->format('Y-m-d') === $date);
-
                 if ($entry) $lastKnown = $entry->no_of_pallets;
                 $dailyTotal += $lastKnown;
-                // if ($entry) {
-                //     $this->log(json_encode([
-                //         'date' => $date,
-                //         'daily_total' => $dailyTotal,
-                //         'entry'       => $entry->toArray()
-                //     ], JSON_PRETTY_PRINT));
-                // } else {
-
-                //     $this->log("\n No palletLogs === " . $date . "\n");
-                // }
             }
             $avgPallets = round($dailyTotal / $daysInMonth, 2);
             $method = 'daily_average';
-
-            $this->log("\n daysInMonth === " . $daysInMonth . "\n");
         }
 
         $charge = round($rate * $avgPallets, 2);
-        $this->log("STORAGE: avg {$avgPallets} pallets x rate {$rate} = charge {$charge} (method {$method}, {$palletLogs->count()} entries)");
+        $this->log("EU STORAGE: avg {$avgPallets} pallets x {$rate} = {$charge} ({$method})");
 
-        return ['charge' => $charge, 'avg_pallets' => $avgPallets, 'rate' => $rate, 'method' => $method];
+        return ['charge' => $charge, 'avg_pallets' => $avgPallets, 'rate' => $rate, 'method' => $method, 'entries' => $palletLogs->count()];
     }
 
     /**
-     * ORDER PROCESSING
-     * Palletize: order_processing_palletize × qty of palletize orders
-     * Non-palletize: order_processing_non_palletize × no of non-palletize orders
+     * EU FULFILLMENT — palletize/non-palletize order processing
+     * Palletize: rate × qty
+     * Non-palletize: rate × no of orders
      */
-    private function calculateOrderProcessing(int $warehouseId, $rc, $periodStart, $periodEnd): array
+    private function euFulfillment(int $warehouseId, $rc, $periodStart, $periodEnd): array
     {
+        $palletizeRate = floatval($rc->order_processing_palletize ?? 0);
+        $nonPalletizeRate = floatval($rc->order_processing_non_palletize ?? 0);
+
         $orders = Order::where('warehouse_id', $warehouseId)
             ->whereBetween('order_date', [$periodStart, $periodEnd])
             ->whereNotIn('status', ['cancelled'])
-            ->where('shipping_method', '!=', 'sp')
             ->with('items')
             ->get();
 
@@ -321,85 +452,65 @@ class WarehouseChargeCalculationService
         $nonPalletize = $orders->where('order_pack_type', '!=', 'palletize');
 
         $pQty = $palletize->sum(fn($o) => $o->items->sum('quantity'));
-        $pRate = floatval($rc->order_processing_palletize ?? 0);
-        $pCharge = round($pRate * $pQty, 2);
+        $pCharge = round($palletizeRate * $pQty, 2);
 
         $npCount = $nonPalletize->count();
-        $npRate = floatval($rc->order_processing_non_palletize ?? 0);
-        $npCharge = round($npRate * $npCount, 2);
+        $npCharge = round($nonPalletizeRate * $npCount, 2);
 
         $charge = $pCharge + $npCharge;
-        $this->log("ORDER PROC: Palletize {$pQty}qty x {$pRate} Rate = {$pCharge} | Non-Pall {$npCount}orders x {$npRate} = NPcharge {$npCharge}");
+        $this->log("EU FULFILLMENT: Palletize {$pQty}qty x {$palletizeRate} = {$pCharge} | Non-Pall {$npCount}orders x {$nonPalletizeRate} = {$npCharge}");
 
         return [
             'charge' => round($charge, 2),
             'palletize_qty' => $pQty,
-            'palletize_rate' => $pRate,
+            'palletize_rate' => $palletizeRate,
             'palletize_charge' => $pCharge,
             'non_palletize_count' => $npCount,
-            'non_palletize_rate' => $npRate,
+            'non_palletize_rate' => $nonPalletizeRate,
             'non_palletize_charge' => $npCharge,
         ];
     }
 
     /**
-     * PICK & PACK
-     * Palletize: pick_pack_palletize × qty of palletize orders
-     * Non-palletize: pick_pack_non_palletize × no of non-palletize orders
+     * EU PICK & PACK — palletize/non-palletize
+     * Palletize: rate × qty
+     * Non-palletize: rate × no of orders
      */
-    private function calculatePickPack(int $warehouseId, $rc, $periodStart, $periodEnd): array
+    private function euPickPack(int $warehouseId, $rc, $periodStart, $periodEnd): array
     {
+        $palletizeRate = floatval($rc->pick_pack_palletize ?? 0);
+        $nonPalletizeRate = floatval($rc->pick_pack_non_palletize ?? 0);
+
         $orders = Order::where('warehouse_id', $warehouseId)
             ->whereBetween('order_date', [$periodStart, $periodEnd])
             ->whereNotIn('status', ['cancelled'])
-            ->where('shipping_method', '!=', 'sp')
             ->with('items')
             ->get();
 
         $palletize = $orders->where('order_pack_type', 'palletize');
         $nonPalletize = $orders->where('order_pack_type', '!=', 'palletize');
-        $pQty = $palletize->sum(fn($o) => $o->items->sum('quantity'));
-        $pRate = 0; //floatval($rc->pick_pack ?? 0);
-        $pCharge = round($pRate * $pQty, 2);
 
-        //pick_pack only applicable for non palletize
-        $nonPalletize = $orders->where('order_pack_type', '!=', 'palletize');
-        $npQty = $nonPalletize->sum(fn($o) => $o->items->sum('quantity'));
-        $npRate = floatval($rc->pick_pack ?? 0);
-        $npCharge = round($npRate * $npQty, 2);
+        $pQty = $palletize->sum(fn($o) => $o->items->sum('quantity'));
+        $pCharge = round($palletizeRate * $pQty, 2);
+
+        $npCount = $nonPalletize->count();
+        $npCharge = round($nonPalletizeRate * $npCount, 2);
 
         $charge = $pCharge + $npCharge;
-        $this->log("PICK-PACK: Palletize {$pQty}qty x {$pRate} = {$pCharge} | Non-Pall {$npQty} Qty x {$npRate} = {$npCharge}");
+        $this->log("EU PICK-PACK: Palletize {$pQty}qty x {$palletizeRate} = {$pCharge} | Non-Pall {$npCount}orders x {$nonPalletizeRate} = {$npCharge}");
 
         return [
             'charge' => round($charge, 2),
             'palletize_qty' => $pQty,
-            'palletize_rate' => $pRate,
+            'palletize_rate' => $palletizeRate,
             'palletize_charge' => $pCharge,
-            'non_palletize_qty' => $npQty,
-            'non_palletize_rate' => $npRate,
+            'non_palletize_count' => $npCount,
+            'non_palletize_rate' => $nonPalletizeRate,
             'non_palletize_charge' => $npCharge,
         ];
     }
 
-    /**
-     * RETURN INWARD — return_inward_per_qty × qty of returned items
-     */
-    private function calculateReturnInward(int $warehouseId, $rc, $periodStart, $periodEnd): array
-    {
-        $rate = floatval($rc->return_inward_per_qty ?? 0);
-
-        $returnQty = \App\Models\OrderReturnItem::whereHas('orderReturn', function ($q) use ($warehouseId, $periodStart, $periodEnd) {
-            $q->where('warehouse_id', $warehouseId)
-                ->whereBetween('return_date', [$periodStart, $periodEnd])
-                ->whereIn('status', ['received', 'inspected', 'approved', 'refunded', 'restocked']);
-        })->sum('return_qty');
-
-        $charge = round($rate * $returnQty, 2);
-        $this->log("RETURN INWARD: {$returnQty} qty x {$rate} = {$charge}");
-
-        return ['charge' => $charge, 'return_qty' => intval($returnQty), 'rate' => $rate];
-    }
+    // ─── LOGGER ──────────────────────────────────────────────────
 
     private function log(string $msg): void
     {

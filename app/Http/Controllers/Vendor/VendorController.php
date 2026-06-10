@@ -27,24 +27,24 @@ class VendorController extends Controller
             return redirect()->route('vendor.kyc');
         }
 
-        $activeCode = session('active_company');
+        $activeCompany = session('active_company');
 
         $data = $this->dashboardService->getVendorDashboard($vendor->id);
 
         $data['stats'] = [
-            'offer_sheets'  => OfferSheet::where('vendor_id', $vendor->id)->where('company_code', $activeCode)->count(),
-            'consignments'  => Consignment::where('vendor_id', $vendor->id)->where('company_code', $activeCode)->count(),
-            'total_sales'   => Order::whereHas('items', fn($q) => $q->where('vendor_id', $vendor->id))->where('company_code', $activeCode)->sum('total_amount'),
-            'chargebacks'   => Chargeback::where('vendor_id', $vendor->id)->where('company_code', $activeCode)->where('status', 'confirmed')->sum('amount'),
-            'pending_payout' => VendorPayout::where('vendor_id', $vendor->id)->where('company_code', $activeCode)->whereIn('status', ['calculated', 'approved'])->sum('net_payout'),
+            'offer_sheets'  => OfferSheet::where('vendor_id', $vendor->id)->where('company_code', $activeCompany)->count(),
+            'consignments'  => Consignment::where('vendor_id', $vendor->id)->where('company_code', $activeCompany)->count(),
+            'total_sales'   => Order::whereHas('items', fn($q) => $q->where('vendor_id', $vendor->id))->where('company_code', $activeCompany)->sum('total_amount'),
+            'chargebacks'   => Chargeback::where('vendor_id', $vendor->id)->where('company_code', $activeCompany)->where('status', 'confirmed')->sum('amount'),
+            'pending_payout' => VendorPayout::where('vendor_id', $vendor->id)->where('company_code', $activeCompany)->whereIn('status', ['calculated', 'approved'])->sum('net_payout'),
         ];
 
         $data['recent_orders'] = Order::whereHas('items', fn($q) => $q->where('vendor_id', $vendor->id))
-            ->where('company_code', $activeCode)
+            ->where('company_code', $activeCompany)
             ->with('salesChannel')->latest('order_date')->take(5)->get();
 
         $data['active_consignments'] = Consignment::where('vendor_id', $vendor->id)
-            ->where('company_code', $activeCode)
+            ->where('company_code', $activeCompany)
             ->whereNotIn('status', ['delivered', 'cancelled'])->with('liveSheet')->latest()->take(5)->get();
 
         return view('vendor.dashboard', compact('data', 'vendor'));
@@ -217,12 +217,12 @@ class VendorController extends Controller
     {
         $user = auth()->user();
 
-        $activeCode = session('active_company');
+        $activeCompany = session('active_company');
 
         $vendor = $user->vendor;
         $sheets = $vendor->offerSheets()->with('items')
-            ->when($activeCode, function ($q) use ($activeCode) {
-                $q->where('company_code', $activeCode);
+            ->when($activeCompany, function ($q) use ($activeCompany) {
+                $q->where('company_code', $activeCompany);
             })
             ->latest()->paginate(20);
         return view('vendor.offer-sheets.index', compact('sheets', 'vendor'));
@@ -921,15 +921,19 @@ class VendorController extends Controller
     {
         $vendor = auth()->user()->vendor;
 
-        $activeCode = session('active_company');
+        $activeCompany = session('active_company');
 
         //$consignments = $vendor->consignments()->with('liveSheet', 'grn', 'shipment')->latest()->paginate(20);
 
         $consignments = $vendor->consignments()
-            ->when($activeCode, function ($q) use ($activeCode) {
-                $q->where('company_code', $activeCode);
+            ->when($activeCompany, function ($q) use ($activeCompany) {
+                $q->where('company_code', $activeCompany);
             })
             ->with('liveSheet', 'shipments')->latest()->paginate(20);
+//             echo '<pre>';
+//             print_r( $consignments->toArray() );
+// echo '</pre>';
+
         return view('vendor.consignments.index', compact('consignments', 'vendor'));
     }
 
@@ -1131,13 +1135,13 @@ class VendorController extends Controller
     {
         $user = auth()->user();
 
-        $activeCode = session('active_company');
+        $activeCompany = session('active_company');
 
         $vendor = $user->vendor;
         $liveSheets = LiveSheet::where('vendor_id', $vendor->id)
             ->with('consignment', 'offerSheet', 'items.product')
-            ->when($activeCode, function ($query) use ($activeCode) {
-                $query->where('company_code', $activeCode);
+            ->when($activeCompany, function ($query) use ($activeCompany) {
+                $query->where('company_code', $activeCompany);
             })
             ->latest()->paginate(20);
         return view('vendor.live-sheets.index', compact('liveSheets', 'vendor'));
@@ -1430,6 +1434,8 @@ class VendorController extends Controller
         //     'live_sheet_file' => 'required|file|mimes:xlsx,xls,csv|max:20480',
         // ]);
 
+        $activeCompany = session('active_company') ?? '2100';
+
         $request->validate([
             'live_sheet_file' => [
                 'required',
@@ -1452,7 +1458,7 @@ class VendorController extends Controller
         $storedPath = $file->store('live-sheet-uploads/' . $vendor->id, 'public');
         $fullPath = storage_path('app/public/' . $storedPath);
 
-        $parsed = $this->parseLiveSheetExcel($fullPath);
+        $parsed = $this->parseLiveSheetExcel($fullPath); 
 
         if (empty($parsed)) {
             return back()->with('error', 'No valid data found. Please use the provided template.');
@@ -1500,13 +1506,22 @@ class VendorController extends Controller
             $masterH = (float)($row['master_height'] ?? 0);
             $qtyMaster = (int)($row['qty_master_pack'] ?? 1);
             $finalQty = (int)($row['final_qty'] ?? $row['qty_offered'] ?? $item->quantity);
+            if ($activeCompany === '2100') {
+                //USA
+                $masterCbm = ($masterL > 0 && $masterW > 0 && $masterH > 0)
+                    ? ($masterL * $masterW * $masterH) / 61023
+                    : 0;
+            } else {
+                //EU & UK
+                $masterCbm = ($masterL > 0 && $masterW > 0 && $masterH > 0)
+                    ? ($masterL * $masterW * $masterH) / 1000000
+                    : 0;
+            }
 
-            $masterCbm = ($masterL > 0 && $masterW > 0 && $masterH > 0)
-                ? ($masterL * $masterW * $masterH) / 61023
-                : 0;
+            //   $totalMasterCartons = $qtyMaster > 0 ? ceil($finalQty / $qtyMaster) : 0;
+            //   $cbmShipment = $totalMasterCartons * $masterCbm;
 
-            $totalMasterCartons = $qtyMaster > 0 ? ceil($finalQty / $qtyMaster) : 0;
-            $cbmShipment = $totalMasterCartons * $masterCbm;
+            $cbmShipment = $masterCbm * $row['no_of_master_carton'];
             $unitPrice = (float)($row['vendor_fob'] ?? $item->unit_price);
             $finalFob = (float)($row['final_fob'] ?? $unitPrice);
             $weightPerUnit = isset($row['weight']) && $row['weight'] > 0
@@ -1547,10 +1562,10 @@ class VendorController extends Controller
                     'specification'    => $row['specification'] ?? null,
                     'hsn_hts_code'     => $row['hsn_code'] ?? null,
                     'duty_percent'     => $row['duty_percent'] ?? null,
-                    'length'    => $row['length'] ?? null,
-                    'width'     => $row['width'] ?? null,
-                    'height'    => $row['height'] ?? null,
-                    'weight'     => $row['weight'] ?? null,
+                    'length'           => $row['length'] ?? null,
+                    'width'            => $row['width'] ?? null,
+                    'height'           => $row['height'] ?? null,
+                    'weight'           => $row['weight'] ?? null,
                     'material'         => $row['material'] ?? null,
                     'other_material'   => $row['other_material'] ?? null,
                     'color'            => $row['color'] ?? null,
@@ -1581,7 +1596,7 @@ class VendorController extends Controller
             $updateData = [];
 
             $updateData['vendor_price'] = $finalFob ?: $unitPrice;
-            $updateData['cbm']          = $qtyMaster > 0 ? round($masterCbm / $qtyMaster, 6) : null;
+            $updateData['cbm']          = $cbmShipment;//$qtyMaster > 0 ? round($masterCbm / $qtyMaster, 6) : null;
             $updateData['weight']       = $weightPerUnit ?: null;
             $updateData['description']  = $row['description'] ?? null;
             $updateData['hsn_code']     = $row['hsn_code'] ?? null;
@@ -1898,19 +1913,19 @@ class VendorController extends Controller
     {
         $vendor = auth()->user()->vendor;
 
-        $activeCode = session('active_company');
+        $activeCompany = session('active_company');
 
         $orders = Order::where('status', 'shipped')
             ->whereHas('items', fn($q) => $q->where('vendor_id', $vendor->id))
             ->with(['salesChannel', 'receivable', 'items' => fn($q) => $q->where('vendor_id', $vendor->id)->with('product')])
-            ->when($activeCode, fn($q) => $q->whereHas('salesChannel', fn($sq) => $sq->where('company_code', $activeCode)))
+            ->when($activeCompany, fn($q) => $q->whereHas('salesChannel', fn($sq) => $sq->where('company_code', $activeCompany)))
             ->get();
 
 
         // Before the loop — build FIFO commission map per product for this vendor
         $vendorLiveSheets = \App\Models\LiveSheet::where('vendor_id', $vendor->id)
             ->where('status', 'locked') // Only consider locked sheets for commission (approved but not yet paid out)
-            //  ->when($activeCode, fn($q) => $q->whereHas('salesChannel', fn($sq) => $sq->where('company_code', $activeCode)))
+            //  ->when($activeCompany, fn($q) => $q->whereHas('salesChannel', fn($sq) => $sq->where('company_code', $activeCompany)))
             ->orderBy('approved_at', 'asc') // FIFO — oldest first
             ->with(['items' => fn($q) => $q->select('id', 'live_sheet_id', 'product_id', 'quantity', 'product_details')])
             ->get();
@@ -2035,13 +2050,13 @@ class VendorController extends Controller
 
         $orders = Order::whereHas('items', fn($q) => $q->where('vendor_id', $vendor->id))
             ->with('salesChannel', 'items')
-            ->when($activeCode, fn($q) => $q->whereHas('salesChannel', fn($sq) => $sq->where('company_code', $activeCode)))
+            ->when($activeCompany, fn($q) => $q->whereHas('salesChannel', fn($sq) => $sq->where('company_code', $activeCompany)))
             ->when($request->month, fn($q, $v) => $q->whereMonth('order_date', $v))
             ->when($request->year, fn($q, $v) => $q->whereYear('order_date', $v))
             ->latest('order_date')->paginate(25);
 
         $totalSales = Order::whereHas('items', fn($q) => $q->where('vendor_id', $vendor->id))
-            ->when($activeCode, fn($q) => $q->whereHas('salesChannel', fn($sq) => $sq->where('company_code', $activeCode)))
+            ->when($activeCompany, fn($q) => $q->whereHas('salesChannel', fn($sq) => $sq->where('company_code', $activeCompany)))
             ->when($request->month, fn($q, $v) => $q->whereMonth('order_date', $v))
             ->when($request->year, fn($q, $v) => $q->whereYear('order_date', $v))
             ->sum('total_amount');
@@ -2052,16 +2067,16 @@ class VendorController extends Controller
     {
         $user = auth()->user();
         // User's allowed company codes        
-        $activeCode = session('active_company');
+        $activeCompany = session('active_company');
 
         $vendor = $user->vendor;
         $vendorProductIds = $vendor->products()
-            ->when(!$user->isAdmin() && !empty($activeCode), fn($q) => $q->where('company_code', $activeCode))
+            ->when($activeCompany, fn($q) => $q->where('company_code', $activeCompany))
             ->pluck('id')->toArray();
 
         // Get consignment IDs for this vendor
         $consignmentIds = Consignment::where('vendor_id', $vendor->id)
-            ->when(!$user->isAdmin() && !empty($activeCode), fn($q) => $q->where('company_code', $activeCode))
+            ->when($activeCompany, fn($q) => $q->where('company_code', $activeCompany))
             ->pluck('id');
 
         // Get shipment IDs linked to those consignments
@@ -2071,8 +2086,8 @@ class VendorController extends Controller
 
         $grns = \App\Models\Grn::with('shipment', 'warehouse', 'items.product')
             ->whereIn('shipment_id', $shipmentIds)
-            ->when(!$user->isAdmin() && !empty($activeCode), function ($query) use ($activeCode) {
-                $query->where('company_code', $activeCode);
+            ->when($activeCompany, function ($query) use ($activeCompany) {
+                $query->where('company_code', $activeCompany);
             })
             ->latest('receipt_date')
             ->paginate(20);
@@ -2114,11 +2129,11 @@ class VendorController extends Controller
     public function showGrn(\App\Models\Grn $grn)
     {
         $vendor = auth()->user()->vendor;
-        $activeCode = session('active_company');
+        $activeCompany = session('active_company');
 
         // Verify this GRN belongs to this vendor's consignments
         $consignmentIds = Consignment::where('vendor_id', $vendor->id)
-            ->when(!$user->isAdmin() && !empty($activeCode), fn($q) => $q->where('company_code', $activeCode))
+            ->when($activeCompany, fn($q) => $q->where('company_code', $activeCompany))
             ->pluck('id');
         $shipmentIds = \DB::table('shipment_consignments')
             ->whereIn('consignment_id', $consignmentIds)
@@ -2132,7 +2147,7 @@ class VendorController extends Controller
 
         // Filter items to show only this vendor's products
         $vendorProductIds = $vendor->products()
-            ->when(!$user->isAdmin() && !empty($activeCode), fn($q) => $q->where('company_code', $activeCode))
+            ->when(!$user->isAdmin() && !empty($activeCompany), fn($q) => $q->where('company_code', $activeCompany))
             ->pluck('id')->toArray();
         $vendorItems = $grn->items->filter(fn($item) => in_array($item->product_id, $vendorProductIds));
 
@@ -2151,13 +2166,13 @@ class VendorController extends Controller
     {
         $user = auth()->user();
 
-        $activeCode = session('active_company');
+        $activeCompany = session('active_company');
         $vendor = $user->vendor;
 
         $rateCard = \App\Models\VendorRateCard::where('vendor_id', $vendor->id)
             ->where('status', 'approved')
-            ->when(!$user->isAdmin() && !empty($activeCode), function ($query) use ($activeCode) {
-                $query->where('company_code', $activeCode);
+            ->when(!$user->isAdmin() && !empty($activeCompany), function ($query) use ($activeCompany) {
+                $query->where('company_code', $activeCompany);
             })
             ->orderByDesc('version')
             ->first();
@@ -2165,8 +2180,8 @@ class VendorController extends Controller
         // Get all versions for history
         $history = \App\Models\VendorRateCard::where('vendor_id', $vendor->id)
             ->with('warehouse')
-            ->when(!$user->isAdmin() && !empty($activeCode), function ($query) use ($activeCode) {
-                $query->where('company_code', $activeCode);
+            ->when(!$user->isAdmin() && !empty($activeCompany), function ($query) use ($activeCompany) {
+                $query->where('company_code', $activeCompany);
             })
             ->orderByDesc('version')
             ->get();
@@ -2189,15 +2204,15 @@ class VendorController extends Controller
     public function inventory(Request $request)
     {
         $user = auth()->user();
-        $activeCode = session('active_company');
+        $activeCompany = session('active_company');
 
         $vendor = $user->vendor;
 
         $inventory = \App\Models\Inventory::with('product', 'warehouse', 'grn')
             ->whereHas('product', fn($q) => $q->where('vendor_id', $vendor->id))
             ->when($request->warehouse_id, fn($q, $v) => $q->where('warehouse_id', $v))
-            ->when(!$user->isAdmin() && !empty($activeCode), function ($query) use ($activeCode) {
-                $query->where('company_code', $activeCode);
+            ->when(!$user->isAdmin() && !empty($activeCompany), function ($query) use ($activeCompany) {
+                $query->where('company_code', $activeCompany);
             })
             ->latest('received_date')
             ->paginate(30);
@@ -2218,40 +2233,104 @@ class VendorController extends Controller
     public function chargebacks()
     {
         $vendor = auth()->user()->vendor;
-        $activeCode = session('active_company');
+        $activeCompany = session('active_company');
 
         $chargebacks = Chargeback::where('vendor_id', $vendor->id)->with('order.salesChannel')
-            ->when(!$vendor->user->isAdmin() && !empty($activeCode), function ($query) use ($activeCode) {
-                $query->whereHas('order.salesChannel', fn($q) => $q->where('company_code', $activeCode));
+            ->when(!$vendor->user->isAdmin() && !empty($activeCompany), function ($query) use ($activeCompany) {
+                $query->whereHas('order.salesChannel', fn($q) => $q->where('company_code', $activeCompany));
             })
             ->latest()->paginate(20);
         return view('vendor.chargebacks.index', compact('chargebacks', 'vendor'));
     }
 
-    public function payouts()
+    public function payoutsOLD()
     {
         $vendor = auth()->user()->vendor;
-        $activeCode = session('active_company');
+        $activeCompany = session('active_company');
 
         $payouts = VendorPayout::where('vendor_id', $vendor->id)
-            ->when(!$vendor->user->isAdmin() && !empty($activeCode), function ($query) use ($activeCode) {
-                $query->where('company_code', $activeCode);
-            })
+            ->where('company_code', $activeCompany)
             ->orderByDesc('payout_year')->orderByDesc('payout_month')->paginate(12);
 
         $warehouseCharges = WarehouseCharge::where('vendor_id', $vendor->id)
-            ->when(!$vendor->user->isAdmin() && !empty($activeCode), function ($query) use ($activeCode) {
-                $query->where('company_code', $activeCode);
-            })
+            ->where('company_code', $activeCompany)
             ->latest()->take(10)->get();
 
         $vendorMonthlyCharges = VendorMonthlyCharge::where('vendor_id', $vendor->id)
-            ->when(!$vendor->user->isAdmin() && !empty($activeCode), function ($query) use ($activeCode) {
-                $query->where('company_code', $activeCode);
-            })
+            ->where('company_code', $activeCompany)
             ->latest()->take(10)->get();
 
         return view('vendor.payouts.index', compact('payouts', 'vendor', 'warehouseCharges', 'vendorMonthlyCharges'));
+    }
+
+    public function payouts()
+    {
+        $vendor = auth()->user()->vendor;
+        $activeCompany = session('active_company');
+
+        $payouts = VendorPayout::where('vendor_id', $vendor->id)
+            ->where('company_code', $activeCompany)
+            ->orderByDesc('payout_year')
+            ->orderByDesc('payout_month')
+            ->paginate(12);
+
+        $vendorMonthlyCharges = \App\Models\VendorMonthlyCharge::where('vendor_id', $vendor->id)
+            ->where('company_code', $activeCompany)
+            ->with('warehouse', 'grn')
+            ->latest()
+            ->take(10)
+            ->get();
+
+        return view('vendor.payouts.index', compact('payouts', 'vendor', 'vendorMonthlyCharges'));
+    }
+
+    public function showPayout(VendorPayout $payout)
+    {
+        $vendor = auth()->user()->vendor;
+        $activeCompany = session('active_company');
+
+        // Security: vendor can only see their own payouts
+        if ($payout->vendor_id !== $vendor->id) {
+            return redirect()->route('vendor.payouts')->with('error', 'Unauthorized.');
+        }
+        if ($activeCompany && $payout->company_code !== $activeCompany) {
+            return redirect()->route('vendor.payouts')->with('error', 'This payout does not belong to your active company.');
+        }
+
+        $payout->load('vendor');
+
+        // Read from saved snapshot
+        $snapshot = $payout->calculation_snapshot;
+
+        if (!empty($snapshot)) {
+            $lineItems = collect($snapshot['line_items'] ?? [])->map(fn($i) => (object) $i);
+            $payoutSummary = $snapshot['summary'] ?? [];
+        } else {
+            // Fallback: recalculate live
+            $service = new \App\Services\VendorPayoutService();
+            $data = $service->buildPayoutData($vendor->id, $payout->company_code, $payout->payout_month, $payout->payout_year);
+            $lineItems = collect($data['line_items'])->map(fn($i) => (object) $i);
+            $payoutSummary = $data['summary'];
+        }
+
+        // Warehouse charges
+        $warehouseCharges = \App\Models\VendorMonthlyCharge::where('vendor_id', $vendor->id)
+            ->where('company_code', $payout->company_code)
+            ->where('charge_month', $payout->payout_month)
+            ->where('charge_year', $payout->payout_year)
+            ->with('warehouse')
+            ->get();
+
+        // Chargebacks
+        $chargebacks = \App\Models\Chargeback::where('vendor_id', $vendor->id)
+            ->whereHas('order', fn($q) => $q->where('company_code', $payout->company_code))
+            ->where('status', 'confirmed')
+            ->whereMonth('confirmed_at', $payout->payout_month)
+            ->whereYear('confirmed_at', $payout->payout_year)
+            ->with('order')
+            ->get();
+
+        return view('vendor.payouts.show', compact('payout', 'lineItems', 'payoutSummary', 'warehouseCharges', 'chargebacks'));
     }
 
     public function uploadInvoice(Request $request, VendorPayout $payout)
@@ -2273,7 +2352,7 @@ class VendorController extends Controller
         $contractFile = 'EU_Contract.pdf';
         if ($activeCompany === '2100') {
             $contractFile = 'US_Contract.pdf';
-        } 
+        }
 
         $path = storage_path('app/public/downloads/' . $contractFile);
 
@@ -2363,36 +2442,36 @@ class VendorController extends Controller
     {
         $vendor = auth()->user()->vendor;
 
-        $activeCode = session('active_company');
+        $activeCompany = session('active_company');
 
         $reports = \App\Models\InspectionReport::whereHas('consignment', fn($q) => $q->where('vendor_id', $vendor->id))
             ->with('consignment', 'uploader')
-            ->when($activeCode, fn($q) => $q->whereHas('consignment', fn($cq) => $cq->where('company_code', $activeCode)))
+            ->when($activeCompany, fn($q) => $q->whereHas('consignment', fn($cq) => $cq->where('company_code', $activeCompany)))
             ->when($request->type, fn($q, $v) => $q->where('inspection_type', $v))
             ->when($request->result, fn($q, $v) => $q->where('result', $v))
             ->when($request->consignment_id, fn($q, $v) => $q->where('consignment_id', $v))
             ->latest()->paginate(20);
 
         $consignments = $vendor->consignments()
-            ->when($activeCode, function ($q) use ($activeCode) {
-                $q->where('company_code', $activeCode);
+            ->when($activeCompany, function ($q) use ($activeCompany) {
+                $q->where('company_code', $activeCompany);
             })
             ->latest()->get();
 
         $stats = [
             'total'    => \App\Models\InspectionReport::whereHas('consignment', fn($q) => $q->where('vendor_id', $vendor->id))
-                ->when($activeCode, fn($q) => $q->whereHas('consignment', fn($cq) => $cq->where('company_code', $activeCode)))
+                ->when($activeCompany, fn($q) => $q->whereHas('consignment', fn($cq) => $cq->where('company_code', $activeCompany)))
                 ->count(),
             'passed'   => \App\Models\InspectionReport::whereHas('consignment', fn($q) => $q->where('vendor_id', $vendor->id))->where('result', 'passed')
-                ->when($activeCode, fn($q) => $q->whereHas('consignment', fn($cq) => $cq->where('company_code', $activeCode)))
+                ->when($activeCompany, fn($q) => $q->whereHas('consignment', fn($cq) => $cq->where('company_code', $activeCompany)))
                 ->count(),
 
             'failed'   => \App\Models\InspectionReport::whereHas('consignment', fn($q) => $q->where('vendor_id', $vendor->id))->where('result', 'failed')
-                ->when($activeCode, fn($q) => $q->whereHas('consignment', fn($cq) => $cq->where('company_code', $activeCode)))
+                ->when($activeCompany, fn($q) => $q->whereHas('consignment', fn($cq) => $cq->where('company_code', $activeCompany)))
                 ->count(),
 
             'conditional' => \App\Models\InspectionReport::whereHas('consignment', fn($q) => $q->where('vendor_id', $vendor->id))->where('result', 'conditional')
-                ->when($activeCode, fn($q) => $q->whereHas('consignment', fn($cq) => $cq->where('company_code', $activeCode)))
+                ->when($activeCompany, fn($q) => $q->whereHas('consignment', fn($cq) => $cq->where('company_code', $activeCompany)))
                 ->count(),
         ];
 

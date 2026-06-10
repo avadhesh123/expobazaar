@@ -18,7 +18,7 @@
                 <div>
                     <div style="font-size:1rem;font-weight:800;color:#0d1b2a;font-family:monospace;">{{ $c->consignment_number }}</div>
                     <div style="font-size:.72rem;color:#64748b;margin-top:.15rem;">
-                        @php $flags = ['IN'=>'🇮🇳','US'=>'🇺🇸','NL'=>'🇳🇱']; @endphp
+                        @php $flags = ['US' => '🇺🇸',    'EU' => '🇪🇺',    'NL' => 'nl'  'UK' => '🇬🇧',]; @endphp
                         {{ $flags[$c->destination_country] ?? '' }} {{ $c->destination_country }} · {{ $c->company_code }}
                         · Live Sheet: {{ $c->liveSheet->live_sheet_number ?? '—' }}
                     </div>
@@ -34,7 +34,7 @@
             <div style="display:flex;gap:1.5rem;margin-bottom:.75rem;font-size:.78rem;">
                 <span><strong>Items:</strong> {{ $c->total_items }}</span>
                 <span><strong>CBM:</strong> {{ number_format($c->total_cbm, 3) }}</span>
-                <span><strong>Value:</strong> <span style="color:#166534;font-weight:700;">${{ number_format($c->total_value, 2) }}</span></span>
+                <span><strong>Value:</strong> <span style="color:#166534;font-weight:700;">{{$activeCurrencySymbol}}{{ number_format($c->total_value, 2) }}</span></span>
             </div>
 
             {{-- Three Document Sections --}}

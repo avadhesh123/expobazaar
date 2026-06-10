@@ -272,6 +272,8 @@ class SourcingController extends Controller
             'change_reason' => 'nullable|string|max:500',
         ]);
 
+        $activeCompany = session('active_company') ?? '2100';
+
         $updated = 0;
         $totalChanges = 0;
         $reason = $request->change_reason;
@@ -306,14 +308,27 @@ class SourcingController extends Controller
             }
 
             // Recalculate derived fields
-            $masterL = $details['master_length'] ?? 0;
-            $masterW = $details['master_width'] ?? 0;
-            $masterH = $details['master_height'] ?? 0;
-            $masterCbm = ($masterL && $masterW && $masterH) ? ($masterL * $masterW * $masterH) / 61023 : 0;
-            $qtyMaster = $details['qty_master_pack'] ?? 1;
-            $totalCartons = $qtyMaster > 0 ? ceil($finalQty / $qtyMaster) : 0;
-            $cbmShipment = $totalCartons * $masterCbm;
+            $masterL = $details['master_length'] ?? $details['master_carton_length'] ?? 0;
+            $masterW = $details['master_width'] ?? $details['master_carton_width'] ?? 0;
+            $masterH = $details['master_height'] ?? $details['master_carton_height'] ?? 0;
 
+            if ($activeCompany === '2100') {
+                //USA
+                $masterCbm = ($masterL > 0 && $masterW > 0 && $masterH > 0)
+                    ? ($masterL * $masterW * $masterH) / 61023
+                    : 0;
+            } else {
+                //EU & UK
+                $masterCbm = ($masterL > 0 && $masterW > 0 && $masterH > 0)
+                    ? ($masterL * $masterW * $masterH) / 1000000
+                    : 0;
+            }
+
+
+            // $masterCbm = ($masterL && $masterW && $masterH) ? ($masterL * $masterW * $masterH) / 61023 : 0;
+            $qtyMaster = $details['qty_master_pack'] ?? 1;
+            $totalCartons = $row['no_of_master_carton'] ?? ($qtyMaster > 0 ? ceil($finalQty / $qtyMaster) : 0);
+            $cbmShipment = $totalCartons * $masterCbm;
             $details['target_fob'] = $row['target_fob'] ?? $details['target_fob'] ?? null;
             $details['final_qty'] = $finalQty;
             $details['final_fob'] = $finalFob;
@@ -323,7 +338,13 @@ class SourcingController extends Controller
             $details['total_master_cartons'] = $totalCartons;
             $details['master_cbm'] = round($masterCbm, 6);
             $details['cbm_shipment'] = round($cbmShipment, 4);
-
+            // echo ';totalCartons:'.$totalCartons;
+            //      echo ';qtyMaster:'  . $qtyMaster ;
+            //      echo ';finalQty:'.$finalQty ;
+            //      echo ';masterCbm:'.$masterCbm;
+            //      echo '<pre>';
+            //      print_r($details);
+            // exit;
             $item->update([
                 'quantity'        => $finalQty,
                 'unit_price'      => $finalFob ?: $item->unit_price,
@@ -478,6 +499,7 @@ class SourcingController extends Controller
 
         $inspections = \App\Models\InspectionReport::with('consignment.vendor', 'uploader')
             ->when($request->type, fn($q, $v) => $q->where('inspection_type', $v))
+            ->when($request->consignment_id, fn($q, $v) => $q->where('consignment_id', $v))
             ->when($request->result, fn($q, $v) => $q->where('result', $v))
             ->when(!empty($activeCompany), function ($q) use ($activeCompany) {
                 $q->whereHas('consignment', function ($cq) use ($activeCompany) {

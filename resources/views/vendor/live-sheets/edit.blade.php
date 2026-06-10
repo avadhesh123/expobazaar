@@ -102,25 +102,25 @@ $weightUnit = $isUS ? 'LBS' : 'KG';
                         <th style="min-width:80px;">Category</th>
                         <th style="min-width:80px;">Sub Cat.</th>
                         <th style="min-width:50px;">Inner Qty</th>
-                        <th style="min-width:55px;">Inner Carton Length ({{ $lwhUnit }})</th>
-                        <th style="min-width:55px;">Inner Carton Width ({{ $lwhUnit }})</th>
-                        <th style="min-width:55px;">Inner Carton Height ({{ $lwhUnit }})</th>
+                        <th style="min-width:50px;">Inner Carton Length ({{ $lwhUnit }})</th>
+                        <th style="min-width:50px;">Inner Carton Width ({{ $lwhUnit }})</th>
+                        <th style="min-width:50px;">Inner Carton Height ({{ $lwhUnit }})</th>
                         <th style="min-width:60px;">Inner Carton Weight {{ $weightUnit }}</th>
-                        <th style="min-width:55px;">Master Qty</th>
-                        <th style="min-width:55px;">Master Carton Length ({{ $lwhUnit }})</th>
-                        <th style="min-width:55px;">Master Carton Width ({{ $lwhUnit }})</th>
-                        <th style="min-width:55px;">Master Carton Height ({{ $lwhUnit }})</th>
+                        <th style="min-width:50px;">Master Qty</th>
+                        <th style="min-width:50px;">Master Carton Length ({{ $lwhUnit }})</th>
+                        <th style="min-width:50px;">Master Carton Width ({{ $lwhUnit }})</th>
+                        <th style="min-width:50px;">Master Carton Height ({{ $lwhUnit }})</th>
                         <th style="min-width:65px;">Master Carton Weight ({{ $weightUnit }})</th>
-                        <th style="min-width:60px;background:#eff6ff;">Qty Offered*</th>
-                        <th style="min-width:70px;background:#eff6ff;">FOB ({{$activeCurrencySymbol}}) *</th>
-                        <th style="min-width:70px;">Target FOB</th>
-                        <th style="min-width:60px;">Final Qty</th>
-                        <th style="min-width:55px;">Total No Of Master Cartons</th>
+                        <th style="min-width:75px;background:#eff6ff;">Qty Offered*</th>
+                        <th style="min-width:75px;background:#eff6ff;">FOB ({{$activeCurrencySymbol}}) *</th>
+                        <th style="min-width:75px;">Target FOB</th>
+                        <th style="min-width:75px;">Final Qty</th>
+                        <th style="min-width:50px;">Total No Of Master Cartons</th>
                         <th style="min-width:65px;">Master Carton CBM</th>
                         <th style="min-width:65px;">CBM Shipment</th>
                         <th style="min-width:70px;">Final FOB</th>
                         <th style="min-width:55px;">Duty</th>
-                        <th style="min-width:55px;">Freight F.</th>
+                        <th style="min-width:55px;">Freight Factor</th>
                         <th style="min-width:60px;">Freight</th>
                         <th style="min-width:70px;">Landed Cost</th>
                         <th style="min-width:55px;">WSP Factor</th>
@@ -182,20 +182,20 @@ $weightUnit = $isUS ? 'LBS' : 'KG';
                         <td style="text-align:center;font-family:monospace;">{{ $d['master_carton_height'] ?? $d['master_height'] ?? '—' }}</td>
                         <td style="text-align:center;font-family:monospace;">{{ $d['master_carton_weight'] ?? $d['master_weight_kg'] ?? '—' }}</td>
                         {{-- Editable fields --}}
-                        <td style="background:#eff6ff;"><input type="number" name="items[{{ $idx }}][quantity]" value="{{ $item->quantity ?? 0 }}" min="1" required onchange="calcRow({{ $idx }})" style="width:55px;padding:.2rem .3rem;border:1px solid #93c5fd;border-radius:4px;font-size:.78rem;text-align:center;background:#fff;" {{ $dis }}></td>
-                        <td style="background:#eff6ff;"><input type="number" step="0.01" name="items[{{ $idx }}][unit_price]" value="{{ $item->unit_price ?? 0 }}" min="0" required onchange="calcRow({{ $idx }})" style="width:65px;padding:.2rem .3rem;border:1px solid #93c5fd;border-radius:4px;font-size:.78rem;font-family:monospace;text-align:right;background:#fff;" {{ $dis }}></td>
-                        <td style="font-family:monospace;color:#64748b;">{{ $d['target_fob'] ?? '—' }}</td>
+                        <td style="background:#eff6ff;"><input type="number" name="items[{{ $idx }}][quantity]" value="{{ $item->quantity ?? 0 }}" min="1" required onchange="calcRow({{ $idx }})" style="width:70px;padding:.2rem .3rem;border:1px solid #93c5fd;border-radius:4px;font-size:.78rem;text-align:center;background:#fff;" {{ $dis }}></td>
+                        <td style="background:#eff6ff;"><input type="number" step="0.01" name="items[{{ $idx }}][vendor_fob]" value="{{ $d['vendor_fob'] ?? $item->unit_price ?? 0 }}" min="0" required onchange="calcRow({{ $idx }})" style="width:70px;padding:.2rem .3rem;border:1px solid #93c5fd;border-radius:4px;font-size:.78rem;font-family:monospace;text-align:right;background:#fff;" {{ $dis }}></td>
+                        <td style="font-family:monospace;color:#64748b;">{{$activeCurrencySymbol}}{{ $d['target_fob'] ?? '—' }}</td>
                         <td style="font-family:monospace;font-weight:600;">{{ $d['final_qty'] ?? $item->quantity }}</td>
                         <td style="text-align:center;">{{ $d['no_of_master_carton'] ?? '—' }}</td>
                         <td style="font-family:monospace;">{{ isset($d['master_cbm']) ? number_format(floatval($d['master_cbm']), 4) : '—' }}</td>
                         <td style="font-family:monospace;font-weight:600;color:#1e40af;">{{ isset($d['cbm_shipment']) ? number_format(floatval($d['cbm_shipment']), 4) : number_format(floatval($item->total_cbm ?? 0), 4) }}</td>
-                        <td style="font-family:monospace;">{{ $d['final_fob'] ?? '—' }}</td>
-                        <td style="font-family:monospace;">{{ $dutyAmt > 0 ? '$'.number_format($dutyAmt, 2) : '—' }}</td>
+                        <td style="font-family:monospace;">{{$activeCurrencySymbol}}{{ $d['final_fob'] ?? '—' }}</td>
+                        <td style="font-family:monospace;">{{ $dutyAmt > 0 ? $activeCurrencySymbol.number_format($dutyAmt, 2) : '—' }}</td>
                         <td>{{ $d['freight_factor'] ?? '' }}</td>
-                        <td style="font-family:monospace;">{{ $freightAmt > 0 ? '$'.number_format($freightAmt, 2) : '—' }}</td>
-                        <td style="font-family:monospace;font-weight:600;">{{ $landedCost > 0 ? '$'.number_format($landedCost, 2) : '—' }}</td>
+                        <td style="font-family:monospace;">{{ $freightAmt > 0 ? $activeCurrencySymbol.number_format($freightAmt, 2) : '—' }}</td>
+                        <td style="font-family:monospace;font-weight:600;">{{ $landedCost > 0 ? $activeCurrencySymbol.number_format($landedCost, 2) : '—' }}</td>
                         <td>{{ $d['wsp_factor'] ?? '—' }}</td>
-                        <td style="font-family:monospace;font-weight:700;color:#166534;">{{ $wsp > 0 ? '$'.number_format($wsp, 2) : '—' }}</td>
+                        <td style="font-family:monospace;font-weight:700;color:#166534;">{{ $wsp > 0 ? $activeCurrencySymbol.number_format($wsp, 2) : '—' }}</td>
                         <td style="font-size:.7rem;color:#64748b;">{{ $d['comments'] ?? '—' }}</td>
                     </tr>
 

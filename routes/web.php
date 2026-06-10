@@ -129,6 +129,7 @@ Route::middleware(['auth'])->group(function () {
             Route::get('rate-card', [VendorController::class, 'rateCard'])->name('rate-card');
             Route::get('inventory', [VendorController::class, 'inventory'])->name('inventory');
             Route::get('payouts', [VendorController::class, 'payouts'])->name('payouts');
+            Route::get('payouts/{payout}', [VendorController::class, 'showPayout'])->name('payouts.show');
             Route::post('payouts/{payout}/invoice', [VendorController::class, 'uploadInvoice'])->name('payouts.invoice');
         });
     });
