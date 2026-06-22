@@ -193,18 +193,33 @@
                         $sapCode = $item->product->sap_code ?? $d['sap_code'] ?? '';
                         $vendorWsp =  $item->product->vendor_wsp ?? $d['vendor_wsp'] ?? $d['vendor_payout_price'] ?? '';
 
-                        $finalFob = floatval($d['final_fob'] ?? $item->unit_price ?? 0);
-                        $dutyAmt = $finalFob * (floatval($d['duty_percent'] ?? 0) / 100);
-                        $freightAmt = floatval($d['freight_factor'] ?? 0) * $finalFob;
-                        $landedCost = $finalFob + $dutyAmt + $freightAmt;
-                        $wsp = $landedCost * floatval($d['wsp_factor'] ?? 0);
+                      //  $finalFob = floatval($d['final_fob'] ?? $item->unit_price ?? 0);
+                      ////  $dutyAmt = $finalFob * (floatval($d['duty_percent'] ?? 0) / 100);
+                     //   $freightAmt = floatval($d['freight_factor'] ?? 0) * $finalFob;
+                      //  $landedCost = $finalFob + $dutyAmt + $freightAmt;
+                      //  $wsp = $landedCost * floatval($d['wsp_factor'] ?? 0); 
+
+
+
+                        
+                    $finalFob = (float)($d['final_fob'] ?? $item->unit_price);
+                    $dutyPercent = (float)($d['duty_percent'] ?? 0);
+                    $freightFactor = (float)($d['freight_factor'] ?? 0);
+                    $wspFactor = (float)($d['wsp_factor'] ?? 0);
+
+                    $dutyAmt = $finalFob * ($dutyPercent / 100);
+                    $freightAmt = $finalFob * ($freightFactor / 100);
+                    $landedCost = $finalFob + $dutyAmt + $freightAmt;
+                    $wsp = $landedCost * $wspFactor;
+
+
                         @endphp
                         <tr style="{{ !empty($sapCode) ? 'background:#f0fdf4;' : '' }}">
                             <td style="text-align:center;color:#94a3b8;">{{ $idx + 1 }}</td>
                             <td style="font-family:monospace;font-weight:600;font-size:.82rem;">{{ $item->product->sku ?? '—' }}</td>
                             <td style="font-size:.82rem;font-weight:500;">{{ $item->product->name ?? '—' }}</td>
                             <td style="font-size:.78rem;">{{ $d['category'] ?? '—' }}</td>
-                            <td style="font-family:monospace;font-weight:600;">{{ $activeCurrencySymbol . number_format($item->unit_price, 2) }}</td>
+                            <td style="font-family:monospace;font-weight:600;">{{ $activeCurrencySymbol . number_format($finalFob, 2) }}</td>
                             <td style="font-family:monospace;text-align:center;font-weight:600;">{{ $activeCurrencySymbol . number_format($wsp, 2) }}</td>
                             <td style="text-align:center;">{{ $item->quantity }}</td>
                             <td style="font-family:monospace;font-size:.78rem;">{{ $d['barcode'] ?? '—' }}</td>

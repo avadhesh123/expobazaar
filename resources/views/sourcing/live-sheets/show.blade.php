@@ -272,7 +272,7 @@ $disabled = $liveSheet->is_locked ? 'disabled' : '';
                     ? ($masterL * $masterW * $masterH) / 61023
                     : 0;
 
-                    $totalCartons = $qtyMaster > 0 ? ceil($finalQty / $qtyMaster) : 0;
+                    $totalCartons = $d['no_of_master_carton'] ?? ($qtyMaster > 0 ? ceil($finalQty / $qtyMaster) : 0);
                     $cbmShipment = $totalCartons * $masterCbm;
 
                     $finalFob = (float)($d['final_fob'] ?? $item->unit_price);
@@ -323,7 +323,7 @@ $disabled = $liveSheet->is_locked ? 'disabled' : '';
                         <td style="text-align:center;font-family:monospace;">{{ $masterH ?: '—' }}</td>
                         <td style="text-align:center;font-family:monospace;">{{ $d['master_carton_weight'] ?? $d['master_weight_kg'] ?? '—' }}</td>
                         <td style="text-align:center;">{{ $item->quantity }}</td>
-                        <td style="font-family:monospace;">{{$activeCurrencySymbol}}{{ number_format($d['vendor_fob'], 2) }}</td>
+                        <td style="font-family:monospace;">{{$activeCurrencySymbol}}{{ number_format($d['vendor_fob'] ?? 0, 2) }}</td>
                         {{-- EDITABLE: Target FOB --}}
                         <td style="background:#eff6ff;"><input {{$disabled }} type="number" step="0.01" name="items[{{ $idx }}][target_fob]" value="{{ $d['target_fob'] ?? '' }}" placeholder="0.00" style="width:70px;padding:.2rem .3rem;border:1px solid #93c5fd;border-radius:4px;font-size:.78rem;font-family:monospace;text-align:right;background:#fff;"></td>
                         {{-- EDITABLE: Final Qty --}}
@@ -379,6 +379,9 @@ $disabled = $liveSheet->is_locked ? 'disabled' : '';
     }
 </style>
 <script>
+    
+const activeCurrencySymbol = "{{ $activeCurrencySymbol }}";
+
     $(document).on('input', 'input[name*="[target_fob]"], input[name*="[final_fob]"], input[name*="[freight_factor]"], input[name*="[wsp_factor]"]', function() {
         var name = $(this).attr('name');
         var match = name.match(/items\[(\d+)\]/);
@@ -412,11 +415,11 @@ $disabled = $liveSheet->is_locked ? 'disabled' : '';
         var landedCost = finalFob + dutyAmt + freightAmt;
         var wsp = landedCost * wspFactor;
 
-        $('#duty-amt-' + idx).text(dutyAmt > 0 ? '$' + dutyAmt.toFixed(2) : '—');
-        $('#freight-amt-' + idx).text(freightAmt > 0 ? '$' + freightAmt.toFixed(2) : '—');
-        $('#landed-cost-' + idx).text(landedCost > 0 ? '$' + landedCost.toFixed(2) : '—')
+        $('#duty-amt-' + idx).text(dutyAmt > 0 ? activeCurrencySymbol + dutyAmt.toFixed(2) : '—');
+        $('#freight-amt-' + idx).text(freightAmt > 0 ? activeCurrencySymbol + freightAmt.toFixed(2) : '—');
+        $('#landed-cost-' + idx).text(landedCost > 0 ? activeCurrencySymbol + landedCost.toFixed(2) : '—')
             .css('color', landedCost > 0 ? '#0d1b2a' : '');
-        $('#wsp-val-' + idx).text(wsp > 0 ? '$' + wsp.toFixed(2) : '—');
+        $('#wsp-val-' + idx).text(wsp > 0 ? activeCurrencySymbol + wsp.toFixed(2) : '—');
 
         // Also copy target_fob to final_fob if final_fob is empty
         // var targetFob = parseFloat($('input[name="items[' + idx + '][target_fob]"]').val()) || 0;

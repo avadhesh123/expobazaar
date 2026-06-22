@@ -53,7 +53,7 @@
         <div style="display:flex;justify-content:space-between;">
             <div>
                 <div class="kpi-label">Total Sales</div>
-                <div class="kpi-value" style="color:#166534;font-size:1.3rem;">{{$activeCurrencySymbol}}{{ number_format($data['stats']['total_sales'] ?? 0, 0) }}</div>
+                <div class="kpi-value" style="color:#16a34a;">{{ $activeCurrencySymbol }}{{ number_format($data['stats']['total_sales'], 2) }}</div>
             </div>
             <div class="kpi-icon" style="background:#dcfce7;color:#166534;"><i class="fas fa-chart-line"></i></div>
         </div>
@@ -62,7 +62,7 @@
         <div style="display:flex;justify-content:space-between;">
             <div>
                 <div class="kpi-label">Pending Payout</div>
-                <div class="kpi-value" style="color:#e8a838;">{{$activeCurrencySymbol}}{{ number_format($data['stats']['pending_payout'] ?? 0, 0) }}</div>
+                <div class="kpi-value" style="color:#e8a838;">{{ ($data['stats']['pending_payout'] ?? 0) < 0 ? '-' : '' }}{{ $activeCurrencySymbol }}{{ number_format(abs($data['stats']['pending_payout'] ?? 0), 0) }}</div>
             </div>
             <div class="kpi-icon" style="background:#fef3c7;color:#e8a838;"><i class="fas fa-money-check-alt"></i></div>
         </div>
@@ -86,11 +86,15 @@
                 </thead>
                 <tbody>
                     @forelse($data['recent_orders'] ?? [] as $o)
+                    @php $oli = $orderLineItems[$o->id] ?? ['sale_amount' => 0, 'shipped_qty' => 0]; @endphp
+
                     <tr>
-                        <td style="font-weight:600;font-family:monospace;font-size:.8rem;">{{ $o->order_number }}</td>
+                        <td style="font-weight:600;font-family:monospace;font-size:.82rem;">{{ $o->order_number }}</td>
                         <td><span class="badge badge-info">{{ $o->salesChannel->name ?? '—' }}</span></td>
-                        <td style="font-family:monospace;font-weight:600;">{{$activeCurrencySymbol}}{{ number_format($o->total_amount,2) }}</td>
-                        <td style="font-size:.82rem;">{{ $o->order_date->format('d M Y') }}</td>
+
+                        <td style="text-align:right;font-family:monospace;font-weight:700;color:#166534;">{{ $activeCurrencySymbol }}{{ number_format($oli['sale_amount'], 2) }}</td>
+                        <td style="font-size:.82rem;">{{ $o->order_date?->format('d M Y') }}</td>
+
                     </tr>
                     @empty<tr>
                         <td colspan="4" style="text-align:center;color:#94a3b8;padding:1.5rem;">No sales yet.</td>

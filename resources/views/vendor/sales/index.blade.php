@@ -35,25 +35,27 @@
                     <th>Platform</th>
                     <th>Date</th>
                     <th>Items</th>
-                    <th>Amount</th>                   
+                    <th>Amount</th>
                     <th>Status</th>
                 </tr>
             </thead>
             <tbody>
-                  
                 @forelse($orders as $o)
-                
+                @php $oli = $orderLineItems[$o->id] ?? ['sale_amount' => 0, 'shipped_qty' => 0]; @endphp
                 <tr>
                     <td style="font-weight:600;font-family:monospace;font-size:.82rem;">{{ $o->order_number }}</td>
                     <td><span class="badge badge-info">{{ $o->salesChannel->name ?? '—' }}</span></td>
-                    <td style="font-size:.82rem;">{{ $o->order_date->format('d M Y') }}</td>
-                    <td style="text-align:center;">{{ $o->items->count() }}</td>
-                    <td style="font-family:monospace;font-weight:700;color:#166534;">{{$activeCurrencySymbol}}{{ number_format($o->total_amount, 2) }}</td>
-                    <td>@php $ssc=['pending'=>'badge-warning','shipped'=>'badge-info','delivered'=>'badge-success']; @endphp <span class="badge {{ $ssc[$o->shipment_status??'pending']??'badge-gray' }}">{{ ucfirst($o->shipment_status??'pending') }}</span></td>
+                    <td style="font-size:.82rem;">{{ $o->order_date?->format('d M Y') }}</td>
+                    <td style="text-align:center;font-weight:600;">{{ $oli['shipped_qty'] }}</td>
+                    <td style="text-align:right;font-family:monospace;font-weight:700;color:#166534;">{{ $activeCurrencySymbol }}{{ number_format($oli['sale_amount'], 2) }}</td>
+                    <td>
+                        @php $ssc = ['shipped'=>'badge-info','delivered'=>'badge-success']; @endphp
+                        <span class="badge {{ $ssc[$o->status] ?? 'badge-gray' }}">{{ ucfirst($o->status) }}</span>
+                    </td>
                 </tr>
                 @empty
                 <tr>
-                    <td colspan="7" style="text-align:center;padding:3rem;color:#94a3b8;">No sales data yet.</td>
+                    <td colspan="6" style="text-align:center;padding:3rem;color:#94a3b8;">No sales data yet.</td>
                 </tr>
                 @endforelse
             </tbody>

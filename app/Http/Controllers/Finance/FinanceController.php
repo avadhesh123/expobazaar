@@ -361,8 +361,8 @@ class FinanceController extends Controller
                 ->where('charge_year', $payout->payout_year)
                 ->with('warehouse')
                 ->get();
-                echo '<pre>';
-print_r( $warehouseCharges->toArray());exit;
+               // echo '<pre>';
+//print_r( $warehouseCharges->toArray());exit;
             $chargebacks = Chargeback::withoutGlobalScopes()
                 ->where('vendor_id', $payout->vendor_id)
                 ->whereHas('order', fn($q) => $q->withoutGlobalScopes()->where('company_code', $payout->company_code))
@@ -920,13 +920,15 @@ print_r( $warehouseCharges->toArray());exit;
 
     public function runVendorCharges(Request $request)
     {
+ 
+$companyCode = session('active_company');
 
         $request->validate([
             'month' => 'required|integer|min:1|max:12',
             'year' => 'required|integer|min:2024',
             'vendor_id' => 'nullable|exists:vendors,id'
         ]);
-        $service = new \App\Services\WarehouseChargesService();
+        $service = new \App\Services\VendorChargesService();
         $results = $service->runMonthlyCharges($request->month, $request->year, $request->vendor_id, auth()->id(), (bool)$request->dry_run);
 
         $msg = ($request->dry_run ? "[DRY RUN] " : "") . "{$results['created']} created, {$results['skipped']} skipped.";
@@ -971,7 +973,7 @@ print_r( $warehouseCharges->toArray());exit;
         }
         $month = $request->get('month', now()->month);
         $year = $request->get('year', now()->year);
-        $service = new \App\Services\WarehouseChargesService();
+        $service = new \App\Services\VendorChargesService();
         $statement = $service->getVendorStatement($vendor->id, $month, $year, $activeCompany);
         return view('finance.vendor-charges.statement', compact('statement', 'month', 'year'));
     }

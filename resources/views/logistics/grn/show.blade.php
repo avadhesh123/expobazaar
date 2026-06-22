@@ -7,10 +7,10 @@
     <a href="{{ route('logistics.grn') }}" class="btn btn-outline btn-sm"><i class="fas fa-arrow-left"></i> All GRNs</a>
     <a href="{{ route('logistics.shipments.show', $grn->shipment) }}" class="btn btn-outline btn-sm"><i class="fas fa-ship"></i> View Shipment</a>
     @if($grn ?? null)
-<a href="{{ route('logistics.grn.download', $grn) }}" class="btn btn-outline btn-sm">
-    <i class="fas fa-download" style="color:#16a34a;"></i> Download GRN
-</a>
-@endif
+    <a href="{{ route('logistics.grn.download', $grn) }}" class="btn btn-outline btn-sm">
+        <i class="fas fa-download" style="color:#16a34a;"></i> Download GRN
+    </a>
+    @endif
 </div>
 
 {{-- GRN Header --}}
@@ -78,6 +78,7 @@
                 <tr>
                     <th>Product</th>
                     <th>SKU</th>
+                    <th>SAP Code</th>
                     <th>Vendor</th>
                     <th>Expected</th>
                     <th>Received</th>
@@ -90,10 +91,11 @@
             </thead>
             <tbody>
                 @foreach($grn->items as $item)
-                @php $match =  ($item->expected_quantity-($item->received_quantity+$item->damaged_quantity+$item->missing_quantity-$item->excess_quantity    )) === 0; @endphp
+                @php $match = ($item->expected_quantity-($item->received_quantity+$item->damaged_quantity+$item->missing_quantity-$item->excess_quantity )) === 0; @endphp
                 <tr style="{{ !$match?'background:#fef2f2;':'' }}">
                     <td style="font-weight:600;font-size:.82rem;">{{ $item->product->name ?? '—' }}</td>
                     <td style="font-family:monospace;font-size:.8rem;">{{ $item->product->sku ?? '—' }}</td>
+                    <td style="font-family:monospace;font-size:.8rem;">{{ $item->product->sap_code ?? '—' }}</td>
                     <td style="font-size:.8rem;">{{ $item->product->vendor->company_name ?? '—' }}</td>
                     <td style="text-align:center;font-family:monospace;">{{ $item->expected_quantity }}</td>
                     <td style="text-align:center;font-family:monospace;font-weight:700;color:#166534;">{{ $item->received_quantity }}</td>

@@ -586,9 +586,9 @@
 
                         {{-- User Info --}}
                         <div style="padding:.75rem 1rem;border-bottom:1px solid #f1f5f9;background:#fafbfc;">
-                            <div style="font-size:.82rem;font-weight:700;color:#0d1b2a;">{{ auth()->user()->name }}</div>
-                            <div style="font-size:.68rem;color:#64748b;">{{ auth()->user()->email }}</div>
-                            <div style="font-size:.62rem;color:#94a3b8;margin-top:.15rem;">{{ ucfirst(auth()->user()->user_type) }} · {{ ucfirst(auth()->user()->department ?? '') }}</div>
+                            <div style="font-size:.82rem;font-weight:700;color:#0d1b2a;">{{ auth()->user()?->name }}</div>
+                            <div style="font-size:.68rem;color:#64748b;">{{ auth()->user()?->email }}</div>
+                            <div style="font-size:.62rem;color:#94a3b8;margin-top:.15rem;">{{ ucfirst(auth()->user()?->user_type) }} · {{ ucfirst(auth()->user()?->department ?? '') }}</div>
                         </div>
 
                         {{-- Company Switcher --}}

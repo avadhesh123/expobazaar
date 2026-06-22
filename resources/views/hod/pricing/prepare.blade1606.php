@@ -102,8 +102,8 @@
                         <td style="font-family:monospace;font-size:.72rem;color:#64748b;">{{ $item['sap_code'] ?: '—' }}</td>
                         <td style="font-size:.75rem;">{{ $item['vendor_name'] }}</td>
                         <td style="text-align:center;font-weight:600;">{{ $item['quantity'] }}</td>
-                        <td style="text-align:right;font-family:monospace;">{{ $activeCurrencySymbol}}{{ number_format($item['fob'], 2) }}</td>
-                        <td style="text-align:right;font-family:monospace;font-weight:600;">{{ $activeCurrencySymbol}}{{ number_format($wsp, 2) }}</td>
+                        <td style="text-align:right;font-family:monospace;">${{ number_format($item['fob'], 2) }}</td>
+                        <td style="text-align:right;font-family:monospace;font-weight:600;">${{ number_format($wsp, 2) }}</td>
                         <td style="text-align:right;background:#fff7ed;">
                             <input type="number" step="0.01" min="0"
                                 name="pricing[{{ $idx }}][inward]"
@@ -162,7 +162,7 @@
                         </td>
                         
                         <td style="text-align:right;font-family:monospace;font-weight:700;color:#166534;background:#f0fdf4;border-right:2px solid #bbf7d0;" id="retail-{{ $idx }}">
-                            {{ $activeCurrencySymbol }}{{ number_format($retailPrice, 2) }}
+                            ${{ number_format($retailPrice, 2) }}
                             <input type="hidden" name="pricing[{{ $idx }}][final_wsp]" id="final_wsp-val-{{ $idx }}" value="{{ $finalWsp }}">
                             <input type="hidden" name="pricing[{{ $idx }}][retail_price]" id="retail-val-{{ $idx }}" value="{{ $retailPrice }}">
                         </td>
@@ -173,7 +173,7 @@
                         $channelPrice = round($wsp * $factor, 2);
                         @endphp
                         <td style="text-align:right;font-family:monospace;font-size:.78rem;" id="ch-{{ $idx }}-{{ $ch->id }}">AAAA
-                            {{ $activeCurrencySymbol }}{{ number_format($channelPrice, 2) }}
+                            ${{ number_format($channelPrice, 2) }}
                             <input type="hidden" name="pricing[{{ $idx }}][channels][{{ $ch->id }}][sales_channel_id]" value="{{ $ch->id }}">
                             <input type="hidden" name="pricing[{{ $idx }}][channels][{{ $ch->id }}][pricing_factor]" id="factor-hidden-{{ $idx }}-{{ $ch->id }}" value="{{ $factor }}">
                             <input type="hidden" name="pricing[{{ $idx }}][channels][{{ $ch->id }}][channel_price]" id="ch-val-{{ $idx }}-{{ $ch->id }}" value="{{ $channelPrice }}">
@@ -198,7 +198,6 @@
 </div>
 <script>
     // Global Data
-   let activeCurrencySymbol = "{{ $activeCurrencySymbol }}";
     const channelFactors = @json(
         collect($channelFactors ?? [])
             ->mapWithKeys(fn($item, $key) => [$key => ($item['factor'] ?? $item['pricing_factor'] ?? 1.0)])
@@ -233,13 +232,13 @@
 
         // Update Final WSP
         const finalWspEl = document.getElementById(`final-wsp-label-${idx}`);
-        if (finalWspEl) finalWspEl.textContent = activeCurrencySymbol + finalWsp.toFixed(2);
+        if (finalWspEl) finalWspEl.textContent = finalWsp.toFixed(2);
 
         // Retail Price
         const retail = (finalWsp + lastMile).toFixed(2);
         const retailEl = document.getElementById(`retail-${idx}`);
         if (retailEl) {
-            retailEl.innerHTML = activeCurrencySymbol + `${retail}<input type="hidden" name="pricing[${idx}][retail_price]" value="${retail}"><input type="hidden" name="pricing[${idx}][final_wsp]" value="${finalWsp}">`;
+            retailEl.innerHTML = `${retail}<input type="hidden" name="pricing[${idx}][retail_price]" value="${retail}"><input type="hidden" name="pricing[${idx}][final_wsp]" value="${finalWsp}">`;
         }
             console.log(`Row ${idx} updated: Final WSP = ${finalWsp}, Retail = ${retail}`);
         // Update Channel Prices
@@ -265,7 +264,7 @@
         const cell = document.getElementById(`ch-${idx}-${chId}`);
         if (cell) {
             console.log(`rebuildChannelCell ${idx}, Channel ${chId}: Price = ${chPrice} factor = ${factor} commission = ${commission} type = ${channelTypes[chId]}`);
-            cell.innerHTML = activeCurrencySymbol+`${chPrice}` +
+            cell.innerHTML = `$${chPrice}` +
                 `<input type="hidden" name="pricing[${idx}][channels][${chId}][sales_channel_id]" value="${chId}">` +
                 `<input type="hidden" name="pricing[${idx}][channels][${chId}][pricing_factor]" value="${channelFactors[chId]}">` +
                 `<input type="hidden" name="pricing[${idx}][channels][${chId}][channel_price]" value="${chPrice}">`;

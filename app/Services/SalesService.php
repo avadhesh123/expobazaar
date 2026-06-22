@@ -222,7 +222,7 @@ class SalesService
         }
 
         $missing = [];
-        foreach (['order_date', 'po_number', 'sku', 'unit_price', 'qty', 'warehouse_id_number'] as $req) {
+        foreach (['order_date', 'po_number', 'sku', 'unit_price', 'qty', 'warehouse_id_number', 'channel'] as $req) {
             if (!isset($colMap[$req])) $missing[] = $req;
         }
         if (!empty($missing)) {
@@ -258,6 +258,7 @@ class SalesService
             if (empty($sku)) continue;
 
             $poNumber = $get($row, 'po_number');
+            $channel = $get($row, 'channel');
             $warehouseCode = $get($row, 'warehouse_id_number');
             $orderDate = $parseDate($get($row, 'order_date'));
             $unitPrice = $get($row, 'unit_price');
@@ -275,6 +276,11 @@ class SalesService
                 $errors[] = "Row {$rowNum}: PO Number is empty.";
                 continue;
             }
+            if (empty($channel)) {
+                $errors[] = "Row {$rowNum}: Sales Channel is empty.";
+                $skippedPOs[] = $poNumber;
+                continue;
+            }
             if (empty($warehouseCode)) {
                 $errors[] = "Row {$rowNum}: Warehouse Number is empty.";
                 $skippedPOs[] = $poNumber;
@@ -290,6 +296,14 @@ class SalesService
                 $skippedPOs[] = $poNumber;
                 continue;
             }
+
+            $channelId = \App\Models\SalesChannel::where('name', $channel)->value('id');
+            if (!$channelId) {
+                $errors[] = "Row {$rowNum}: Sales Channel '{$channel}' not found.";
+                $skippedPOs[] = $poNumber;
+                continue;
+            }
+
 
             $product = \App\Models\Product::withoutGlobalScopes()->where('sku', $sku)->first();
             if (!$product) {
@@ -645,7 +659,7 @@ class SalesService
                 //   $warehouseId = \App\Models\Warehouse::where('code', $warehouseIdNumber)->value('id');
                 $qty = intval($qty);
                 $availableStock = \App\Models\Inventory::where('product_id', $product->id)
-                    ->where('warehouse_id ', $warehouseId)
+                    ->where('warehouse_id', $warehouseId)
                     ->where('company_code', $companyCode)->sum('available_quantity');
                 if ($availableStock < $qty) {
                     $errors[] = "Row {$rowNum}: SKU '{$sku}' insufficient inventory. Available: {$availableStock}, Ordered: {$qty}.";

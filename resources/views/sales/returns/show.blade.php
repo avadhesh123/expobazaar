@@ -96,10 +96,10 @@
                 <div>
                     <label style="font-size:.68rem;font-weight:600;color:#64748b;">Update Status</label>
                     <select name="status" required style="padding:.35rem .5rem;border:1px solid #d1d5db;border-radius:8px;font-size:.82rem;">
-                        @if($orderReturn->status === 'initiated')<option value="received">Mark Received</option>@endif
-                        @if($orderReturn->status === 'received')<option value="inspected">Mark Inspected</option>@endif
-                        @if(in_array($orderReturn->status, ['inspected','received']))<option value="approved">Approve</option><option value="rejected">Reject</option>@endif
-                        @if($orderReturn->status === 'approved')<option value="refunded">Mark Refunded</option>@endif
+                        <option value="received">Mark Received</option>
+                       <option value="inspected">Mark Inspected</option>
+                       <option value="approved">Approve</option><option value="rejected">Reject</option>
+                       <option value="refunded">Mark Refunded</option>
                     </select>
                 </div>
                 <div style="flex:1;min-width:150px;">

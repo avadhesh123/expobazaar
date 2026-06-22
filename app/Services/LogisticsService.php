@@ -289,7 +289,91 @@ class LogisticsService
     /**
      * Transfer inventory between warehouses/sub-locations
      */
-    public function transferInventory(int $productId, int $fromWarehouseId, int $toWarehouseId, int $quantity, ?int $fromSubId = null, ?int $toSubId = null, ?float $transportationCost = null): void
+    public function transferInventory(
+        int $productId,
+        int $fromWarehouseId,
+        int $toWarehouseId,
+        int $quantity,
+        ?int $fromSubId = null,
+        ?int $toSubId = null,
+        float $transportationCost = 0,
+        float $pickPackCost = 0,
+        ?string $referenceNo = null,
+        ?string $batchId = null
+    ): void {
+        DB::transaction(function () use ($productId, $fromWarehouseId, $toWarehouseId, $quantity, $fromSubId, $toSubId, $transportationCost, $pickPackCost, $referenceNo, $batchId) {
+
+            // Decrease from source
+            $source = Inventory::where('product_id', $productId)
+                ->where('warehouse_id', $fromWarehouseId)
+                ->first();
+
+
+            if (!$source) {
+                \Log::error("Inventory transfer failed: No inventory found for product_id {$productId} in warehouse_id {$fromWarehouseId}");
+                return  back()->with('error', 'No inventory found for this product in the source warehouse.');
+            }
+
+            if ($source->available_quantity < $quantity) {
+                //throw new \Exception("Insufficient stock. Available: {$source->available_quantity}, Requested: {$quantity}");
+                \Log::error("Insufficient stock. Available: {$source->available_quantity}, Requested: {$quantity}");
+                return  back()->with('error', "Insufficient stock. Available: {$source->available_quantity}, Requested: {$quantity}");
+            }
+
+            $source->decrement('quantity', $quantity);
+            $source->decrement('available_quantity', $quantity);
+
+            InventoryLog::record($source, InventoryLog::ACTION_TRANSFER_OUT, -$quantity, [
+                'reference_type' => 'transfer',
+                'reference_code' => "To warehouse #{$toWarehouseId}" . ($referenceNo ? " (Ref: {$referenceNo})" : ''),
+                'metadata' => ['to_warehouse_id' => $toWarehouseId, 'transportation_cost' => $transportationCost, 'pick_pack_cost' => $pickPackCost],
+            ]);
+
+            // Increase at destination
+            $dest = Inventory::firstOrCreate(
+                ['product_id' => $productId, 'warehouse_id' => $toWarehouseId, 'company_code' => $source->company_code],
+                ['quantity' => 0, 'reserved_quantity' => 0, 'available_quantity' => 0]
+            );
+            $dest->increment('quantity', $quantity);
+            $dest->increment('available_quantity', $quantity);
+
+            InventoryLog::record($dest, InventoryLog::ACTION_TRANSFER_IN, $quantity, [
+                'reference_type' => 'transfer',
+                'reference_code' => "From warehouse #{$fromWarehouseId}" . ($referenceNo ? " (Ref: {$referenceNo})" : ''),
+            ]);
+
+            if ($toSubId) {
+                $dest->update(['warehouse_sub_location_id' => $toSubId]);
+            }
+
+            InventoryMovement::create([
+                'product_id'          => $productId,
+                'movement_type'       => 'transfer',
+                'from_warehouse_id'   => $fromWarehouseId,
+                'to_warehouse_id'     => $toWarehouseId,
+                'from_sub_location_id' => $fromSubId ?: null,
+                'to_sub_location_id'  => $toSubId ?: null,
+                'company_code'        => $source->company_code,
+                'quantity'            => $quantity,
+                'transportation_cost' => $transportationCost,
+                'pick_pack_cost'      => $pickPackCost,
+                'reference_type'      => 'transfer',
+                'reference_no'        => $referenceNo,
+                'batch_id'            => $batchId,
+                'performed_by'        => auth()->id(),
+            ]);
+
+            ActivityLog::log('transferred', 'inventory', $source, null, [
+                'from' => $fromWarehouseId,
+                'to' => $toWarehouseId,
+                'qty' => $quantity,
+                'transport_cost' => $transportationCost,
+                'pick_pack_cost' => $pickPackCost,
+                'reference_no' => $referenceNo,
+            ], "Transferred {$quantity} units" . ($referenceNo ? " (Ref: {$referenceNo})" : ''));
+        });
+    }
+    public function transferInventoryBAK(int $productId, int $fromWarehouseId, int $toWarehouseId, int $quantity, ?int $fromSubId = null, ?int $toSubId = null, ?float $transportationCost = null): void
     {
         DB::transaction(function () use ($productId, $fromWarehouseId, $toWarehouseId, $quantity, $fromSubId, $toSubId, $transportationCost) {
             // Decrease from source

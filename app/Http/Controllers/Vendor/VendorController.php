@@ -3,14 +3,15 @@
 namespace App\Http\Controllers\Vendor;
 
 use App\Http\Controllers\Controller;
-use App\Models\{Vendor, Consignment, VendorPayout, Chargeback, VendorMonthlyCharge, VendorDocument, Category, LiveSheet, OfferSheet, OfferSheetItem, Order, WarehouseCharge, Product, SalesChannel};
+use App\Models\{Vendor, Consignment, VendorPayout, Chargeback, VendorMonthlyCharge, VendorDocument, Category, LiveSheet, OfferSheet, OfferSheetItem, Order, WarehouseCharge, Product, SalesChannel,OrderItem};
 use App\Services\{DashboardService, VendorService, SourcingService};
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
 use Illuminate\Support\Facades\Log;
 use App\Models\ActivityLog;
 use App\Helpers\ActiveCompany;
-
+use Illuminate\Support\Facades\Storage;
+use App\Helpers\FileStorage;
 
 class VendorController extends Controller
 {
@@ -18,9 +19,200 @@ class VendorController extends Controller
         protected DashboardService $dashboardService,
         protected VendorService $vendorService,
         protected SourcingService $sourcingService
-    ) {}
+    ) {
+    }
 
     public function dashboard()
+    {
+        $vendor = auth()->user()->vendor;
+        if (!$vendor) {
+            return redirect()->route('vendor.kyc');
+        }
+
+        $activeCompany = session('active_company');
+        $data = $this->dashboardService->getVendorDashboard($vendor->id);
+
+        // Total sales based on shipped_qty × vendor WSP
+        $totalSales = OrderItem::withoutGlobalScopes()
+            ->where('vendor_id', $vendor->id)
+            ->where('shipped_qty', '>', 0)
+            ->whereHas('order', fn ($q) => $q->withoutGlobalScopes()
+                ->where('company_code', $activeCompany)
+                ->whereIn('status', ['shipped', 'delivered']))
+            ->get()
+            ->sum(function ($item) {
+                $wsp = floatval($item->product?->vendor_wsp ?? $item->product?->fob_price ?? $item->unit_price ?? 0);
+                return round($wsp * intval($item->shipped_qty), 2);
+            });
+
+        $totalShippedQty = OrderItem::withoutGlobalScopes()
+            ->where('vendor_id', $vendor->id)
+            ->where('shipped_qty', '>', 0)
+            ->whereHas('order', fn ($q) => $q->withoutGlobalScopes()
+                ->where('company_code', $activeCompany)
+                ->whereIn('status', ['shipped', 'delivered']))
+            ->sum('shipped_qty');
+
+        // ── Pending payout calculation (gross sales - warehouse charges - chargebacks) ──
+        $netPayout = 0;
+        $finalPayout = 0;
+        $payouts = VendorPayout::where('vendor_id', $vendor->id)
+            ->where('company_code', $activeCompany)
+            ->whereIn('status', ['calculated', 'approved', 'payment_pending'])
+            ->get();
+
+        foreach ($payouts as $payout) {
+            $snapshot = $payout->calculation_snapshot    ;
+
+            // ── Read from saved snapshot ──
+            $lineItems = collect($snapshot['line_items'] ?? [])->map(fn ($i) => (object) $i);
+
+            $payoutSummary = $snapshot['summary'] ?? [
+                'total_qty' => $lineItems->sum('qty'),
+                'total_sales' => $lineItems->sum('sale_amount'),
+                'total_commission' => $lineItems->sum('commission'),
+                'total_payout' => $lineItems->sum('net_payout'),
+                'total_warehouse_charges' => $payout->total_warehouse_charges ?? 0,
+                'total_chargebacks' => $payout->total_chargebacks ?? 0,
+                'net_payout' => $payout->net_payout ?? 0,
+            ];
+
+
+
+            $warehouseCharges = \App\Models\VendorMonthlyCharge::withoutGlobalScopes()
+                           ->where('vendor_id', $payout->vendor_id)
+                           ->where('company_code', $payout->company_code)
+                           ->where('charge_month', $payout->payout_month)
+                           ->where('charge_year', $payout->payout_year)
+                           ->with('warehouse')
+                           ->get();
+
+            $chargebacks = Chargeback::withoutGlobalScopes()
+                ->where('vendor_id', $payout->vendor_id)
+                ->whereHas('order', fn ($q) => $q->withoutGlobalScopes()->where('company_code', $payout->company_code))
+                ->where('status', 'confirmed')
+                ->whereMonth('confirmed_at', $payout->payout_month)
+                ->whereYear('confirmed_at', $payout->payout_year)
+                ->with(['order' => fn ($q) => $q->withoutGlobalScopes()])
+                ->get();
+
+
+            $totalPayout = $payoutSummary['total_payout'] ?? 0;
+            $totalWhCharges = $warehouseCharges->sum(fn ($c) => floatval($c->total_charges ?? $c->amount ?? 0));
+
+            $totalChargebacks = $chargebacks->sum('amount');
+
+            $netPayout += round($totalPayout - $totalWhCharges - $totalChargebacks, 2);
+            $finalPayout += $payoutSummary['total_payout'] - $totalWhCharges - $totalChargebacks;
+
+
+        } 
+
+        $data['stats'] = [
+            'offer_sheets'   => OfferSheet::where('vendor_id', $vendor->id)->where('company_code', $activeCompany)->count(),
+            'consignments'   => Consignment::where('vendor_id', $vendor->id)->where('company_code', $activeCompany)->count(),
+            'total_sales'    => $totalSales,
+            'total_shipped'  => intval($totalShippedQty),
+            'chargebacks'    => Chargeback::where('vendor_id', $vendor->id)->where('company_code', $activeCompany)->where('status', 'confirmed')->sum('amount'),
+            'pending_payout' => $finalPayout
+            //VendorPayout::where('vendor_id', $vendor->id)->where('company_code', $activeCompany)->whereIn('status', ['calculated', 'approved'])->sum('net_payout'),
+        ];
+
+        $data['recent_orders'] = Order::withoutGlobalScopes()
+            ->where('company_code', $activeCompany)
+            ->whereIn('status', ['shipped', 'delivered'])
+            ->whereHas('items', fn ($q) => $q->where('vendor_id', $vendor->id)->where('shipped_qty', '>', 0))
+            ->with(['salesChannel', 'items' => fn ($q) => $q->where('vendor_id', $vendor->id)])
+            ->latest('order_date')->take(5)->get();
+
+        $data['active_consignments'] = Consignment::where('vendor_id', $vendor->id)
+            ->where('company_code', $activeCompany)
+            ->whereNotIn('status', ['delivered', 'cancelled'])
+            ->with('liveSheet')->latest()->take(5)->get();
+
+        //  print_r($data['recent_orders']->toArray());exit;
+        // Deduct prior sold using shipped_qty
+        $priorSold = \App\Models\OrderItem::withoutGlobalScopes()
+            ->where('vendor_id', $vendor->id)
+            ->where('shipped_qty', '>', 0)
+            ->whereHas('order', fn ($q) => $q->withoutGlobalScopes()
+                ->where('company_code', $activeCompany)
+                ->whereIn('status', ['shipped', 'delivered']))
+            ->select('product_id', \DB::raw('SUM(shipped_qty) as shipped'))
+            ->groupBy('product_id')
+            ->pluck('shipped', 'product_id');
+
+        foreach ($priorSold as $pid => $soldQty) {
+            if (!isset($fifoQueue[$pid])) {
+                continue;
+            }
+            $remaining = intval($soldQty);
+            foreach ($fifoQueue[$pid] as &$batch) {
+                if ($remaining <= 0) {
+                    break;
+                }
+                $deduct = min($remaining, $batch['remaining_qty']);
+                $batch['remaining_qty'] -= $deduct;
+                $remaining -= $deduct;
+            }
+            unset($batch);
+        }
+
+        // Build line items per order
+        $orderLineItems = [];
+        foreach ($data['recent_orders'] as $order) {
+            $orderTotal = 0;
+            $orderShippedQty = 0;
+            foreach ($order->items as $item) {
+                $product = $item->product;
+                if (!$product) {
+                    continue;
+                }
+                $pid = $product->id;
+                $shippedQty = intval($item->shipped_qty);
+                if ($shippedQty <= 0) {
+                    continue;
+                }
+
+                $qtyToAllocate = $shippedQty;
+                $itemSale = 0;
+                $itemComm = 0;
+
+                if (isset($fifoQueue[$pid])) {
+                    foreach ($fifoQueue[$pid] as &$batch) {
+                        if ($qtyToAllocate <= 0) {
+                            break;
+                        }
+                        if ($batch['remaining_qty'] <= 0) {
+                            continue;
+                        }
+                        $allocate = min($qtyToAllocate, $batch['remaining_qty']);
+                        $batchSale = round($batch['vendor_wsp'] * $allocate, 2);
+                        $itemSale += $batchSale;
+                        $itemComm += round(($batch['commission'] / 100) * $batchSale, 2);
+                        $batch['remaining_qty'] -= $allocate;
+                        $qtyToAllocate -= $allocate;
+                    }
+                    unset($batch);
+                }
+
+                if ($qtyToAllocate > 0) {
+                    $fallbackWsp = floatval($product->vendor_wsp ?? $product->fob_price ?? 0);
+                    $itemSale += round($fallbackWsp * $qtyToAllocate, 2);
+                }
+
+                $orderTotal += $itemSale;
+                $orderShippedQty += $shippedQty;
+            }
+            $orderLineItems[$order->id] = [
+                'sale_amount'  => round($orderTotal, 2),
+                'shipped_qty'  => $orderShippedQty,
+            ];
+        }
+
+        return view('vendor.dashboard', compact('data', 'vendor', 'orderLineItems'));
+    }
+    public function dashboardBAK()
     {
         $vendor = auth()->user()->vendor;
         if (!$vendor) {
@@ -34,12 +226,12 @@ class VendorController extends Controller
         $data['stats'] = [
             'offer_sheets'  => OfferSheet::where('vendor_id', $vendor->id)->where('company_code', $activeCompany)->count(),
             'consignments'  => Consignment::where('vendor_id', $vendor->id)->where('company_code', $activeCompany)->count(),
-            'total_sales'   => Order::whereHas('items', fn($q) => $q->where('vendor_id', $vendor->id))->where('company_code', $activeCompany)->sum('total_amount'),
+            'total_sales'   => Order::whereHas('items', fn ($q) => $q->where('vendor_id', $vendor->id))->where('company_code', $activeCompany)->sum('total_amount'),
             'chargebacks'   => Chargeback::where('vendor_id', $vendor->id)->where('company_code', $activeCompany)->where('status', 'confirmed')->sum('amount'),
             'pending_payout' => VendorPayout::where('vendor_id', $vendor->id)->where('company_code', $activeCompany)->whereIn('status', ['calculated', 'approved'])->sum('net_payout'),
         ];
 
-        $data['recent_orders'] = Order::whereHas('items', fn($q) => $q->where('vendor_id', $vendor->id))
+        $data['recent_orders'] = Order::whereHas('items', fn ($q) => $q->where('vendor_id', $vendor->id))
             ->where('company_code', $activeCompany)
             ->with('salesChannel')->latest('order_date')->take(5)->get();
 
@@ -144,7 +336,7 @@ class VendorController extends Controller
             if ($request->hasFile("documents.{$type}")) {
                 try {
                     $file = $request->file("documents.{$type}");
-                    $path = $file->store('vendor-kyc/' . $vendor->id, 'public');
+                    $path = $file->store('vendor-kyc/' . $vendor->id, FileStorage::disk());
                     $docs[] = ['name' => ucfirst(str_replace('_', ' ', $type)), 'path' => $path, 'type' => $file->getMimeType(), 'size' => $file->getSize()];
 
                     \App\Models\VendorDocument::updateOrCreate(
@@ -162,7 +354,7 @@ class VendorController extends Controller
         if ($request->hasFile('documents.other')) {
             foreach ($request->file('documents.other') as $file) {
                 try {
-                    $path = $file->store('vendor-kyc/' . $vendor->id, 'public');
+                    $path = $file->store('vendor-kyc/' . $vendor->id, FileStorage::disk());
                     $docs[] = ['name' => $file->getClientOriginalName(), 'path' => $path, 'type' => $file->getMimeType(), 'size' => $file->getSize()];
 
                     \App\Models\VendorDocument::create([
@@ -249,7 +441,7 @@ class VendorController extends Controller
         $activeCompany = session('active_company');
         $vendor = auth()->user()->vendor;
         $file = $request->file('offer_file');
-        $path = $file->store('offer-sheets/' . $vendor->id, 'public');
+        $path = $file->store('offer-sheets/' . $vendor->id, FileStorage::disk());
 
         $products = $this->parseOfferSheetExcel($file->getRealPath());
 
@@ -279,7 +471,7 @@ class VendorController extends Controller
             $barcode = trim($p['barcode'] ?? '');
             if (!empty($barcode)) {
                 $dupBarcode = Product::withoutGlobalScopes()->where('barcode', $barcode)
-                    ->when($existingProduct, fn($q) => $q->where('id', '!=', $existingProduct->id))
+                    ->when($existingProduct, fn ($q) => $q->where('id', '!=', $existingProduct->id))
                     ->first();
                 if ($dupBarcode) {
                     $errors[] = "Row " . ($idx + 1) . ": Barcode '{$barcode}' already assigned to SKU '{$dupBarcode->sku}'.";
@@ -346,10 +538,12 @@ class VendorController extends Controller
                         'status'       => 'draft',
                     ];
                     $barcode = trim($p['barcode'] ?? '');
-                    if (!empty($barcode)) $productData['barcode'] = $barcode;
+                    if (!empty($barcode)) {
+                        $productData['barcode'] = $barcode;
+                    }
                     $product = Product::create($productData);
 
-                    file_put_contents(storage_path('logs/product-updates.log'), print_r($productData, true) . "Product ID {$product->id} created via offer sheet upload at " . now() . "\n", FILE_APPEND);
+                    \Log::channel('daily')->info("Product #{$product->id} created via offer sheet", $productData);
                 } else {
                     // Update existing product with new data
                     $updateData = array_filter([
@@ -358,9 +552,11 @@ class VendorController extends Controller
                         'vendor_price' => $p['vendor_fob'] ?? null,
                     ]);
                     $barcode = trim($p['barcode'] ?? '');
-                    if (!empty($barcode)) $updateData['barcode'] = $barcode;
+                    if (!empty($barcode)) {
+                        $updateData['barcode'] = $barcode;
+                    }
                     $product->update($updateData);
-                    file_put_contents(storage_path('logs/product-updates.log'), print_r($updateData, true) . "Product ID {$product->id} updated via offer sheet upload at " . now() . "\n", FILE_APPEND);
+                    \Log::channel('daily')->info("Product #{$product->id} updated via offer sheet", $updateData);
                 }
 
                 OfferSheetItem::create([
@@ -503,7 +699,7 @@ class VendorController extends Controller
                 ];
             }
             // print_r($products);exit;
-            file_put_contents("storage/logs/products.csv." . date("Y-m-d") . ".log", print_r($products, true) . "\n", FILE_APPEND);
+            \Log::channel('daily')->info('Products CSV upload data', ['count' => count($products)]);
         } catch (\Exception $e) {
             \Log::error('Offer sheet parse error: ' . $e->getMessage());
         }
@@ -551,7 +747,16 @@ class VendorController extends Controller
                 // $filename = 'offer-img-' . $vendorId . '-row' . $row . '-' . time() . '-' . mt_rand(1000, 9999);
                 $filename = 'offer-img-' . $vendorId . '-' . $cleanSku;
                 $imagePath = null;
-                file_put_contents("storage/logs/ExcelImages" . date('Y-m-d') . ".log", "Processing drawing at row {$row} with coordinates {$coordinates} \t {$filename}\n", FILE_APPEND);
+
+                $logFile = 'logs/ExcelImages' . date('Y-m-d') . '.log';
+
+                //file_put_contents("storage/logs/ExcelImages" . date('Y-m-d') . ".log", "Processing drawing at row {$row} with coordinates {$coordinates} \t {$filename}\n", FILE_APPEND);
+
+                FileStorage::append(
+                    $logFile,
+                    "Processing drawing at row {$row} with coordinates {$coordinates}\t{$filename}"
+                );
+
                 if ($drawing instanceof \PhpOffice\PhpSpreadsheet\Worksheet\Drawing) {
                     $sourcePath = $drawing->getPath();
                     $ext        = strtolower(pathinfo($sourcePath, PATHINFO_EXTENSION) ?: 'png');
@@ -587,7 +792,7 @@ class VendorController extends Controller
                     }
 
                     if ($imageData) {
-                        \Storage::disk('public')->put($destPath, $imageData);
+                        FileStorage::put($destPath, $imageData);
                         $imagePath = $destPath;
                     }
                 } elseif ($drawing instanceof \PhpOffice\PhpSpreadsheet\Worksheet\MemoryDrawing) {
@@ -611,7 +816,7 @@ class VendorController extends Controller
                         $imageData = ob_get_clean();
 
                         if ($imageData) {
-                            \Storage::disk('public')->put($destPath, $imageData);
+                            FileStorage::put($destPath, $imageData);
                             $imagePath = $destPath;
                         }
                     }
@@ -710,9 +915,10 @@ class VendorController extends Controller
 
                 //   $destPath = $destDir . '/offer-img-' . $vendorId . '-row' . $excelRow . '-' . time() . '-' . mt_rand(1000, 9999) . '.' . $ext;
                 $destPath = $destDir . '/' . $filename . '.' . $ext;
-                file_put_contents("storage/logs/ImagesFromZip" . date('Y-m-d') . ".log", "{$mediaFilename}\t{$destPath}\n", FILE_APPEND);
+                // file_put_contents("storage/logs/ImagesFromZip" . date('Y-m-d') . ".log", "{$mediaFilename}\t{$destPath}\n", FILE_APPEND);
 
-                \Storage::disk('public')->put($destPath, $imageData);
+                FileStorage::put($destPath, $imageData);
+
                 $imageMap[$excelRow] = $destPath;
             }
 
@@ -728,7 +934,7 @@ class VendorController extends Controller
                 }
 
                 // Sort by filename so image1, image2... are in order
-                usort($mediaFiles, fn($a, $b) => strnatcmp($a['name'], $b['name']));
+                usort($mediaFiles, fn ($a, $b) => strnatcmp($a['name'], $b['name']));
 
                 $dataRow = 2;
                 foreach ($mediaFiles as $media) {
@@ -739,7 +945,7 @@ class VendorController extends Controller
                     $ext      = strtolower(pathinfo($media['name'], PATHINFO_EXTENSION) ?: 'png');
                     //  $destPath = $destDir . '/offer-img-' . $vendorId . '-row' . $dataRow . '-' . time() . '-' . mt_rand(1000, 9999) . '.' . $ext;
                     $destPath = $destDir . '/' . $filename . '.' . $ext;
-                    \Storage::disk('public')->put($destPath, $imageData);
+                    FileStorage::put($destPath, $imageData);
                     $imageMap[$dataRow] = $destPath;
                     $dataRow++;
                 }
@@ -793,7 +999,7 @@ class VendorController extends Controller
                 'Content-Disposition' => "attachment; filename=\"{$fileName}\"",
             ]);
         }
-        return response()->download($path,  $activeCompany . '_Offer_Sheet_Template.xlsx');
+        return response()->download($path, $activeCompany . '_Offer_Sheet_Template.xlsx');
     }
     public function downloadOfferSheetTemplate()
     {
@@ -850,7 +1056,7 @@ class VendorController extends Controller
         $currency = trim(config('app.active_currency_symbol')); // $, ₹, €
         $lwhUnit = $isUS ? 'Inches' : 'CM';
         $weightUnit = $isUS ? 'LBS' : 'KG';   // You can change to LBS if needed for 2100
-        $csv = "\xEF\xBB\xBF"; // UTF-8 BOM    
+        $csv = "\xEF\xBB\xBF"; // UTF-8 BOM
         $csv .= "S.no,Vendor SKU,Product Name,Product Length ({$lwhUnit}),Product Width ({$lwhUnit}),Product Height ({$lwhUnit}),Product Weight ({$weightUnit}),Material,Color,Finish,Category,Sub Category,Vendor FOB ({$currency}),Comments,Selection\n";
 
         foreach ($offerSheet->items as $item) {
@@ -893,19 +1099,24 @@ class VendorController extends Controller
 
         if ($request->hasFile('image')) {
             // Delete old image if exists
-            if ($item->thumbnail && \Storage::disk('public')->exists($item->thumbnail)) {
-                \Storage::disk('public')->delete($item->thumbnail);
+
+
+            // Determine storage disk based on environment
+
+            // Delete thumbnail if exists
+            if ($item->thumbnail && FileStorage::exists($item->thumbnail)) {
+                FileStorage::delete($item->thumbnail);
             }
 
             // Store new image
-            $path = $request->file('image')->store('offer-thumbnails', 'public');
+            $path = $request->file('image')->store('offer-thumbnails', $disk);
 
             // Save path to database
             $item->update(['thumbnail' => $path]);
 
             return response()->json([
                 'success' => true,
-                'image_url' => \Storage::url($path),
+                'image_url' => FileStorage::url($path),
                 'message' => 'Image uploaded successfully.'
             ]);
         }
@@ -930,9 +1141,9 @@ class VendorController extends Controller
                 $q->where('company_code', $activeCompany);
             })
             ->with('liveSheet', 'shipments')->latest()->paginate(20);
-//             echo '<pre>';
-//             print_r( $consignments->toArray() );
-// echo '</pre>';
+        //             echo '<pre>';
+        //             print_r( $consignments->toArray() );
+        // echo '</pre>';
 
         return view('vendor.consignments.index', compact('consignments', 'vendor'));
     }
@@ -957,7 +1168,7 @@ class VendorController extends Controller
 
         try {
             $path = $request->file('commercial_invoice_file')
-                ->store("consignments/{$consignment->id}/documents", 'public');
+                ->store("consignments/{$consignment->id}/documents", FileStorage::disk());
 
             $consignment->update([
                 'commercial_invoice_file'        => $path,
@@ -996,7 +1207,7 @@ class VendorController extends Controller
 
         try {
             $path = $request->file('packing_list_file')
-                ->store("consignments/{$consignment->id}/documents", 'public');
+                ->store("consignments/{$consignment->id}/documents", FileStorage::disk());
 
             $consignment->update([
                 'packing_list_file'        => $path,
@@ -1021,7 +1232,9 @@ class VendorController extends Controller
     public function uploadShippingBill(Request $request, Consignment $consignment)
     {
         $vendor = auth()->user()->vendor;
-        if ($consignment->vendor_id !== $vendor->id) abort(403);
+        if ($consignment->vendor_id !== $vendor->id) {
+            abort(403);
+        }
 
         $request->validate([
             'shipping_bill_file'   => 'required|file|max:10240|mimes:pdf,jpg,jpeg,png',
@@ -1029,7 +1242,7 @@ class VendorController extends Controller
         ]);
 
         try {
-            $path = $request->file('shipping_bill_file')->store("consignments/{$consignment->id}/documents", 'public');
+            $path = $request->file('shipping_bill_file')->store("consignments/{$consignment->id}/documents", FileStorage::disk());
             $consignment->update([
                 'shipping_bill_file'        => $path,
                 'shipping_bill_number'      => $request->shipping_bill_number,
@@ -1050,7 +1263,9 @@ class VendorController extends Controller
     public function uploadMeasurement(Request $request, Consignment $consignment)
     {
         $vendor = auth()->user()->vendor;
-        if ($consignment->vendor_id !== $vendor->id) abort(403);
+        if ($consignment->vendor_id !== $vendor->id) {
+            abort(403);
+        }
 
         $request->validate([
             'measurement_file'   => 'required|file|max:10240|mimes:pdf,jpg,jpeg,png,xlsx,xls',
@@ -1058,7 +1273,7 @@ class VendorController extends Controller
         ]);
 
         try {
-            $path = $request->file('measurement_file')->store("consignments/{$consignment->id}/documents", 'public');
+            $path = $request->file('measurement_file')->store("consignments/{$consignment->id}/documents", FileStorage::disk());
             $consignment->update([
                 'measurement_file'        => $path,
                 'measurement_number'      => $request->measurement_number,
@@ -1079,7 +1294,9 @@ class VendorController extends Controller
     public function uploadHbl(Request $request, Consignment $consignment)
     {
         $vendor = auth()->user()->vendor;
-        if ($consignment->vendor_id !== $vendor->id) abort(403);
+        if ($consignment->vendor_id !== $vendor->id) {
+            abort(403);
+        }
 
         $request->validate([
             'hbl_file'   => 'required|file|max:10240|mimes:pdf,jpg,jpeg,png',
@@ -1087,7 +1304,7 @@ class VendorController extends Controller
         ]);
 
         try {
-            $path = $request->file('hbl_file')->store("consignments/{$consignment->id}/documents", 'public');
+            $path = $request->file('hbl_file')->store("consignments/{$consignment->id}/documents", FileStorage::disk());
             $consignment->update([
                 'hbl_file'        => $path,
                 'hbl_number'      => $request->hbl_number,
@@ -1108,7 +1325,9 @@ class VendorController extends Controller
     public function uploadOtherDoc(Request $request, Consignment $consignment)
     {
         $vendor = auth()->user()->vendor;
-        if ($consignment->vendor_id !== $vendor->id) abort(403);
+        if ($consignment->vendor_id !== $vendor->id) {
+            abort(403);
+        }
 
         $request->validate([
             'other_doc_file' => 'required|file|max:10240|mimes:pdf,jpg,jpeg,png,xlsx,xls,doc,docx',
@@ -1116,7 +1335,7 @@ class VendorController extends Controller
         ]);
 
         try {
-            $path = $request->file('other_doc_file')->store("consignments/{$consignment->id}/documents", 'public');
+            $path = $request->file('other_doc_file')->store("consignments/{$consignment->id}/documents", FileStorage::disk());
             $consignment->update([
                 'other_doc_file'        => $path,
                 'other_doc_name'        => $request->other_doc_name,
@@ -1166,9 +1385,9 @@ class VendorController extends Controller
             'items'                    => 'required|array|min:1',
             'items.*.product_id'       => 'required|exists:products,id',
             'items.*.quantity'         => 'required|integer|min:1',
-            'items.*.unit_price'       => 'required|numeric|min:0',
+            //  'items.*.unit_price'       => 'required|numeric|min:0',
             //'items.*.cbm_per_unit'     => 'required|numeric|min:0',
-            'items.*.weight_per_unit'  => 'nullable|numeric|min:0',
+            //  'items.*.weight_per_unit'  => 'nullable|numeric|min:0',
         ]);
 
         // Track changes before submitting
@@ -1455,10 +1674,11 @@ class VendorController extends Controller
         }
 
         $file = $request->file('live_sheet_file');
-        $storedPath = $file->store('live-sheet-uploads/' . $vendor->id, 'public');
-        $fullPath = storage_path('app/public/' . $storedPath);
-
-        $parsed = $this->parseLiveSheetExcel($fullPath); 
+        // Parse from temp upload (works for both local and S3)
+        $fullPath = $file->getRealPath();
+        $parsed = $this->parseLiveSheetExcel($fullPath);
+        // Store on configured disk after parsing
+        $storedPath = $file->store('live-sheet-uploads/' . $vendor->id, FileStorage::disk());
 
         if (empty($parsed)) {
             return back()->with('error', 'No valid data found. Please use the provided template.');
@@ -1478,7 +1698,7 @@ class VendorController extends Controller
             }
 
             // Find matching live sheet item by SKU
-            $item = $liveSheet->items()->whereHas('product', fn($q) => $q->where('sku', $sku))->first();
+            $item = $liveSheet->items()->whereHas('product', fn ($q) => $q->where('sku', $sku))->first();
 
             if (!$item) {
                 $errors[] = "Row " . ($idx + 1) . ": SKU '{$sku}' not found in this live sheet.";
@@ -1589,14 +1809,14 @@ class VendorController extends Controller
             ];
             $item->update($itemData);
 
-            file_put_contents(storage_path('logs/live_sheet_upload.log'),  print_r($itemData, 1) . "\n", FILE_APPEND);
+            \Log::channel('daily')->info('Live sheet item data', $itemData);
 
             // Update product master
 
             $updateData = [];
 
             $updateData['vendor_price'] = $finalFob ?: $unitPrice;
-            $updateData['cbm']          = $cbmShipment;//$qtyMaster > 0 ? round($masterCbm / $qtyMaster, 6) : null;
+            $updateData['cbm']          = $cbmShipment; //$qtyMaster > 0 ? round($masterCbm / $qtyMaster, 6) : null;
             $updateData['weight']       = $weightPerUnit ?: null;
             $updateData['description']  = $row['description'] ?? null;
             $updateData['hsn_code']     = $row['hsn_code'] ?? null;
@@ -1606,7 +1826,7 @@ class VendorController extends Controller
             }
 
             // Remove null values before update
-            $updateData = array_filter($updateData, fn($val) => $val !== null);
+            $updateData = array_filter($updateData, fn ($val) => $val !== null);
             $item->product->update($updateData);
             $updated++;
         }
@@ -1698,12 +1918,12 @@ class VendorController extends Controller
                         continue;
                     }
                     if (str_contains($val, 'inner carton weight') || $val === 'inner carton weight (kg)') {
-                        file_put_contents(storage_path('logs/live_sheet_upload.log'), $col . '===' .  $val  . "\n", FILE_APPEND);
+                        \Log::channel('daily')->debug("Live sheet col map: {$col} = {$val}");
                         $colMap['inner_weight'] = $col;
                     }
                     if (str_contains($val, 'master') && str_contains($val, 'weight')) {
                         $colMap['master_weight'] = $col;
-                        file_put_contents(storage_path('logs/live_sheet_upload.log'), $col . '===' .  $val  . "\n", FILE_APPEND);
+                        \Log::channel('daily')->debug("Live sheet col map: {$col} = {$val}");
                     }
 
                     if (str_contains($val, 'vendor sku') || $val === 'sku') {
@@ -1792,7 +2012,7 @@ class VendorController extends Controller
                     continue;
                 }
 
-                $getVal = fn($key, $default = null) => isset($colMap[$key]) ? $sheet->getCell($colMap[$key] . $r)->getValue() : $default;
+                $getVal = fn ($key, $default = null) => isset($colMap[$key]) ? $sheet->getCell($colMap[$key] . $r)->getValue() : $default;
 
                 $rows[] = [
                     'sno'             => $getVal('sno'),
@@ -1843,7 +2063,7 @@ class VendorController extends Controller
     {
         $validated = $request->validate([
             'inspection_type'    => 'required|in:inline,midline,final',
-            'report'             => 'required|file|mimes:pdf,jpg,jpeg,png,doc,docx,xlsx|max:20480',
+            'report'             => 'required|file|mimes:pdf,jpg,jpeg,png,doc,docx,xlsx,ppt,pptx|max:20480',
             'commercial_invoice' => 'nullable|file|mimes:pdf,jpg,jpeg,png,doc,docx,xlsx|max:20480',
             'packing_list'       => 'nullable|file|mimes:pdf,jpg,jpeg,png,doc,docx,xlsx|max:20480',
             'result'             => 'nullable|string',
@@ -1855,7 +2075,7 @@ class VendorController extends Controller
         $data = [
             'consignment_id'     => $consignment->id,
             'inspection_type'    => $validated['inspection_type'],
-            'report_file'        => $request->file('report')->store($folder, 'public'),
+            'report_file'        => $request->file('report')->store($folder, FileStorage::disk()),
             'report_name'        => $request->file('report')->getClientOriginalName(),
             'result'             => $validated['result'] ?? null,
             'remarks'            => $validated['remarks'] ?? null,
@@ -1864,17 +2084,17 @@ class VendorController extends Controller
 
         // Commercial Invoice
         if ($request->hasFile('commercial_invoice')) {
-            $data['commercial_invoice_file'] = $request->file('commercial_invoice')->store($folder, 'public');
+            $data['commercial_invoice_file'] = $request->file('commercial_invoice')->store($folder, FileStorage::disk());
             $data['commercial_invoice_name'] = $request->file('commercial_invoice')->getClientOriginalName();
         }
 
         // Packing List
         if ($request->hasFile('packing_list')) {
-            $data['packing_list_file'] = $request->file('packing_list')->store($folder, 'public');
+            $data['packing_list_file'] = $request->file('packing_list')->store($folder, FileStorage::disk());
             $data['packing_list_name'] = $request->file('packing_list')->getClientOriginalName();
         }
 
-        file_put_contents("storage/logs/VendorInspection.log" . date("Y-m-d") . ".log", print_r($data, true) . "\n", FILE_APPEND);
+        \Log::channel('daily')->info('Vendor inspection upload', $data);
 
         \App\Models\InspectionReport::create($data);
 
@@ -1885,40 +2105,152 @@ class VendorController extends Controller
 
         return back()->with('success', 'Inspection report uploaded successfully.');
     }
-    public function uploadInspectionBACK(Request $request, Consignment $consignment)
-    {
-        $request->validate(['inspection_type' => 'required|in:inline,midline,final', 'report' => 'required|file|max:20480', 'commercial_invoice' => 'nullable|file|max:20480', 'packing_list' => 'nullable|file|max:20480']);
-        $path = $request->file('report')->store('inspections/' . $consignment->id, 'public');
-
-        $com_inv_path = $request->file('commercial_invoice')->store('inspections/' . $consignment->id, 'public');
-        $pack_list_path = $request->file('packing_list')->store('inspections/' . $consignment->id, 'public');
-        \App\Models\InspectionReport::create([
-            'consignment_id' => $consignment->id,
-            'inspection_type' => $request->inspection_type,
-            'report_file' => $path,
-            'report_name' => $request->file('report')->getClientOriginalName(),
-            'commercial_invoice_file' => $com_inv_path,
-            'commercial_invoice_name' => $request->file('commercial_invoice') ? $request->file('commercial_invoice')->getClientOriginalName() : null,
-            'packing_list_file' => $pack_list_path,
-            'packing_list_name' => $request->file('packing_list') ? $request->file('packing_list')->getClientOriginalName() : null,
-            'result' => $request->result,
-            'remarks' => $request->remarks,
-            'uploaded_by' => auth()->id(),
-        ]);
-        return back()->with('success', 'Inspection report uploaded.');
-    }
-
 
     public function salesReport(Request $request)
+    {
+        $vendor = auth()->user()->vendor;
+        $activeCompany = session('active_company');
+
+        // Get shipped orders with vendor's items
+        $orders = Order::withoutGlobalScopes()
+            ->whereIn('status', ['shipped', 'delivered'])
+            ->where('company_code', $activeCompany)
+            ->whereHas('items', fn ($q) => $q->where('vendor_id', $vendor->id)->where('shipped_qty', '>', 0))
+            ->with([
+                'salesChannel',
+                'items' => fn ($q) => $q->where('vendor_id', $vendor->id)
+                    ->where('shipped_qty', '>', 0)
+                    ->with(['product' => fn ($pq) => $pq->withoutGlobalScopes()])
+            ])
+            ->when($request->month, fn ($q, $v) => $q->whereMonth('order_date', $v))
+            ->when($request->year, fn ($q, $v) => $q->whereYear('order_date', $v))
+            ->latest('order_date')
+            ->paginate(25);
+
+        // Build FIFO queue
+        $vendorLiveSheets = \App\Models\LiveSheet::withoutGlobalScopes()
+            ->where('vendor_id', $vendor->id)
+            ->where('company_code', $activeCompany)
+            ->where('status', 'locked')
+            ->orderBy('approved_at', 'asc')
+            ->with(['items' => fn ($q) => $q->select('id', 'live_sheet_id', 'product_id', 'quantity', 'unit_price', 'product_details')])
+            ->get();
+
+        $fifoQueue = [];
+        foreach ($vendorLiveSheets as $ls) {
+            $commPercent = floatval($ls->commission_percentage ?? 0);
+            foreach ($ls->items as $lsItem) {
+                $pid = $lsItem->product_id;
+                $d = $lsItem->product_details ?? [];
+                $batchWsp = floatval($d['wsp'] ?? $d['vendor_wsp'] ?? $lsItem->unit_price ?? 0);
+
+                if (!isset($fifoQueue[$pid])) {
+                    $fifoQueue[$pid] = [];
+                }
+                $fifoQueue[$pid][] = [
+                    'live_sheet_id' => $ls->id,
+                    'vendor_wsp'    => $batchWsp,
+                    'commission'    => $commPercent,
+                    'remaining_qty' => intval($lsItem->quantity),
+                ];
+            }
+        }
+
+        // Deduct prior sold using shipped_qty
+        $priorSold = \App\Models\OrderItem::withoutGlobalScopes()
+            ->where('vendor_id', $vendor->id)
+            ->where('shipped_qty', '>', 0)
+            ->whereHas('order', fn ($q) => $q->withoutGlobalScopes()
+                ->where('company_code', $activeCompany)
+                ->whereIn('status', ['shipped', 'delivered']))
+            ->select('product_id', \DB::raw('SUM(shipped_qty) as shipped'))
+            ->groupBy('product_id')
+            ->pluck('shipped', 'product_id');
+
+        foreach ($priorSold as $pid => $soldQty) {
+            if (!isset($fifoQueue[$pid])) {
+                continue;
+            }
+            $remaining = intval($soldQty);
+            foreach ($fifoQueue[$pid] as &$batch) {
+                if ($remaining <= 0) {
+                    break;
+                }
+                $deduct = min($remaining, $batch['remaining_qty']);
+                $batch['remaining_qty'] -= $deduct;
+                $remaining -= $deduct;
+            }
+            unset($batch);
+        }
+
+        // Build line items per order
+        $orderLineItems = [];
+        foreach ($orders as $order) {
+            $orderTotal = 0;
+            $orderShippedQty = 0;
+            foreach ($order->items as $item) {
+                $product = $item->product;
+                if (!$product) {
+                    continue;
+                }
+                $pid = $product->id;
+                $shippedQty = intval($item->shipped_qty);
+                if ($shippedQty <= 0) {
+                    continue;
+                }
+
+                $qtyToAllocate = $shippedQty;
+                $itemSale = 0;
+                $itemComm = 0;
+
+                if (isset($fifoQueue[$pid])) {
+                    foreach ($fifoQueue[$pid] as &$batch) {
+                        if ($qtyToAllocate <= 0) {
+                            break;
+                        }
+                        if ($batch['remaining_qty'] <= 0) {
+                            continue;
+                        }
+                        $allocate = min($qtyToAllocate, $batch['remaining_qty']);
+                        $batchSale = round($batch['vendor_wsp'] * $allocate, 2);
+                        $itemSale += $batchSale;
+                        $itemComm += round(($batch['commission'] / 100) * $batchSale, 2);
+                        $batch['remaining_qty'] -= $allocate;
+                        $qtyToAllocate -= $allocate;
+                    }
+                    unset($batch);
+                }
+
+                if ($qtyToAllocate > 0) {
+                    $fallbackWsp = floatval($product->vendor_wsp ?? $product->fob_price ?? 0);
+                    $itemSale += round($fallbackWsp * $qtyToAllocate, 2);
+                }
+
+                $orderTotal += $itemSale;
+                $orderShippedQty += $shippedQty;
+            }
+            $orderLineItems[$order->id] = [
+                'sale_amount'  => round($orderTotal, 2),
+                'shipped_qty'  => $orderShippedQty,
+            ];
+        }
+
+        // Stats
+        $totalSales = array_sum(array_column($orderLineItems, 'sale_amount'));
+        $totalShippedQty = array_sum(array_column($orderLineItems, 'shipped_qty'));
+
+        return view('vendor.sales.index', compact('orders', 'vendor', 'totalSales', 'totalShippedQty', 'orderLineItems'));
+    }
+    public function salesReportBAK(Request $request)
     {
         $vendor = auth()->user()->vendor;
 
         $activeCompany = session('active_company');
 
         $orders = Order::where('status', 'shipped')
-            ->whereHas('items', fn($q) => $q->where('vendor_id', $vendor->id))
-            ->with(['salesChannel', 'receivable', 'items' => fn($q) => $q->where('vendor_id', $vendor->id)->with('product')])
-            ->when($activeCompany, fn($q) => $q->whereHas('salesChannel', fn($sq) => $sq->where('company_code', $activeCompany)))
+            ->whereHas('items', fn ($q) => $q->where('vendor_id', $vendor->id))
+            ->with(['salesChannel', 'receivable', 'items' => fn ($q) => $q->where('vendor_id', $vendor->id)->with('product')])
+            ->when($activeCompany, fn ($q) => $q->whereHas('salesChannel', fn ($sq) => $sq->where('company_code', $activeCompany)))
             ->get();
 
 
@@ -1927,7 +2259,7 @@ class VendorController extends Controller
             ->where('status', 'locked') // Only consider locked sheets for commission (approved but not yet paid out)
             //  ->when($activeCompany, fn($q) => $q->whereHas('salesChannel', fn($sq) => $sq->where('company_code', $activeCompany)))
             ->orderBy('approved_at', 'asc') // FIFO — oldest first
-            ->with(['items' => fn($q) => $q->select('id', 'live_sheet_id', 'product_id', 'quantity', 'product_details')])
+            ->with(['items' => fn ($q) => $q->select('id', 'live_sheet_id', 'product_id', 'quantity', 'product_details')])
             ->get();
 
         // Build FIFO queue with BOTH vendor_wsp and commission per batch
@@ -1982,7 +2314,7 @@ class VendorController extends Controller
         $lineItems = collect();
         foreach ($orders as $order) {
             foreach ($order->items as $item) {
-                print_r($item->toArray());
+                //  print_r($item->toArray());
                 $product = $item->product;
                 $pid = $product->id;
                 $qty = intval($item->shipped_qty);
@@ -2011,7 +2343,7 @@ class VendorController extends Controller
                         $totalCommission += $batchComm;
                         $totalPayout += $batchPayout;
 
-                        $details[] = "{$allocate}u × \${$batch['vendor_wsp']} @ {$batch['commission']}%";
+                        $details[] = "{$allocate}u x \${$batch['vendor_wsp']} @ {$batch['commission']}%";
 
                         $batch['remaining_qty'] -= $allocate;
                         $qtyToAllocate -= $allocate;
@@ -2025,7 +2357,7 @@ class VendorController extends Controller
                     $fallbackSale = round($fallbackWsp * $qtyToAllocate, 2);
                     $totalSaleAmount += $fallbackSale;
                     $totalPayout += $fallbackSale;
-                    $details[] = "{$qtyToAllocate}u × \${$fallbackWsp} @ 0%";
+                    $details[] = "{$qtyToAllocate}u x \${$fallbackWsp} @ 0%";
                 }
 
                 // Weighted average WSP for display
@@ -2048,17 +2380,17 @@ class VendorController extends Controller
         // exit;
         //print_r($lineItems->toArray());exit;
 
-        $orders = Order::whereHas('items', fn($q) => $q->where('vendor_id', $vendor->id))
+        $orders = Order::whereHas('items', fn ($q) => $q->where('vendor_id', $vendor->id))
             ->with('salesChannel', 'items')
-            ->when($activeCompany, fn($q) => $q->whereHas('salesChannel', fn($sq) => $sq->where('company_code', $activeCompany)))
-            ->when($request->month, fn($q, $v) => $q->whereMonth('order_date', $v))
-            ->when($request->year, fn($q, $v) => $q->whereYear('order_date', $v))
+            ->when($activeCompany, fn ($q) => $q->whereHas('salesChannel', fn ($sq) => $sq->where('company_code', $activeCompany)))
+            ->when($request->month, fn ($q, $v) => $q->whereMonth('order_date', $v))
+            ->when($request->year, fn ($q, $v) => $q->whereYear('order_date', $v))
             ->latest('order_date')->paginate(25);
 
-        $totalSales = Order::whereHas('items', fn($q) => $q->where('vendor_id', $vendor->id))
-            ->when($activeCompany, fn($q) => $q->whereHas('salesChannel', fn($sq) => $sq->where('company_code', $activeCompany)))
-            ->when($request->month, fn($q, $v) => $q->whereMonth('order_date', $v))
-            ->when($request->year, fn($q, $v) => $q->whereYear('order_date', $v))
+        $totalSales = Order::whereHas('items', fn ($q) => $q->where('vendor_id', $vendor->id))
+            ->when($activeCompany, fn ($q) => $q->whereHas('salesChannel', fn ($sq) => $sq->where('company_code', $activeCompany)))
+            ->when($request->month, fn ($q, $v) => $q->whereMonth('order_date', $v))
+            ->when($request->year, fn ($q, $v) => $q->whereYear('order_date', $v))
             ->sum('total_amount');
 
         return view('vendor.sales.index', compact('orders', 'vendor', 'totalSales', 'lineItems'));
@@ -2066,17 +2398,17 @@ class VendorController extends Controller
     public function grn(Request $request)
     {
         $user = auth()->user();
-        // User's allowed company codes        
+        // User's allowed company codes
         $activeCompany = session('active_company');
 
         $vendor = $user->vendor;
         $vendorProductIds = $vendor->products()
-            ->when($activeCompany, fn($q) => $q->where('company_code', $activeCompany))
+            ->when($activeCompany, fn ($q) => $q->where('company_code', $activeCompany))
             ->pluck('id')->toArray();
 
         // Get consignment IDs for this vendor
         $consignmentIds = Consignment::where('vendor_id', $vendor->id)
-            ->when($activeCompany, fn($q) => $q->where('company_code', $activeCompany))
+            ->when($activeCompany, fn ($q) => $q->where('company_code', $activeCompany))
             ->pluck('id');
 
         // Get shipment IDs linked to those consignments
@@ -2100,7 +2432,7 @@ class VendorController extends Controller
         $totalExcess = 0;
 
         $grns->getCollection()->transform(function ($grn) use ($vendorProductIds, &$totalExpected, &$totalReceived, &$totalDamaged, &$totalMissing, &$totalExcess) {
-            $myItems = $grn->items->filter(fn($i) => in_array($i->product_id, $vendorProductIds));
+            $myItems = $grn->items->filter(fn ($i) => in_array($i->product_id, $vendorProductIds));
             $grn->vendor_expected = $myItems->sum('expected_quantity');
             $grn->vendor_received = $myItems->sum('received_quantity');
             $grn->vendor_damaged  = $myItems->sum('damaged_quantity');
@@ -2133,7 +2465,7 @@ class VendorController extends Controller
 
         // Verify this GRN belongs to this vendor's consignments
         $consignmentIds = Consignment::where('vendor_id', $vendor->id)
-            ->when($activeCompany, fn($q) => $q->where('company_code', $activeCompany))
+            ->when($activeCompany, fn ($q) => $q->where('company_code', $activeCompany))
             ->pluck('id');
         $shipmentIds = \DB::table('shipment_consignments')
             ->whereIn('consignment_id', $consignmentIds)
@@ -2147,9 +2479,9 @@ class VendorController extends Controller
 
         // Filter items to show only this vendor's products
         $vendorProductIds = $vendor->products()
-            ->when(!$user->isAdmin() && !empty($activeCompany), fn($q) => $q->where('company_code', $activeCompany))
+            ->when($activeCompany, fn ($q) => $q->where('company_code', $activeCompany))
             ->pluck('id')->toArray();
-        $vendorItems = $grn->items->filter(fn($item) => in_array($item->product_id, $vendorProductIds));
+        $vendorItems = $grn->items->filter(fn ($item) => in_array($item->product_id, $vendorProductIds));
 
         $itemStats = [
             'total_expected' => $vendorItems->sum('expected_quantity'),
@@ -2171,7 +2503,7 @@ class VendorController extends Controller
 
         $rateCard = \App\Models\VendorRateCard::where('vendor_id', $vendor->id)
             ->where('status', 'approved')
-            ->when(!$user->isAdmin() && !empty($activeCompany), function ($query) use ($activeCompany) {
+            ->when($activeCompany, function ($query) use ($activeCompany) {
                 $query->where('company_code', $activeCompany);
             })
             ->orderByDesc('version')
@@ -2180,7 +2512,7 @@ class VendorController extends Controller
         // Get all versions for history
         $history = \App\Models\VendorRateCard::where('vendor_id', $vendor->id)
             ->with('warehouse')
-            ->when(!$user->isAdmin() && !empty($activeCompany), function ($query) use ($activeCompany) {
+            ->when($activeCompany, function ($query) use ($activeCompany) {
                 $query->where('company_code', $activeCompany);
             })
             ->orderByDesc('version')
@@ -2209,8 +2541,8 @@ class VendorController extends Controller
         $vendor = $user->vendor;
 
         $inventory = \App\Models\Inventory::with('product', 'warehouse', 'grn')
-            ->whereHas('product', fn($q) => $q->where('vendor_id', $vendor->id))
-            ->when($request->warehouse_id, fn($q, $v) => $q->where('warehouse_id', $v))
+            ->whereHas('product', fn ($q) => $q->where('vendor_id', $vendor->id))
+            ->when($request->warehouse_id, fn ($q, $v) => $q->where('warehouse_id', $v))
             ->when(!$user->isAdmin() && !empty($activeCompany), function ($query) use ($activeCompany) {
                 $query->where('company_code', $activeCompany);
             })
@@ -2221,10 +2553,10 @@ class VendorController extends Controller
 
         // Stats
         $stats = [
-            'total_skus'     => \App\Models\Inventory::whereHas('product', fn($q) => $q->where('vendor_id', $vendor->id))->distinct('product_id')->count('product_id'),
-            'total_qty'      => (int) \App\Models\Inventory::whereHas('product', fn($q) => $q->where('vendor_id', $vendor->id))->sum('quantity'),
-            'available_qty'  => (int) \App\Models\Inventory::whereHas('product', fn($q) => $q->where('vendor_id', $vendor->id))->sum('available_quantity'),
-            'reserved_qty'   => (int) \App\Models\Inventory::whereHas('product', fn($q) => $q->where('vendor_id', $vendor->id))->sum('reserved_quantity'),
+            'total_skus'     => \App\Models\Inventory::whereHas('product', fn ($q) => $q->where('vendor_id', $vendor->id))->distinct('product_id')->count('product_id'),
+            'total_qty'      => (int) \App\Models\Inventory::whereHas('product', fn ($q) => $q->where('vendor_id', $vendor->id))->sum('quantity'),
+            'available_qty'  => (int) \App\Models\Inventory::whereHas('product', fn ($q) => $q->where('vendor_id', $vendor->id))->sum('available_quantity'),
+            'reserved_qty'   => (int) \App\Models\Inventory::whereHas('product', fn ($q) => $q->where('vendor_id', $vendor->id))->sum('reserved_quantity'),
         ];
 
         return view('vendor.inventory.index', compact('inventory', 'vendor', 'warehouses', 'stats'));
@@ -2237,7 +2569,7 @@ class VendorController extends Controller
 
         $chargebacks = Chargeback::where('vendor_id', $vendor->id)->with('order.salesChannel')
             ->when(!$vendor->user->isAdmin() && !empty($activeCompany), function ($query) use ($activeCompany) {
-                $query->whereHas('order.salesChannel', fn($q) => $q->where('company_code', $activeCompany));
+                $query->whereHas('order.salesChannel', fn ($q) => $q->where('company_code', $activeCompany));
             })
             ->latest()->paginate(20);
         return view('vendor.chargebacks.index', compact('chargebacks', 'vendor'));
@@ -2303,13 +2635,13 @@ class VendorController extends Controller
         $snapshot = $payout->calculation_snapshot;
 
         if (!empty($snapshot)) {
-            $lineItems = collect($snapshot['line_items'] ?? [])->map(fn($i) => (object) $i);
+            $lineItems = collect($snapshot['line_items'] ?? [])->map(fn ($i) => (object) $i);
             $payoutSummary = $snapshot['summary'] ?? [];
         } else {
             // Fallback: recalculate live
             $service = new \App\Services\VendorPayoutService();
             $data = $service->buildPayoutData($vendor->id, $payout->company_code, $payout->payout_month, $payout->payout_year);
-            $lineItems = collect($data['line_items'])->map(fn($i) => (object) $i);
+            $lineItems = collect($data['line_items'])->map(fn ($i) => (object) $i);
             $payoutSummary = $data['summary'];
         }
 
@@ -2323,7 +2655,7 @@ class VendorController extends Controller
 
         // Chargebacks
         $chargebacks = \App\Models\Chargeback::where('vendor_id', $vendor->id)
-            ->whereHas('order', fn($q) => $q->where('company_code', $payout->company_code))
+            ->whereHas('order', fn ($q) => $q->where('company_code', $payout->company_code))
             ->where('status', 'confirmed')
             ->whereMonth('confirmed_at', $payout->payout_month)
             ->whereYear('confirmed_at', $payout->payout_year)
@@ -2336,7 +2668,7 @@ class VendorController extends Controller
     public function uploadInvoice(Request $request, VendorPayout $payout)
     {
         $request->validate(['invoice' => 'required|file|mimes:pdf|max:10240', 'vendor_invoice_number' => 'required|string|max:100']);
-        $path = $request->file('invoice')->store('vendor-invoices/' . $payout->vendor_id, 'public');
+        $path = $request->file('invoice')->store('vendor-invoices/' . $payout->vendor_id, FileStorage::disk());
         $payout->update(['vendor_invoice_file' => $path, 'vendor_invoice_number' => $request->vendor_invoice_number, 'vendor_invoice_date' => now(), 'status' => 'invoice_received']);
         return back()->with('success', 'Invoice uploaded. Invoice #: ' . $request->vendor_invoice_number);
     }
@@ -2430,7 +2762,7 @@ class VendorController extends Controller
         if ($request->has('factory_location')) {
             $data['factory_location'] = $request->factory_location ?: null;
         }
-        file_put_contents("storage/logs/LiveSheetDates.log" . date("Y-m-d") . ".log", print_r($data, true) . "\n", FILE_APPEND);
+        \Log::channel('daily')->info('Live sheet dates update', $data);
         if (!empty($data)) {
             $liveSheet->update($data);
             $data['message'] = 'dates updated';
@@ -2444,12 +2776,12 @@ class VendorController extends Controller
 
         $activeCompany = session('active_company');
 
-        $reports = \App\Models\InspectionReport::whereHas('consignment', fn($q) => $q->where('vendor_id', $vendor->id))
+        $reports = \App\Models\InspectionReport::whereHas('consignment', fn ($q) => $q->where('vendor_id', $vendor->id))
             ->with('consignment', 'uploader')
-            ->when($activeCompany, fn($q) => $q->whereHas('consignment', fn($cq) => $cq->where('company_code', $activeCompany)))
-            ->when($request->type, fn($q, $v) => $q->where('inspection_type', $v))
-            ->when($request->result, fn($q, $v) => $q->where('result', $v))
-            ->when($request->consignment_id, fn($q, $v) => $q->where('consignment_id', $v))
+            ->when($activeCompany, fn ($q) => $q->whereHas('consignment', fn ($cq) => $cq->where('company_code', $activeCompany)))
+            ->when($request->type, fn ($q, $v) => $q->where('inspection_type', $v))
+            ->when($request->result, fn ($q, $v) => $q->where('result', $v))
+            ->when($request->consignment_id, fn ($q, $v) => $q->where('consignment_id', $v))
             ->latest()->paginate(20);
 
         $consignments = $vendor->consignments()
@@ -2459,19 +2791,19 @@ class VendorController extends Controller
             ->latest()->get();
 
         $stats = [
-            'total'    => \App\Models\InspectionReport::whereHas('consignment', fn($q) => $q->where('vendor_id', $vendor->id))
-                ->when($activeCompany, fn($q) => $q->whereHas('consignment', fn($cq) => $cq->where('company_code', $activeCompany)))
+            'total'    => \App\Models\InspectionReport::whereHas('consignment', fn ($q) => $q->where('vendor_id', $vendor->id))
+                ->when($activeCompany, fn ($q) => $q->whereHas('consignment', fn ($cq) => $cq->where('company_code', $activeCompany)))
                 ->count(),
-            'passed'   => \App\Models\InspectionReport::whereHas('consignment', fn($q) => $q->where('vendor_id', $vendor->id))->where('result', 'passed')
-                ->when($activeCompany, fn($q) => $q->whereHas('consignment', fn($cq) => $cq->where('company_code', $activeCompany)))
-                ->count(),
-
-            'failed'   => \App\Models\InspectionReport::whereHas('consignment', fn($q) => $q->where('vendor_id', $vendor->id))->where('result', 'failed')
-                ->when($activeCompany, fn($q) => $q->whereHas('consignment', fn($cq) => $cq->where('company_code', $activeCompany)))
+            'passed'   => \App\Models\InspectionReport::whereHas('consignment', fn ($q) => $q->where('vendor_id', $vendor->id))->where('result', 'passed')
+                ->when($activeCompany, fn ($q) => $q->whereHas('consignment', fn ($cq) => $cq->where('company_code', $activeCompany)))
                 ->count(),
 
-            'conditional' => \App\Models\InspectionReport::whereHas('consignment', fn($q) => $q->where('vendor_id', $vendor->id))->where('result', 'conditional')
-                ->when($activeCompany, fn($q) => $q->whereHas('consignment', fn($cq) => $cq->where('company_code', $activeCompany)))
+            'failed'   => \App\Models\InspectionReport::whereHas('consignment', fn ($q) => $q->where('vendor_id', $vendor->id))->where('result', 'failed')
+                ->when($activeCompany, fn ($q) => $q->whereHas('consignment', fn ($cq) => $cq->where('company_code', $activeCompany)))
+                ->count(),
+
+            'conditional' => \App\Models\InspectionReport::whereHas('consignment', fn ($q) => $q->where('vendor_id', $vendor->id))->where('result', 'conditional')
+                ->when($activeCompany, fn ($q) => $q->whereHas('consignment', fn ($cq) => $cq->where('company_code', $activeCompany)))
                 ->count(),
         ];
 

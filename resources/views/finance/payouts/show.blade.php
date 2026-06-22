@@ -56,7 +56,7 @@ $monthName = \Carbon\Carbon::create($payout->payout_year, $payout->payout_month)
         <div class="kpi-value" style="color:#e8a838;">{{ $activeCurrencySymbol }}{{ number_format($payoutSummary['total_commission'], 2) }}</div>
     </div>
     <div class="kpi-card" style="flex:1;border-left:3px solid #7c3aed;">
-        <div class="kpi-label">Net Payout</div>
+        <div class="kpi-label">Gross Payout</div>
         <div class="kpi-value" style="color:#7c3aed;">{{ $activeCurrencySymbol }}{{ number_format($payoutSummary['total_payout'], 2) }}</div>
     </div>
 </div>
@@ -226,7 +226,7 @@ $finalPayout = $payoutSummary['total_payout'] - $totalWhCharges - $totalChargeba
 
         <table style="width:100%;max-width:500px;font-size:.85rem;">
             <tr>
-                <td style="padding:.4rem 0;">Total Sales (Vendor WSP × QTY)</td>
+                <td style="padding:.4rem 0;">Total Sales (Vendor WSP x QTY)</td>
                 <td style="text-align:right;font-family:monospace;font-weight:600;">{{ $activeCurrencySymbol }}{{ number_format($payoutSummary['total_sales'] ?? 0, 2) }}</td>
             </tr>
             <tr>

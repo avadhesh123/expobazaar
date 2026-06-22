@@ -3,6 +3,66 @@
 @section('page-title', 'Monthly Payouts')
 
 @section('content')
+
+
+{{-- Warehouse Charges Summary --}}
+<div class="card">
+    <div class="card-header">
+        <h3><i class="fas fa-warehouse" style="margin-right:.5rem;color:#e8a838;"></i>Warehouse Charges</h3>
+    </div>
+    <div class="card-body" style="padding:0;overflow-x:auto;">
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>Vendor</th>
+                    <th>GRN</th>
+                    <th>Inward</th>
+                    <th>Storage</th>
+                    <th>Fulfillment</th>
+                    <th>Pick & Pack</th>
+                    <th>Material</th>
+                    <th>Total</th>
+                    <th>Status</th>
+                 </tr>
+            </thead>
+            <tbody>
+                @forelse($vendorMonthlyCharges as $c)
+                 <tr>
+                    <td>
+                        <div style="font-weight:600;font-size:.82rem;">{{ $c->vendor->company_name ?? '—' }}</div>
+                        <div style="font-size:.6rem;color:#94a3b8;">{{ $c->vendor->vendor_code ?? '' }}</div>
+                    </td>
+                    <td style="font-family:monospace;font-size:.78rem;">{{ $c->grn->grn_number ?? '—' }}</td>
+                    <td style="font-family:monospace;">{{ $activeCurrencySymbol }}{{ number_format(floatval($c->inward_charge), 2) }}
+                        <div style="font-size:.58rem;color:#94a3b8;">{{ $c->inward_cartons }} cartons</div>
+                    </td>
+                    <td style="font-family:monospace;">{{ $activeCurrencySymbol }}{{ number_format(floatval($c->storage_charge), 2) }}
+                        <div style="font-size:.58rem;color:#94a3b8;">{{ number_format(floatval($c->storage_cft), 1) }} CFT</div>
+                    </td>
+                    <td style="font-family:monospace;">{{ $activeCurrencySymbol }}{{ number_format(floatval($c->fulfillment_charge), 2) }}
+                        <div style="font-size:.58rem;color:#94a3b8;">{{ $c->fulfillment_orders_small }}s + {{ $c->fulfillment_orders_large }}l</div>
+                    </td>
+                    <td style="font-family:monospace;">{{ $activeCurrencySymbol }}{{ number_format(floatval($c->pick_pack_charge), 2) }}
+                        <div style="font-size:.58rem;color:#94a3b8;">{{ $c->pick_pack_units }} units</div>
+                    </td>
+                    <td style="font-family:monospace;">{{ $activeCurrencySymbol }}{{ number_format(floatval($c->material_cost), 2) }}</td>
+                    <td style="font-family:monospace;font-weight:800;color:#dc2626;">{{ $activeCurrencySymbol }}{{ number_format(floatval($c->total_charges), 2) }}</td>
+                    <td>
+                        @php $sc = ['calculated'=>'badge-warning','approved'=>'badge-success','deducted'=>'badge-info','disputed'=>'badge-danger']; @endphp
+                        <span class="badge {{ $sc[$c->status] ?? 'badge-gray' }}">{{ ucfirst($c->status) }}</span>
+                    </td>
+
+                </tr>
+                @empty
+                <tr>
+                    <td colspan="10" style="text-align:center;padding:3rem;color:#94a3b8;">No charges for this period. Click "Run Charges" to calculate.</td>
+                </tr>
+                @endforelse
+            </tbody>
+        </table>
+    </div>
+</div>
+
 {{-- Payouts --}}
 <div class="card" style="margin-bottom:1.25rem;">
     <div class="card-header">
@@ -19,7 +79,7 @@
                     <th>Logistics</th>
                     <th>Platform Ded.</th>
                     <th>Chargebacks</th>
-                    <th>Net Payout</th>
+                    <th>Gross Payout</th>
                     <th>Status</th>
                     <th>Invoice</th>
                     <th style="width:120px;">Actions</th>
@@ -30,13 +90,13 @@
                 @php $totalDed = $p->total_storage_charges + $p->total_inward_charges + $p->total_logistics_charges + $p->total_platform_deductions + $p->total_chargebacks; @endphp
                 <tr>
                     <td style="font-weight:700;">{{ date('M',mktime(0,0,0,$p->payout_month,1)) }} {{ $p->payout_year }}</td>
-                    <td style="font-family:monospace;color:#166534;font-weight:600;">${{ number_format($p->total_sales, 2) }}</td>
-                    <td style="font-family:monospace;font-size:.78rem;color:#dc2626;">-${{ number_format($p->total_storage_charges, 2) }}</td>
-                    <td style="font-family:monospace;font-size:.78rem;color:#dc2626;">-${{ number_format($p->total_inward_charges, 2) }}</td>
-                    <td style="font-family:monospace;font-size:.78rem;color:#dc2626;">-${{ number_format($p->total_logistics_charges, 2) }}</td>
-                    <td style="font-family:monospace;font-size:.78rem;color:#dc2626;">-${{ number_format($p->total_platform_deductions, 2) }}</td>
-                    <td style="font-family:monospace;font-size:.78rem;color:#991b1b;">-${{ number_format($p->total_chargebacks, 2) }}</td>
-                    <td style="font-family:monospace;font-weight:800;color:{{ $p->net_payout>=0?'#166534':'#dc2626' }};">${{ number_format($p->net_payout, 2) }}</td>
+                    <td style="font-family:monospace;color:#166534;font-weight:600;">{{ $activeCurrencySymbol }}{{ number_format($p->total_sales, 2) }}</td>
+                    <td style="font-family:monospace;font-size:.78rem;color:#dc2626;">-{{ $activeCurrencySymbol }}{{ number_format($p->total_storage_charges, 2) }}</td>
+                    <td style="font-family:monospace;font-size:.78rem;color:#dc2626;">-{{ $activeCurrencySymbol }}{{ number_format($p->total_inward_charges, 2) }}</td>
+                    <td style="font-family:monospace;font-size:.78rem;color:#dc2626;">-{{ $activeCurrencySymbol }}{{ number_format($p->total_logistics_charges, 2) }}</td>
+                    <td style="font-family:monospace;font-size:.78rem;color:#dc2626;">-{{ $activeCurrencySymbol }}{{ number_format($p->total_platform_deductions, 2) }}</td>
+                    <td style="font-family:monospace;font-size:.78rem;color:#991b1b;">-{{ $activeCurrencySymbol }}{{ number_format($p->total_chargebacks, 2) }}</td>
+                    <td style="font-family:monospace;font-weight:800;color:{{ $p->net_payout>=0?'#166534':'#dc2626' }};">{{ $activeCurrencySymbol }}{{ number_format($p->net_payout, 2) }}</td>
                     <td>
                         @php $sc = ['calculated'=>'badge-warning','approved'=>'badge-info','payment_pending'=>'badge-warning','paid'=>'badge-success','invoice_received'=>'badge-success']; @endphp
                         <span class="badge {{ $sc[$p->status]??'badge-gray' }}">{{ ucfirst(str_replace('_',' ',$p->status)) }}</span>
@@ -77,64 +137,5 @@
         </table>
     </div>
     @if($payouts->hasPages())<div style="padding:1rem 1.4rem;border-top:1px solid #e8ecf1;">{{ $payouts->links('pagination::tailwind') }}</div>@endif
-</div>
-
-{{-- Warehouse Charges Summary --}}
-<div class="card">
-    <div class="card-header">
-        <h3><i class="fas fa-warehouse" style="margin-right:.5rem;color:#e8a838;"></i>Warehouse Charges</h3>
-    </div>
-    <div class="card-body" style="padding:0;overflow-x:auto;">
-        <table class="data-table">
-            <thead>
-                <tr>
-                    <th>Vendor</th>
-                    <th>GRN</th>
-                    <th>Inward</th>
-                    <th>Storage</th>
-                    <th>Fulfillment</th>
-                    <th>Pick & Pack</th>
-                    <th>Material</th>
-                    <th>Total</th>
-                    <th>Status</th>
-                 </tr>
-            </thead>
-            <tbody>
-                @forelse($vendorMonthlyCharges as $c)
-                @php $sym = $c->getCurrencySymbol(); @endphp
-                <tr>
-                    <td>
-                        <div style="font-weight:600;font-size:.82rem;">{{ $c->vendor->company_name ?? '—' }}</div>
-                        <div style="font-size:.6rem;color:#94a3b8;">{{ $c->vendor->vendor_code ?? '' }}</div>
-                    </td>
-                    <td style="font-family:monospace;font-size:.78rem;">{{ $c->grn->grn_number ?? '—' }}</td>
-                    <td style="font-family:monospace;">{{ $sym }}{{ number_format(floatval($c->inward_charge), 2) }}
-                        <div style="font-size:.58rem;color:#94a3b8;">{{ $c->inward_cartons }} cartons</div>
-                    </td>
-                    <td style="font-family:monospace;">{{ $sym }}{{ number_format(floatval($c->storage_charge), 2) }}
-                        <div style="font-size:.58rem;color:#94a3b8;">{{ number_format(floatval($c->storage_cft), 1) }} CFT</div>
-                    </td>
-                    <td style="font-family:monospace;">{{ $sym }}{{ number_format(floatval($c->fulfillment_charge), 2) }}
-                        <div style="font-size:.58rem;color:#94a3b8;">{{ $c->fulfillment_orders_small }}s + {{ $c->fulfillment_orders_large }}l</div>
-                    </td>
-                    <td style="font-family:monospace;">{{ $sym }}{{ number_format(floatval($c->pick_pack_charge), 2) }}
-                        <div style="font-size:.58rem;color:#94a3b8;">{{ $c->pick_pack_units }} units</div>
-                    </td>
-                    <td style="font-family:monospace;">{{ $sym }}{{ number_format(floatval($c->material_cost), 2) }}</td>
-                    <td style="font-family:monospace;font-weight:800;color:#dc2626;">{{ $sym }}{{ number_format(floatval($c->total_charges), 2) }}</td>
-                    <td>
-                        @php $sc = ['calculated'=>'badge-warning','approved'=>'badge-success','deducted'=>'badge-info','disputed'=>'badge-danger']; @endphp
-                        <span class="badge {{ $sc[$c->status] ?? 'badge-gray' }}">{{ ucfirst($c->status) }}</span>
-                    </td>
-
-                </tr>
-                @empty
-                <tr>
-                    <td colspan="10" style="text-align:center;padding:3rem;color:#94a3b8;">No charges for this period. Click "Run Charges" to calculate.</td>
-                </tr>
-                @endforelse
-            </tbody>
-        </table>
-    </div>
 </div>
 @endsection

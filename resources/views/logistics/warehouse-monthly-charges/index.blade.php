@@ -28,7 +28,7 @@
     </div>
 </div>
 
-@php $chargeHeads = ['unloading'=>'Unloading','putaway'=>'Putaway','storage'=>'Storage','order_processing'=>'Order Processing','pick_pack'=>'Pick & Pack','return_inward'=>'Return Inward']; @endphp
+@php $chargeHeads = ['unloading'=>'Unloading','putaway'=>'Putaway','storage'=>'Storage','order_processing'=>'Order Processing','pick_pack'=>'Pick & Pack','return_inward'=>'Return Inward','transfer' => 'Inventory Transfer']; @endphp
 
 @forelse($charges as $c)
 @php $hasInvoice = $c->actual_total !== null; $snap = $c->calculation_snapshot ?? []; $strategy = $snap['strategy'] ?? 'unknown'; @endphp
@@ -245,6 +245,28 @@
             <tr style="border-bottom:2px solid #e2e8f0;">
                 <td colspan="3" style="padding:.3rem .6rem;color:#64748b;">{{ $ri['return_qty']??0 }} units x {{ $activeCurrencySymbol }}{{ number_format($ri['rate']??0,2) }}/unit</td>
                 <td style="text-align:right;font-family:monospace;font-weight:700;">{{ $activeCurrencySymbol }}{{ number_format($ri['charge']??0,2) }}</td>
+            </tr>
+
+            {{-- Inventory Transfer --}}
+            <tr style="background:#e8ecf1;">
+                <td colspan="4" style="padding:.4rem .6rem;font-weight:700;"><i class="fas fa-exchange-alt" style="margin-right:.3rem;color:#e8a838;"></i> Inventory Transfer (monthly)</td>
+            </tr>
+            @php $tf = $details['transfer'] ?? []; @endphp
+            @forelse($tf['batches'] ?? [] as $batch)
+            <tr style="border-bottom:1px solid #f1f5f9;">
+                <td style="padding:.3rem .6rem;font-family:monospace;font-size:.72rem;">{{ $batch['reference_no'] ?? $batch['batch_id'] }}</td>
+                <td style="color:#64748b;">{{ $batch['date'] }} · {{ $batch['items'] }} items</td>
+                <td style="color:#64748b;">{{ $batch['qty'] }} units — Transport: {{ $activeCurrencySymbol }}{{ number_format($batch['transportation'], 2) }} + P&P: {{ $activeCurrencySymbol }}{{ number_format($batch['pick_pack'], 2) }}</td>
+                <td style="text-align:right;font-family:monospace;font-weight:600;">{{ $activeCurrencySymbol }}{{ number_format($batch['total'], 2) }}</td>
+            </tr>
+            @empty
+            <tr>
+                <td colspan="4" style="padding:.3rem .6rem;color:#94a3b8;">No transfers this period.</td>
+            </tr>
+            @endforelse
+            <tr style="border-bottom:2px solid #e2e8f0;">
+                <td colspan="3" style="padding:.3rem .6rem;text-align:right;font-weight:700;">Subtotal:</td>
+                <td style="text-align:right;font-family:monospace;font-weight:700;">{{ $activeCurrencySymbol }}{{ number_format($tf['charge'] ?? 0, 2) }}</td>
             </tr>
 
             <tr style="background:#1e3a5f;">

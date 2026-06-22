@@ -18,7 +18,7 @@
                 <div>
                     <div style="font-size:1rem;font-weight:800;color:#0d1b2a;font-family:monospace;">{{ $c->consignment_number }}</div>
                     <div style="font-size:.72rem;color:#64748b;margin-top:.15rem;">
-                        @php $flags = ['US' => '🇺🇸',    'EU' => '🇪🇺',    'NL' => 'nl'  'UK' => '🇬🇧',]; @endphp
+                        @php $flags = ['US' => '🇺🇸',  'EU' => '🇪🇺', 'NL' => '🇳🇱', 'UK' => '🇬🇧']; @endphp
                         {{ $flags[$c->destination_country] ?? '' }} {{ $c->destination_country }} · {{ $c->company_code }}
                         · Live Sheet: {{ $c->liveSheet->live_sheet_number ?? '—' }}
                     </div>
@@ -86,7 +86,7 @@
                             </div>
                             <div style="margin-bottom:.3rem;">
                                 <label style="font-size:.6rem;font-weight:700;color:#64748b;">Report File *</label>
-                                <input type="file" name="report" required accept=".pdf,.jpg,.jpeg,.png,.doc,.docx,.xlsx" style="font-size:.68rem;width:100%;">
+                                <input type="file" name="report" required accept=".pdf,.jpg,.jpeg,.png,.doc,.docx,.xlsx,.ppt,.pptx" style="font-size:.68rem;width:100%;">
                             </div>
                             <button type="submit" class="btn btn-primary btn-sm" style="width:100%;font-size:.7rem;"><i class="fas fa-upload"></i> Upload</button>
                         </form>
@@ -104,7 +104,10 @@
                                 @if($c->commercial_invoice_upload_date){{ $c->commercial_invoice_upload_date->format('d M Y') }}@endif
                                 @if($c->commercialInvoiceUploader) · by {{ $c->commercialInvoiceUploader->name }}@endif
                             </div>
-                            <a href="{{ asset('storage/app/public/' . $c->commercial_invoice_file) }}" target="_blank" style="font-size:.65rem;color:#1e40af;"><i class="fas fa-download"></i> Download</a>
+                            <a href="{{ \App\Helpers\FileStorage::url($c->commercial_invoice_file) }}" target="_blank">
+                                    <span style="font-size:.65rem;color:#1e40af;"><i class="fas fa-download"></i> Download</span>
+                            </a>
+                                    <!-- <a href="{{ asset('storage/app/public/' . $c->commercial_invoice_file) }}" target="_blank" style="font-size:.65rem;color:#1e40af;"><i class="fas fa-download"></i> Download</a> -->
                         </div>
                     @else
                         <div style="font-size:.68rem;color:#dc2626;margin-bottom:.3rem;"><i class="fas fa-exclamation-circle"></i> Not uploaded — required</div>
