@@ -94,11 +94,11 @@ $weightUnit = $isUS ? 'LBS' : 'KG';
                         if (str_starts_with($item->thumbnail, 'http')) {
                         $imgUrl = $item->thumbnail;
                         } elseif (str_starts_with($item->thumbnail, 'offer-thumbnails/') || str_starts_with($item->thumbnail, 'offer-')) {
-                        $imgUrl = asset('storage/' . $item->thumbnail);
+                        $imgUrl = \App\Helpers\FileStorage::url($item->thumbnail);
                         } elseif (str_starts_with($item->thumbnail, 'storage/')) {
-                        $imgUrl = asset($item->thumbnail);
+                        $imgUrl = \App\Helpers\FileStorage::url($item->thumbnail);
                         } else {
-                        $imgUrl = asset('storage/' . $item->thumbnail);
+                        $imgUrl = \App\Helpers\FileStorage::url($item->thumbnail);
                         }
                         }
                         @endphp

@@ -52,7 +52,7 @@
                                 @if($r->result)<span class="badge" style="font-size:.55rem;padding:.08rem .25rem;background:{{ $r->result==='passed'?'#dcfce7':($r->result==='fail'?'#fef2f2':'#fefce8') }};color:{{ $r->result==='passed'?'#166534':($r->result==='fail'?'#991b1b':'#854d0e') }};">{{ ucfirst($r->result) }}</span>@endif
                                 <div style="font-size:.6rem;color:#94a3b8;">{{ Str::limit($r->report_name, 20) }}</div>
                             </div>
-                            <a href="{{ asset('storage/app/public/' . $r->report_file) }}" target="_blank" style="font-size:.6rem;color:#7c3aed;"><i class="fas fa-download"></i></a>
+                            <a href="{{ \App\Helpers\FileStorage::url($r->report_file) }}" target="_blank" style="font-size:.6rem;color:#7c3aed;"><i class="fas fa-download"></i></a>
                         </div>
                         @endforeach
                     @else
@@ -142,7 +142,7 @@
                                 @if($c->packing_list_upload_date){{ $c->packing_list_upload_date->format('d M Y') }}@endif
                                 @if($c->packingListUploader) · by {{ $c->packingListUploader->name }}@endif
                             </div>
-                            <a href="{{ asset('storage/app/public/' . $c->packing_list_file) }}" target="_blank" style="font-size:.65rem;color:#854d0e;"><i class="fas fa-download"></i> Download</a>
+                            <a href="{{ \App\Helpers\FileStorage::url( $c->packing_list_file) }}" target="_blank" style="font-size:.65rem;color:#854d0e;"><i class="fas fa-download"></i> Download</a>
                         </div>
                     @else
                         <div style="font-size:.68rem;color:#dc2626;margin-bottom:.3rem;"><i class="fas fa-exclamation-circle"></i> Not uploaded — required</div>
@@ -178,7 +178,7 @@
                             <div style="font-size:.7rem;font-weight:700;color:#16a34a;"><i class="fas fa-check-circle"></i> Uploaded</div>
                             <div style="font-size:.68rem;color:#475569;">#{{ $c->shipping_bill_number }}</div>
                             <div style="font-size:.62rem;color:#94a3b8;">@if($c->shipping_bill_upload_date){{ $c->shipping_bill_upload_date->format('d M Y') }}@endif @if($c->shippingBillUploader) · {{ $c->shippingBillUploader->name }}@endif</div>
-                            <a href="{{ asset('storage/app/public/' . $c->shipping_bill_file) }}" target="_blank" style="font-size:.65rem;color:#c2410c;"><i class="fas fa-download"></i> Download</a>
+                            <a href="{{ \App\Helpers\FileStorage::url($c->shipping_bill_file) }}" target="_blank" style="font-size:.65rem;color:#c2410c;"><i class="fas fa-download"></i> Download</a>
                         </div>
                     @else
                         <div style="font-size:.68rem;color:#94a3b8;margin-bottom:.3rem;">Not uploaded</div>
@@ -203,7 +203,7 @@
                             <div style="font-size:.7rem;font-weight:700;color:#16a34a;"><i class="fas fa-check-circle"></i> Uploaded</div>
                             <div style="font-size:.68rem;color:#475569;">#{{ $c->measurement_number }}</div>
                             <div style="font-size:.62rem;color:#94a3b8;">@if($c->measurement_upload_date){{ $c->measurement_upload_date->format('d M Y') }}@endif @if($c->measurementUploader) · {{ $c->measurementUploader->name }}@endif</div>
-                            <a href="{{ asset('storage/app/public/' . $c->measurement_file) }}" target="_blank" style="font-size:.65rem;color:#166534;"><i class="fas fa-download"></i> Download</a>
+                            <a href="{{ \App\Helpers\FileStorage::url($c->measurement_file) }}" target="_blank" style="font-size:.65rem;color:#166534;"><i class="fas fa-download"></i> Download</a>
                         </div>
                     @else
                         <div style="font-size:.68rem;color:#94a3b8;margin-bottom:.3rem;">Not uploaded</div>
@@ -228,7 +228,7 @@
                             <div style="font-size:.7rem;font-weight:700;color:#16a34a;"><i class="fas fa-check-circle"></i> Uploaded</div>
                             <div style="font-size:.68rem;color:#475569;">#{{ $c->hbl_number }}</div>
                             <div style="font-size:.62rem;color:#94a3b8;">@if($c->hbl_upload_date){{ $c->hbl_upload_date->format('d M Y') }}@endif @if($c->hblUploader) · {{ $c->hblUploader->name }}@endif</div>
-                            <a href="{{ asset('storage/app/public/' . $c->hbl_file) }}" target="_blank" style="font-size:.65rem;color:#1e40af;"><i class="fas fa-download"></i> Download</a>
+                            <a href="{{ \App\Helpers\FileStorage::url($c->hbl_file) }}" target="_blank" style="font-size:.65rem;color:#1e40af;"><i class="fas fa-download"></i> Download</a>
                         </div>
                     @else
                         <div style="font-size:.68rem;color:#94a3b8;margin-bottom:.3rem;">Not uploaded</div>
@@ -253,7 +253,7 @@
                             <div style="font-size:.7rem;font-weight:700;color:#16a34a;"><i class="fas fa-check-circle"></i> Uploaded</div>
                             <div style="font-size:.68rem;color:#475569;">{{ $c->other_doc_name }}</div>
                             <div style="font-size:.62rem;color:#94a3b8;">@if($c->other_doc_upload_date){{ $c->other_doc_upload_date->format('d M Y') }}@endif @if($c->otherDocUploader) · {{ $c->otherDocUploader->name }}@endif</div>
-                            <a href="{{ asset('storage/app/public/' . $c->other_doc_file) }}" target="_blank" style="font-size:.65rem;color:#475569;"><i class="fas fa-download"></i> Download</a>
+                            <a href="{{ \App\Helpers\FileStorage::url($c->other_doc_file) }}" target="_blank" style="font-size:.65rem;color:#475569;"><i class="fas fa-download"></i> Download</a>
                         </div>
                     @else
                         <div style="font-size:.68rem;color:#94a3b8;margin-bottom:.3rem;">Not uploaded</div>

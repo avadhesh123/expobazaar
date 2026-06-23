@@ -115,7 +115,7 @@
                 {{-- Image --}}
                 <div style="height:130px;background:#f8fafc;display:flex;align-items:center;justify-content:center;overflow:hidden;">
                     @if($item->thumbnail)
-                        @php $imgUrl = str_starts_with($item->thumbnail, 'http') ? $item->thumbnail : asset('storage/app/public/' . $item->thumbnail); @endphp
+                        @php $imgUrl = str_starts_with($item->thumbnail, 'http') ? $item->thumbnail : \App\Helpers\FileStorage::url($item->thumbnail); @endphp
                         <a href="{{ $imgUrl }}" target="_blank">
                             <img src="{{ $imgUrl }}" style="width:100%;height:130px;object-fit:cover;" onerror="this.parentElement.parentElement.innerHTML='<i class=\'fas fa-image\' style=\'color:#d1d5db;font-size:2rem;\'></i>'">
                         </a>
@@ -194,7 +194,7 @@
                     <td style="font-weight:600;font-size:.82rem;">{{ $item->product_name }}</td>
                     <td style="text-align:center;">
                         @if($item->thumbnail)
-                            @php $imgUrl = str_starts_with($item->thumbnail, 'http') ? $item->thumbnail : asset('storage/app/public/' . $item->thumbnail); @endphp
+                            @php $imgUrl = str_starts_with($item->thumbnail, 'http') ? $item->thumbnail : \App\Helpers\FileStorage::url($item->thumbnail); @endphp
                             <a href="{{ $imgUrl }}" target="_blank"><img src="{{ $imgUrl }}" style="width:40px;height:40px;object-fit:cover;border-radius:4px;" onerror="this.style.display='none'"></a>
                         @else
                             <i class="fas fa-image" style="color:#d1d5db;"></i>

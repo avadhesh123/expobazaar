@@ -50,7 +50,7 @@ $signedContractDoc = $documents->where('document_type', 'signed_contract')->firs
                         <label style="font-size:.78rem;font-weight:600;color:#374151;display:block;margin-bottom:.3rem;">GST Certificate <span style="color:#dc2626;">*</span></label>
                         @if(!$isLocked)<input type="file" name="documents[gst_certificate]" accept=".pdf,.jpg,.jpeg,.png" style="font-size:.78rem;">@endif
                         @php $gstDoc = $documents->where('document_type', 'gst_certificate')->first(); @endphp
-                        @if($gstDoc)<div style="font-size:.68rem;color:#16a34a;margin-top:.2rem;"><i class="fas fa-check-circle"></i> <a href="{{ asset('storage/app/public/'.$gstDoc->file_path) }}" target="_blank" style="color:#16a34a;">Uploaded</a></div>@endif
+                        @if($gstDoc)<div style="font-size:.68rem;color:#16a34a;margin-top:.2rem;"><i class="fas fa-check-circle"></i> <a href="{{ \App\Helpers\FileStorage::url($gstDoc->file_path) }}" target="_blank" style="color:#16a34a;">Uploaded</a></div>@endif
                         @error('documents.gst_certificate')<span style="font-size:.72rem;color:#dc2626;">{{ $message }}</span>@enderror
                     </div>
                 </div>

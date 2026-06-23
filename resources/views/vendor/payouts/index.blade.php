@@ -103,7 +103,7 @@
                         @if($p->payment_date)<div style="font-size:.62rem;color:#94a3b8;">{{ $p->payment_date->format('d M Y') }}</div>@endif
                     </td>
                     <td>
-                        @if($p->vendor_invoice_file)<a href="{{ asset('storage/' . $p->vendor_invoice_file) }}" target="_blank" style="font-size:.72rem;color:#166534;"><i class="fas fa-file-pdf"></i> {{ $p->vendor_invoice_number }}</a>
+                        @if($p->vendor_invoice_file)<a href="{{ \App\Helpers\FileStorage::url($p->vendor_invoice_file) }}" target="_blank" style="font-size:.72rem;color:#166534;"><i class="fas fa-file-pdf"></i> {{ $p->vendor_invoice_number }}</a>
                         @elseif($p->status === 'paid')<span style="font-size:.72rem;color:#e8a838;"><i class="fas fa-clock"></i> Upload Required</span>
                         @else<span style="color:#94a3b8;font-size:.72rem;">—</span>@endif
                     </td>
@@ -112,7 +112,7 @@
                         <button type="button" class="btn btn-primary btn-sm" onclick="document.getElementById('inv{{ $p->id }}').style.display=document.getElementById('inv{{ $p->id }}').style.display==='none'?'table-row':'none'"><i class="fas fa-upload"></i> Invoice</button>
                         @endif
                         @if($p->payment_advice_file ?? false)
-                        <a href="{{ asset('storage/' . $p->payment_advice_file) }}" class="btn btn-outline btn-sm" target="_blank"><i class="fas fa-file-download"></i></a>
+                        <a href="{{ \App\Helpers\FileStorage::url($p->payment_advice_file) }}" class="btn btn-outline btn-sm" target="_blank"><i class="fas fa-file-download"></i></a>
                         @endif
                     </td>
                 </tr>

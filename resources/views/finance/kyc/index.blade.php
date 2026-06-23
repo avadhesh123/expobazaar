@@ -38,7 +38,7 @@
                     <div style="font-size:.72rem;font-weight:700;color:#64748b;text-transform:uppercase;margin-bottom:.4rem;">Uploaded Documents ({{ $vendor->documents->count() }})</div>
                     <div style="display:flex;flex-wrap:wrap;gap:.35rem;">
                         @forelse($vendor->documents as $doc)
-                        <a href="{{ asset('storage/app/public/' . $doc->file_path) }}" target="_blank" style="display:inline-flex;align-items:center;gap:.3rem;padding:.3rem .55rem;background:#f1f5f9;border-radius:6px;font-size:.7rem;color:#1e40af;text-decoration:none;"><i class="fas fa-file-pdf"></i> {{ ucfirst(str_replace('_',' ',$doc->document_type)) }}</a>
+                        <a href="{{ \App\Helpers\FileStorage::url($doc->file_path) }}" target="_blank" style="display:inline-flex;align-items:center;gap:.3rem;padding:.3rem .55rem;background:#f1f5f9;border-radius:6px;font-size:.7rem;color:#1e40af;text-decoration:none;"><i class="fas fa-file-pdf"></i> {{ ucfirst(str_replace('_',' ',$doc->document_type)) }}</a>
                         @empty
                         <span style="font-size:.72rem;color:#94a3b8;">No documents uploaded.</span>
                         @endforelse

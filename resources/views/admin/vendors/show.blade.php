@@ -106,7 +106,7 @@
                     <div style="font-size:.65rem;color:#94a3b8;">{{ ucfirst($doc->document_type) }} · {{ $doc->created_at?->format('d M Y') }}</div>
                 </div>
                 @if($doc->file_path)
-                <a href="{{ asset('storage/' . $doc->file_path) }}" target="_blank" class="btn btn-outline btn-sm" title="View"><i class="fas fa-eye"></i></a>
+                <a href="{{ \App\Helpers\FileStorage::url($doc->file_path) }}" target="_blank" class="btn btn-outline btn-sm" title="View"><i class="fas fa-eye"></i></a>
                 @endif
             </div>
             @endforeach

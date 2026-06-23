@@ -116,7 +116,7 @@
                     @if($report->report_file)
                     <div>
                         <div style="font-size:.6rem;color:#94a3b8;font-weight:600;text-transform:uppercase;margin-bottom:.1rem;">Report PDF</div>
-                        <a href="{{ asset('storage/' . $report->report_file) }}" target="_blank" style="display:inline-flex;align-items:center;gap:.3rem;padding:.25rem .6rem;background:#eff6ff;border:1px solid #bfdbfe;border-radius:6px;color:#1e40af;text-decoration:none;font-size:.75rem;">
+                        <a href="{{ \App\Helpers\FileStorage::url($report->report_file) }}" target="_blank" style="display:inline-flex;align-items:center;gap:.3rem;padding:.25rem .6rem;background:#eff6ff;border:1px solid #bfdbfe;border-radius:6px;color:#1e40af;text-decoration:none;font-size:.75rem;">
                             <i class="fas fa-file-pdf"></i> Download
                         </a>
                     </div>
@@ -126,7 +126,7 @@
                     @if($report->commercial_invoice_file)
                     <div>
                         <div style="font-size:.6rem;color:#94a3b8;font-weight:600;text-transform:uppercase;margin-bottom:.1rem;">Commercial Invoice</div>
-                        <a href="{{ Storage::url($report->commercial_invoice_file) }}" target="_blank" style="display:inline-flex;align-items:center;gap:.3rem;padding:.25rem .6rem;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:6px;color:#166534;text-decoration:none;font-size:.75rem;">
+                        <a href="{{ \App\Helpers\FileStorage::url($report->commercial_invoice_file) }}" target="_blank" style="display:inline-flex;align-items:center;gap:.3rem;padding:.25rem .6rem;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:6px;color:#166534;text-decoration:none;font-size:.75rem;">
                             <i class="fas fa-file-invoice"></i> {{ Str::limit($report->commercial_invoice_name ?? 'View', 20) }}
                         </a>
                     </div>
@@ -136,7 +136,7 @@
                     @if($report->packing_list_file)
                     <div>
                         <div style="font-size:.6rem;color:#94a3b8;font-weight:600;text-transform:uppercase;margin-bottom:.1rem;">Packing List</div>
-                        <a href="{{ Storage::url($report->packing_list_file) }}" target="_blank" style="display:inline-flex;align-items:center;gap:.3rem;padding:.25rem .6rem;background:#fefce8;border:1px solid #fde68a;border-radius:6px;color:#854d0e;text-decoration:none;font-size:.75rem;">
+                        <a href="{{ \App\Helpers\FileStorage::url($report->packing_list_file) }}" target="_blank" style="display:inline-flex;align-items:center;gap:.3rem;padding:.25rem .6rem;background:#fefce8;border:1px solid #fde68a;border-radius:6px;color:#854d0e;text-decoration:none;font-size:.75rem;">
                             <i class="fas fa-list-ol"></i> {{ Str::limit($report->packing_list_name ?? 'View', 20) }}
                         </a>
                     </div>

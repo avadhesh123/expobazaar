@@ -49,7 +49,7 @@ $types = [
 
             <div style="display:flex;align-items:center;gap:.5rem;padding:.4rem .5rem;background:#f8fafc;border-radius:6px;margin-bottom:.3rem;font-size:.78rem;">
                 <i class="fas fa-file-pdf" style="color:{{ $color }};"></i>
-                <a href="{{ asset('storage/app/public/' . $r->report_file) }}" target="_blank" style="flex:1;color:#0d1b2a;font-weight:500;">{{ Str::limit($r->report_name, 30) }}</a>
+                <a href="{{ \App\Helpers\FileStorage::url($r->report_file) }}" target="_blank" style="flex:1;color:#0d1b2a;font-weight:500;">{{ Str::limit($r->report_name, 30) }}</a>
                 <span class="badge {{ ['passed'=>'badge-success','failed'=>'badge-danger','conditional'=>'badge-warning'][$r->result] ?? 'badge-gray' }}" style="font-size:.6rem;">{{ ucfirst($r->result) }}</span>
                 <form method="POST" action="{{ route('sourcing.inspections.delete', $r) }}" onsubmit="return confirm('Delete?')">@csrf @method('DELETE')<button type="submit" style="background:none;border:none;color:#dc2626;cursor:pointer;font-size:.7rem;"><i class="fas fa-times"></i></button></form>
             </div>
