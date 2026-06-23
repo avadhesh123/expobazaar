@@ -7,8 +7,6 @@ use App\Models\{Vendor, OfferSheet, OfferSheetItem, Consignment, LiveSheet, Live
 use App\Services\{DashboardService, VendorService, SourcingService};
 use Illuminate\Http\Request;
 
-use App\Helpers\FileStorage;
-
 class SourcingController extends Controller
 {
     public function __construct(
@@ -550,7 +548,7 @@ class SourcingController extends Controller
             'consignment_id'     => $consignment->id,
             'product_id'         => $request->product_id,
             'inspection_type'    => $validated['inspection_type'],
-            'report_file'        => $request->file('report_file')->store($folder, FileStorage::disk()),
+            'report_file'        => $request->file('report_file')->store($folder, 'public'),
             'report_name'        => $request->file('report_file')->getClientOriginalName(),
             'result'             => $validated['result'] ?? null,
             'remarks'            => $validated['remarks'] ?? null,
@@ -560,13 +558,13 @@ class SourcingController extends Controller
 
         // Commercial Invoice
         if ($request->hasFile('commercial_invoice')) {
-            $data['commercial_invoice_file'] = $request->file('commercial_invoice')->store($folder, FileStorage::disk());
+            $data['commercial_invoice_file'] = $request->file('commercial_invoice')->store($folder, 'public');
             $data['commercial_invoice_name'] = $request->file('commercial_invoice')->getClientOriginalName();
         }
 
         // Packing List
         if ($request->hasFile('packing_list')) {
-            $data['packing_list_file'] = $request->file('packing_list')->store($folder, FileStorage::disk());
+            $data['packing_list_file'] = $request->file('packing_list')->store($folder, 'public');
             $data['packing_list_name'] = $request->file('packing_list')->getClientOriginalName();
         }
 
@@ -590,7 +588,7 @@ class SourcingController extends Controller
     public function deleteInspection(\App\Models\InspectionReport $inspection)
     {
         $consignment = $inspection->consignment;
-        \FileStorage::storage()->delete($inspection->report_file);
+        \Storage::disk('public')->delete($inspection->report_file);
         $inspection->delete();
         return redirect()->route('sourcing.inspections.upload', $consignment)->with('success', 'Inspection report deleted.');
     }
@@ -677,7 +675,7 @@ class SourcingController extends Controller
         // Store file in public/barcodes directory
         //  $storedPath = $file->storeAs('barcodes', $filename, 'public');
 
-        $path = $file->store('barcodes/' . $userName, FileStorage::disk());
+        $path = $file->store('barcodes/' . $userName, 'public');
 
         try {
             if ($extension === 'csv') {

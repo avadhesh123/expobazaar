@@ -57,7 +57,7 @@ $types = [
             {{-- Commercial Invoice --}}
             @if($r->commercial_invoice_file)
             <div style="display:flex;align-items:center;gap:.5rem;padding:.4rem .5rem;background:#f8fafc;border-radius:6px;margin-bottom:.3rem;font-size:.78rem;">
-                <a href="{{ \App\Helpers\FileStorage::url($r->commercial_invoice_file) }}" target="_blank" style="flex:1;color:#0d1b2a;font-weight:500;">
+                <a href="{{ Storage::url($r->commercial_invoice_file) }}" target="_blank" style="flex:1;color:#0d1b2a;font-weight:500;">
                     {{ Str::limit($r->commercial_invoice_name, 30) }}
                 </a>
                 <span class="badge {{ ['passed'=>'badge-success','failed'=>'badge-danger','conditional'=>'badge-warning'][$r->result] ?? 'badge-gray' }}" style="font-size:.6rem;">Commercial Invoice</span>
@@ -74,7 +74,7 @@ $types = [
             {{-- Packing List --}}
             @if($r->packing_list_file)
             <div style="display:flex;align-items:center;gap:.5rem;padding:.4rem .5rem;background:#f8fafc;border-radius:6px;margin-bottom:.3rem;font-size:.78rem;">
-                 <a href="{{ \App\Helpers\FileStorage::url($r->packing_list_file) }}" target="_blank" style="flex:1;color:#0d1b2a;font-weight:500;">
+                 <a href="{{ Storage::url($r->packing_list_file) }}" target="_blank" style="flex:1;color:#0d1b2a;font-weight:500;">
                     {{ Str::limit($r->packing_list_name, 30) }}
                 </a>
                 <span class="badge {{ ['passed'=>'badge-success','failed'=>'badge-danger','conditional'=>'badge-warning'][$r->result] ?? 'badge-gray' }}" style="font-size:.6rem;">Packing List</span>

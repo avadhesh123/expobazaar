@@ -63,7 +63,7 @@
             </div>
         </div>
         @if($grn->remarks)<div style="margin-top:.75rem;padding:.5rem .75rem;background:#fefce8;border-radius:6px;font-size:.82rem;color:#854d0e;"><i class="fas fa-sticky-note" style="margin-right:.3rem;"></i> {{ $grn->remarks }}</div>@endif
-        @if($grn->grn_file)<div style="margin-top:.5rem;"><a href="{{ \App\Helpers\FileStorage::url($grn->grn_file) }}" class="btn btn-outline btn-sm" target="_blank"><i class="fas fa-file-download"></i> Download GRN Document</a></div>@endif
+        @if($grn->grn_file)<div style="margin-top:.5rem;"><a href="{{ asset('storage/' . $grn->grn_file) }}" class="btn btn-outline btn-sm" target="_blank"><i class="fas fa-file-download"></i> Download GRN Document</a></div>@endif
     </div>
 </div>
 

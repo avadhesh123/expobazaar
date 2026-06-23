@@ -12,7 +12,8 @@ class HodController extends Controller
     public function __construct(
         protected DashboardService $dashboardService,
         protected PricingService $pricingService
-    ) {}
+    ) {
+    }
 
     public function dashboard(Request $request)
     {
@@ -45,7 +46,7 @@ class HodController extends Controller
         $asns = Asn::with('shipment', 'platformPricing')
             // ->when(!$user->isAdmin() && !empty($userCompanyCodes), fn($q) => $q->whereIn('company_code', $userCompanyCodes))
             ->where('company_code', $activeCompany)
-            ->when($request->status, fn($q, $v) => $q->where('status', $v))
+            ->when($request->status, fn ($q, $v) => $q->where('status', $v))
             // ->when($request->company_code, fn($q, $v) => $q->where('company_code', $v))
             ->latest()->paginate(20);
 
@@ -69,15 +70,19 @@ class HodController extends Controller
             ->orderBy('name')->get();
         $existingPricing = PlatformPricing::where('asn_id', $asn->id)
             ->get()
-            ->keyBy(fn($p) => $p->product_id);
+            ->keyBy(fn ($p) => $p->product_id);
 
         // Collect all items from all consignments in this ASN's shipment
         $items = collect();
         if ($asn->shipment && $asn->shipment->consignments) {
             foreach ($asn->shipment->consignments as $consignment) {
-                if (!$consignment->liveSheet) continue;
+                if (!$consignment->liveSheet) {
+                    continue;
+                }
                 foreach ($consignment->liveSheet->items as $lsItem) {
-                    if (!$lsItem->product) continue;
+                    if (!$lsItem->product) {
+                        continue;
+                    }
                     $d = $lsItem->product_details ?? [];
 
                     $finalFob = (float)($d['final_fob'] ?? $lsItem->unit_price);
@@ -88,7 +93,7 @@ class HodController extends Controller
                     // $dutyAmt = $finalFob * ($dutyPercent / 100);
                     // $freightAmt = $freightFactor * $finalFob;
                     // $landedCost = $finalFob + $dutyAmt + $freightAmt;
-                    // $wsp = $landedCost * $wspFactor;    
+                    // $wsp = $landedCost * $wspFactor;
 
                     $dutyAmt = $finalFob * ($dutyPercent / 100);
                     $freightAmt = $finalFob * ($freightFactor / 100);
@@ -121,7 +126,7 @@ class HodController extends Controller
         $channelFactors = [];
         // print_r($channels->toArray());exit;
         foreach ($channels as $ch) {
-            //   print_r($ch->toArray()); 
+            //   print_r($ch->toArray());
             $channelFactors[$ch->id] = [
                 'name'   => $ch->name,
                 'factor' => $ch->pricing_factors ?? 1.0,
@@ -141,8 +146,18 @@ class HodController extends Controller
             'pricing.*.last_mile'                   => 'nullable|numeric|min:0',
         ]);
 
-        $this->pricingService->preparePricing($asn, $request->pricing, auth()->user());
-        return redirect()->route('hod.asn-list')->with('success', 'Pricing is submitted.');
+        //$this->pricingService->preparePricing($asn, $request->pricing, auth()->user());
+
+
+        try {
+            $pricings = $this->pricingService->preparePricing($asn, $request->pricing, auth()->user());
+
+            return redirect()->route('hod.asn-list')->with('success', 'Pricing is submitted.');
+            // return back()->with('success', count($pricings) . ' pricing(s) saved.');
+        } catch (\Exception $e) {
+            return back()->with('error', $e->getMessage())->withInput();
+        }
+
     }
 
     public function pricingStatus(Asn $asn)
@@ -160,7 +175,7 @@ class HodController extends Controller
             ->orderBy('product_id')
             ->orderBy('sales_channel_id')
             ->get()
-            ->keyBy(fn($p) => $p->product_id . '-' . $p->sales_channel_id); // Better key
+            ->keyBy(fn ($p) => $p->product_id . '-' . $p->sales_channel_id); // Better key
 
         return view('hod.pricing.status', compact('asn', 'existingPricing', 'channels'));
     }
@@ -231,10 +246,14 @@ class HodController extends Controller
         // Data rows
         if ($asn->shipment && $asn->shipment->consignments) {
             foreach ($asn->shipment->consignments as $consignment) {
-                if (!$consignment->liveSheet) continue;
+                if (!$consignment->liveSheet) {
+                    continue;
+                }
 
                 foreach ($consignment->liveSheet->items as $lsItem) {
-                    if (!$lsItem->product) continue;
+                    if (!$lsItem->product) {
+                        continue;
+                    }
 
                     $d = $lsItem->product_details ?? [];
 
@@ -284,9 +303,13 @@ class HodController extends Controller
 
         if ($asn->shipment && $asn->shipment->consignments) {
             foreach ($asn->shipment->consignments as $consignment) {
-                if (!$consignment->liveSheet) continue;
+                if (!$consignment->liveSheet) {
+                    continue;
+                }
                 foreach ($consignment->liveSheet->items as $lsItem) {
-                    if (!$lsItem->product) continue;
+                    if (!$lsItem->product) {
+                        continue;
+                    }
                     $d = $lsItem->product_details ?? [];
 
                     $finalFob = (float)($d['final_fob'] ?? $lsItem->unit_price);
@@ -351,9 +374,13 @@ class HodController extends Controller
             $skuMap = [];
             if ($asn->shipment && $asn->shipment->consignments) {
                 foreach ($asn->shipment->consignments as $consignment) {
-                    if (!$consignment->liveSheet) continue;
+                    if (!$consignment->liveSheet) {
+                        continue;
+                    }
                     foreach ($consignment->liveSheet->items as $lsItem) {
-                        if (!$lsItem->product) continue;
+                        if (!$lsItem->product) {
+                            continue;
+                        }
                         $skuMap[strtolower(trim($lsItem->product->sku))] = [
                             'product_id' => $lsItem->product_id,
                             'wsp' => floatval(($lsItem->product_details ?? [])['wsp'] ?? 0),
@@ -363,7 +390,7 @@ class HodController extends Controller
                 }
             }
 
-            // Parse CSV       
+            // Parse CSV
 
             //   $filePath = $file->store('temp', 'local');
             //   $fullPath = storage_path('app/' . $filePath);
@@ -392,7 +419,7 @@ class HodController extends Controller
             }
 
             // Find SKU and Last Mile column indexes from header
-            $header = array_map(fn($h) => strtolower(trim($h ?? '')), $rows[0]);
+            $header = array_map(fn ($h) => strtolower(trim($h ?? '')), $rows[0]);
             $skuCol = null;
             $inwardCol = null;
             $fulfillmentCol = null;
@@ -400,12 +427,24 @@ class HodController extends Controller
             $adBudgetCol = null;
             $lmCol = null;
             foreach ($header as $i => $h) {
-                if (in_array($h, ['sku', 'vendor sku', 'product sku'])) $skuCol = $i;
-                if (in_array($h, ['inward', 'cost price'])) $inwardCol = $i;
-                if (in_array($h, ['fulfillment'])) $fulfillmentCol = $i;
-                if (in_array($h, ['storage'])) $storageCol = $i;
-                if (in_array($h, ['ad budget', 'advertising'])) $adBudgetCol = $i;
-                if (in_array($h, ['last mile', 'last_mile', 'lastmile'])) $lmCol = $i;
+                if (in_array($h, ['sku', 'vendor sku', 'product sku'])) {
+                    $skuCol = $i;
+                }
+                if (in_array($h, ['inward', 'cost price'])) {
+                    $inwardCol = $i;
+                }
+                if (in_array($h, ['fulfillment'])) {
+                    $fulfillmentCol = $i;
+                }
+                if (in_array($h, ['storage'])) {
+                    $storageCol = $i;
+                }
+                if (in_array($h, ['ad budget', 'advertising'])) {
+                    $adBudgetCol = $i;
+                }
+                if (in_array($h, ['last mile', 'last_mile', 'lastmile'])) {
+                    $lmCol = $i;
+                }
             }
 
             if ($skuCol === null) {
@@ -545,8 +584,12 @@ class HodController extends Controller
             ], "Last Mile CSV uploaded: {$updated} updated, {$skipped} skipped");
 
             $msg = "{$updated} SKU(s) updated.";
-            if ($skipped > 0) $msg .= " {$skipped} skipped (no match or empty).";
-            if (!empty($errors)) $msg .= " Errors: " . implode('; ', array_slice($errors, 0, 3));
+            if ($skipped > 0) {
+                $msg .= " {$skipped} skipped (no match or empty).";
+            }
+            if (!empty($errors)) {
+                $msg .= " Errors: " . implode('; ', array_slice($errors, 0, 3));
+            }
 
             return back()->with($updated > 0 ? 'success' : 'error', $msg);
         } catch (\Exception $e) {

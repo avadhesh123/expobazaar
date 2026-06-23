@@ -178,7 +178,7 @@
                     <!-- <div style="display:flex;gap:.4rem;flex-wrap:wrap;">
                         @foreach($docs as $key => $doc)
                         @php $m = $doc['meta']; @endphp
-                        <a href="{{ \App\Helpers\FileStorage::url($doc['file']) }}" target="_blank" style="display:inline-flex;align-items:center;gap:.25rem;padding:.2rem .5rem;background:{{ $m['bg'] }};border:1px solid {{ $m['border'] }};border-radius:5px;color:{{ $m['color'] }};text-decoration:none;font-size:.68rem;white-space:nowrap;">
+                        <a href="{{ Storage::url($doc['file']) }}" target="_blank" style="display:inline-flex;align-items:center;gap:.25rem;padding:.2rem .5rem;background:{{ $m['bg'] }};border:1px solid {{ $m['border'] }};border-radius:5px;color:{{ $m['color'] }};text-decoration:none;font-size:.68rem;white-space:nowrap;">
                             <i class="fas {{ $m['icon'] }}"></i>
                             <span style="font-weight:600;">{{ $m['label'] }}</span>
                             @if($doc['number'])<span style="font-family:monospace;font-size:.62rem;">#{{ $doc['number'] }}</span>@endif
@@ -193,7 +193,7 @@
                         <div style="display:flex;align-items:center;gap:.3rem;font-size:.62rem;color:#64748b;">
                             <!-- <span style="font-weight:600;color:{{ $m['color'] }};">{{ $m['label'] }}:</span> -->
                             <!-- @if($doc['number'])<span style="font-family:monospace;">#{{ $doc['number'] }}</span>@endif -->
-                            <a href="{{ \App\Helpers\FileStorage::url($doc['file']) }}" target="_blank" style="display:inline-flex;align-items:center;gap:.25rem;padding:.2rem .5rem;background:{{ $m['bg'] }};border:1px solid {{ $m['border'] }};border-radius:5px;color:{{ $m['color'] }};text-decoration:none;font-size:.68rem;white-space:nowrap;">
+                            <a href="{{ Storage::url($doc['file']) }}" target="_blank" style="display:inline-flex;align-items:center;gap:.25rem;padding:.2rem .5rem;background:{{ $m['bg'] }};border:1px solid {{ $m['border'] }};border-radius:5px;color:{{ $m['color'] }};text-decoration:none;font-size:.68rem;white-space:nowrap;">
                             <i class="fas fa-download"></i>
                             <span style="font-weight:600;">{{ $m['label'] }}</span>
                             @if($doc['number'])<span style="font-family:monospace;font-size:.62rem;">#{{ $doc['number'] }}</span>@endif

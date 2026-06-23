@@ -27,6 +27,9 @@ Route::get('/', fn() => redirect()->route('auth.login'));
 // Default 'login' route alias — Laravel's built-in middleware expects this name
 Route::redirect('/login', '/auth/login')->name('login');
 
+
+ 
+
 Route::middleware(['auth'])->group(function () {
 
     // ADMIN

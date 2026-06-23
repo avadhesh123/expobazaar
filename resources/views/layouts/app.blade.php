@@ -9,7 +9,7 @@
     <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" rel="stylesheet">
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-    <style>
+     <style>
         :root {
             --eb-primary: #1e3a5f;
             --eb-secondary: #e8a838;
@@ -68,19 +68,25 @@
         }
 
         .sidebar .logo {
-            padding: 1.4rem 1.25rem;
+            /* padding: 1.4rem 1.25rem; */
+            padding-top: 0.5rem;
             border-bottom: 1px solid rgba(255, 255, 255, .08);
+            text-align: center;
         }
 
         .sidebar .logo h1 {
             color: #fff;
-            font-size: 1.2rem;
-            font-weight: 800;
+            font-size: 1rem;
+            font-weight: 700;
             letter-spacing: -.02em;
         }
 
-        .sidebar .logo span {
-            color: #e8a838;
+        .sidebar .logo img {
+            width: 100%;
+            max-width: 170px;
+            height: 67.74px;
+            border-radius: 5px;
+            margin-left: 37.5px;
         }
 
         .sidebar .section-title {
@@ -389,6 +395,12 @@
             grid-template-columns: 1fr 1fr 1fr;
             gap: 1.25rem;
         }
+        .flag {
+    font-family: "Noto Color Emoji", "Segoe UI Emoji", "Apple Color Emoji" !important;
+            font-size: 1.25rem;
+            vertical-align: middle;
+            line-height: 1;
+        }
 
         @media(max-width:1024px) {
 
@@ -409,6 +421,9 @@
         .sidebar .listing-panel{
             /* display: none; */
         }
+        .sidebar .home{
+             font-size:18px;    color:#dbeafe; 
+        }
     </style>
          <script src="https://code.jquery.com/jquery-3.6.4.min.js"></script>
 
@@ -417,8 +432,9 @@
 <body>
     <aside class="sidebar">
         <div class="logo">
-            <h1>Expo<span>Bazaar</span></h1>
-            <p style="color:#4a5e6f;font-size:.65rem;margin-top:.15rem;">Supply Chain Management</p>
+            <img src="{{ asset('images/logo.svg') }}" alt="ExpoBazaar" loading="eager"  style="background: #fff; padding: 5px; border-radius: 5px;"sizes="200px" data-animate="fadein"> 
+            <h1>EB Partner Home</h1>
+            <!-- <p style="color:#4a5e6f;font-size:.65rem;margin-top:.15rem;">Supply Chain Management</p> -->
         </div>
         @auth
         @php
@@ -555,18 +571,21 @@
     <div class="main-content">
         <div class="topbar">
             <h2 style="font-size:1.05rem;font-weight:700;color:#0d1b2a;">@yield('page-title', 'Dashboard')</h2>
-            <div style="display:flex;align-items:center;gap:1.25rem;">
+            <div style="display:flex;align-items:center;gap:1.25rem;" >
                 {{-- Active Company Badge --}}
                 @if(auth()->check())
                 @php
-                    $activeCode = session('active_company');
-                    $companyLabels = [ '2100' => '🇺🇸 ExpoBazaar USA', '2200' => '🇪🇺 ExpoBazaar EU', '2400' => '🇬🇧 ExpoBazaar UK' ];
-                    $companyColors = ['2100' => '#1e40af', '2200' => '#16a34a','2400' => '#dc2626'];          
-
+                   $activeCode = session('active_company');
+                   $companyLabels = [ 
+    '2100' => '<img src="https://flagcdn.com/w40/us.png" width="25" alt="United States" style="float: left;margin-right: 2px;"> ExpoBazaar USA', 
+    '2200' => '<img src="https://flagcdn.com/w40/eu.png" width="25" alt="European Union" style="float: left;margin-right: 2px;"> ExpoBazaar EU', 
+    '2400' => '<img src="https://flagcdn.com/w40/gb.png" width="25" alt="United Kingdom" style="float: left;margin-right: 2px;"> ExpoBazaar UK' 
+    ];
+                   $companyColors = ['2100' => '#1e40af', '2200' => '#16a34a','2400' => '#dc2626'];  
                 @endphp
                 <div style="padding:.25rem .6rem;background:{{ $companyColors[$activeCode] ?? '#64748b' }}15;border:1px solid {{ $companyColors[$activeCode] ?? '#64748b' }}40;border-radius:6px;font-size:.72rem;font-weight:700;color:{{ $companyColors[$activeCode] ?? '#64748b' }};">
-                    {{ $companyLabels[$activeCode] ?? '🌐 All' }} · {{ $activeCode ?? '' }}                    
-                </div>
+                    {!! $companyLabels[$activeCode] ?? '🌐 All' !!} · {{ $activeCode ?? '' }} 
+                </div> 
                 @endif
                 {{-- Notifications --}}
                 <a href="{{ route('notifications') }}" class="notification-bell" style="color:#64748b;"><i class="fas fa-bell" style="font-size:1.05rem;"></i>@if(auth()->check() && auth()->user()->unreadNotifications->count()>0)<span class="count">{{ auth()->user()->unreadNotifications->count() }}</span>@endif</a>
@@ -604,7 +623,7 @@
                             @foreach($userCodes as $code)
                             <a href="?switch_company={{ $code }}" style="display:flex;align-items:center;gap:.5rem;padding:.35rem .5rem;border-radius:6px;text-decoration:none;font-size:.78rem;color:#334155;{{ $activeCode === $code ? 'background:#eff6ff;font-weight:700;color:#1e40af;' : '' }}" onmouseover="this.style.background='#f1f5f9'" onmouseout="this.style.background='{{ $activeCode === $code ? '#eff6ff' : 'transparent' }}'">
                                 <span style="width:8px;height:8px;border-radius:50%;background:{{ $companyColors[$code] ?? '#94a3b8' }};{{ $activeCode === $code ? 'box-shadow:0 0 0 3px '.$companyColors[$code].'30;' : '' }}"></span>
-                                {{ $companyNames[$code] ?? $code }}
+                                {!! $companyLabels[$code] ?? $code !!}
                                 @if($activeCode === $code)<i class="fas fa-check" style="margin-left:auto;font-size:.6rem;color:#1e40af;"></i>@endif
                             </a>
                             @endforeach

@@ -8,8 +8,6 @@ use App\Services\{DashboardService, LogisticsService};
 use Illuminate\Http\Request;
 use App\Models\ActivityLog;
 
-use App\Helpers\FileStorage;
-
 class LogisticsController extends Controller
 {
     public function __construct(
@@ -114,7 +112,7 @@ class LogisticsController extends Controller
         ]);
 
         try {
-            $path = $request->file('entry_summary_file')->store("shipments/{$shipment->id}/documents", FileStorage::disk());
+            $path = $request->file('entry_summary_file')->store("shipments/{$shipment->id}/documents", 'public');
             $shipment->update([
                 'entry_summary_file'        => $path,
                 'entry_summary_number'      => $request->entry_summary_number,
@@ -234,7 +232,7 @@ class LogisticsController extends Controller
         $data = $request->only(['warehouse_id', 'receipt_date', 'remarks']);
 
         if ($request->hasFile('grn_file')) {
-            $data['grn_file'] = $request->file('grn_file')->store("grn/{$shipment->id}", FileStorage::disk());
+            $data['grn_file'] = $request->file('grn_file')->store("grn/{$shipment->id}", 'public');
         }
 
         try {
@@ -958,7 +956,7 @@ class LogisticsController extends Controller
             'status' => 'invoiced',
         ];
         if ($request->hasFile('invoice_file')) {
-            $data['invoice_file'] = $request->file('invoice_file')->store("warehouse-invoices/{$charge->warehouse_id}", FileStorage::disk());
+            $data['invoice_file'] = $request->file('invoice_file')->store("warehouse-invoices/{$charge->warehouse_id}", 'public');
         }
         $charge->update($data);
         ActivityLog::log('invoiced', 'warehouse_charge', $charge, null, $data, "Invoice #{$request->invoice_number} uploaded");
@@ -1149,7 +1147,7 @@ class LogisticsController extends Controller
     public function uploadChargeReceipt(Request $request, WarehouseCharge $charge)
     {
         $request->validate(['receipt' => 'required|file|max:10240', 'actual_amount' => 'required|numeric']);
-        $path = $request->file('receipt')->store('warehouse-receipts', FileStorage::disk());
+        $path = $request->file('receipt')->store('warehouse-receipts', 'public');
         $charge->update([
             'receipt_file' => $path,
             'actual_amount' => $request->actual_amount,
@@ -1399,7 +1397,7 @@ class LogisticsController extends Controller
         $data['remarks'] = $request->remarks;
 
         if ($request->hasFile('invoice_file')) {
-            $data['invoice_file'] = $request->file('invoice_file')->store("warehouse-invoices/{$warehouseMonthlyCharge->warehouse_id}", FileStorage::disk());
+            $data['invoice_file'] = $request->file('invoice_file')->store("warehouse-invoices/{$warehouseMonthlyCharge->warehouse_id}", 'public');
         }
 
         $warehouseMonthlyCharge->update($data);
@@ -1545,7 +1543,7 @@ class LogisticsController extends Controller
         $data['remarks'] = $request->remarks;
 
         if ($request->hasFile('invoice_file')) {
-            $data['invoice_file'] = $request->file('invoice_file')->store("warehouse-invoices/{$warehouseMonthlyCharge->warehouse_id}", FileStorage::disk());
+            $data['invoice_file'] = $request->file('invoice_file')->store("warehouse-invoices/{$warehouseMonthlyCharge->warehouse_id}", 'public');
         }
 
         $warehouseMonthlyCharge->update($data);

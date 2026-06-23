@@ -1116,7 +1116,7 @@ class VendorController extends Controller
 
             return response()->json([
                 'success' => true,
-                'image_url' => FileFileStorage::url($path),
+                'image_url' => FileStorage::url($path),
                 'message' => 'Image uploaded successfully.'
             ]);
         }

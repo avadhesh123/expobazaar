@@ -176,7 +176,7 @@
             @if($evidence)
                 @php
                     $ext = strtolower(pathinfo($evidence, PATHINFO_EXTENSION));
-                    $url = \App\Helpers\FileStorage::url($evidence);
+                    $url = asset('storage/' . $evidence);
                 @endphp
                 @if(in_array($ext, ['jpg', 'jpeg', 'png']))
                     <a href="{{ $url }}" target="_blank" style="display:block;">

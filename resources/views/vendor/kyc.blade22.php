@@ -243,7 +243,7 @@ $signedContractDoc = $documents->where('document_type', 'signed_contract')->firs
                             @if($signedContractDoc)
                             <div style="font-size:.75rem;color:#166534;margin-bottom:.35rem;">
                                 Signed contract uploaded.
-                                <a href="{{ \App\Helpers\FileStorage::url($signedContractDoc->file_path) }}" target="_blank"
+                                <a href="{{ asset('storage/app/public/' . $signedContractDoc->file_path) }}" target="_blank"
                                     style="color:#1e40af;font-weight:700;text-decoration:none;margin-left:.3rem;">
                                     <i class="fas fa-eye" style="margin-right:.15rem;"></i> View uploaded file
                                 </a>
@@ -269,7 +269,7 @@ $signedContractDoc = $documents->where('document_type', 'signed_contract')->firs
                     <label style="font-size:.78rem;font-weight:700;color:#991b1b;display:block;margin-bottom:.3rem;">Cancelled Cheque / Bank Proof <span style="color:#dc2626;">* (Mandatory)</span></label>
                     @if(!$isLocked)<input type="file" name="documents[cancelled_cheque]" accept=".pdf,.jpg,.jpeg,.png" style="font-size:.78rem;">@endif
                     @php $chequeDoc = $documents->where('document_type', 'cancelled_cheque')->first(); @endphp
-                    @if($chequeDoc)<div style="font-size:.68rem;color:#16a34a;margin-top:.2rem;"><i class="fas fa-check-circle"></i> <a href="{{ \App\Helpers\FileStorage::url($chequeDoc->file_path) }}" target="_blank" style="color:#16a34a;">Uploaded</a></div>@endif
+                    @if($chequeDoc)<div style="font-size:.68rem;color:#16a34a;margin-top:.2rem;"><i class="fas fa-check-circle"></i> <a href="{{ asset('storage/app/public/'.$chequeDoc->file_path) }}" target="_blank" style="color:#16a34a;">Uploaded</a></div>@endif
                     @error('documents.cancelled_cheque')<span style="font-size:.72rem;color:#dc2626;">{{ $message }}</span>@enderror
                 </div>
 
@@ -291,7 +291,7 @@ $signedContractDoc = $documents->where('document_type', 'signed_contract')->firs
                         <div style="display:flex;align-items:center;gap:.4rem;padding:.4rem .6rem;background:#f8fafc;border-radius:6px;border:1px solid #e8ecf1;">
                             <i class="fas {{ str_contains($doc->file_path ?? '', '.pdf') ? 'fa-file-pdf' : 'fa-file-image' }}" style="color:#94a3b8;"></i>
                             <div style="flex:1;min-width:0;">
-                                <a href="{{ \App\Helpers\FileStorage::url($doc->file_path) }}" target="_blank" style="font-size:.75rem;color:#1e40af;text-decoration:none;display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ $doc->document_name }}</a>
+                                <a href="{{ asset('storage/app/public/' . $doc->file_path) }}" target="_blank" style="font-size:.75rem;color:#1e40af;text-decoration:none;display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ $doc->document_name }}</a>
                                 <div style="font-size:.62rem;color:#94a3b8;">{{ ucfirst(str_replace('_',' ',$doc->document_type ?? 'other')) }}</div>
                             </div>
                         </div>

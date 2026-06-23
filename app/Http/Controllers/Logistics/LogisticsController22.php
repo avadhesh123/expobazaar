@@ -7,7 +7,6 @@ use App\Models\{OrderItem, Shipment, Consignment, Vendor, Grn, GrnItem, Inventor
 use App\Services\{DashboardService, LogisticsService};
 use Illuminate\Http\Request;
 use App\Models\ActivityLog;
-
 use App\Helpers\FileStorage;
 
 class LogisticsController extends Controller

@@ -59,8 +59,8 @@
 <body>
     <div class="login-left">
         <div class="logo-area">
-            <!-- <img src="{{ asset('images/logo.png') }}" alt="ExpoBazaar"> -->
-             <img src="//www.expobazaar.com/cdn/shop/files/OPTIMIZE_BACKUP_PRODUCT_eb-logo-mob.svg?v=1749987098&amp;width=400" alt="Expobazaar" width="200" height="77.47747747747748" loading="eager"  style="background: #fff; padding: 5px; border-radius: 5px;"sizes="200px" data-animate="fadein"> 
+            <img src="{{ asset('images/logo.svg') }}" alt="ExpoBazaar" loading="eager"  style="background: #fff; padding: 5px; border-radius: 5px;" sizes="200px" data-animate="fadein" width="200" height="77.47747747747748">
+             <!-- <img src="//www.expobazaar.com/cdn/shop/files/OPTIMIZE_BACKUP_PRODUCT_eb-logo-mob.svg?v=1749987098&amp;width=400" alt="Expobazaar" width="200" height="77.47747747747748" loading="eager"  style="background: #fff; padding: 5px; border-radius: 5px;"sizes="200px" data-animate="fadein">  -->
 
         </div>
         <h1>Welcome to <span class="highlight">EB Partner Home</span></h1>
@@ -82,7 +82,7 @@
     </div>
     <div class="login-right">
         <div class="login-box">
-            <div class="logo-mobile"><img src="{{ asset('images/logo.jpeg') }}" alt="ExpoBazaar"></div>
+            <div class="logo-mobile"><img src="{{ asset('images/logo.svg') }}" alt="ExpoBazaar"></div>
             <h2>Welcome back</h2>
             <p class="sub">Sign in with your email. We'll send you a one-time password.</p>
             @if($errors->any())<div class="error">{{ $errors->first() }}</div>@endif

@@ -8,7 +8,7 @@
         *{margin:0;padding:0;box-sizing:border-box;}body{font-family:'Plus Jakarta Sans',sans-serif;min-height:100vh;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,#0d1b2a,#1e3a5f);}
         .box{background:#fff;border-radius:16px;padding:2.5rem;width:100%;max-width:400px;box-shadow:0 20px 60px rgba(0,0,0,.2);}
         .box .logo{text-align:center;margin-bottom:1.5rem;}
-        .box .logo img{width:225px; height:170px;}
+        .box .logo img{width:200px; height:77.77px;}
         .box h2{font-size:1.4rem;font-weight:800;color:#0d1b2a;margin-bottom:.3rem;}.box p{font-size:.82rem;color:#64748b;margin-bottom:1.5rem;}
         label{display:block;font-size:.78rem;font-weight:600;color:#374151;margin-bottom:.35rem;}
         input{width:100%;padding:.7rem .9rem;border:1.5px solid #d1d5db;border-radius:10px;font-size:1.2rem;letter-spacing:.5em;text-align:center;font-family:inherit;}
@@ -20,7 +20,9 @@
 </head>
 <body>
     <div class="box">
-        <div class="logo"><img src="{{ asset('images/logo.jpeg') }}" alt="ExpoBazaar"></div>
+        <div class="logo">
+            <img src="{{ asset('images/logo.svg') }}" alt="ExpoBazaar" loading="eager"  style="background: #fff; padding: 5px; border-radius: 5px;"sizes="200px" data-animate="fadein">
+    </div>
         <h2>Enter OTP</h2>
         <p>We've sent a 6-digit code to <strong>{{ $email }}</strong></p>
         @if(session('debug_otp'))

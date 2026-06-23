@@ -101,7 +101,7 @@
                     <input type="checkbox" name="selected_items[]" value="{{ $item->id }}"
                         class="item-check tile-check" data-tile-id="tile-{{ $item->id }}"
                         {{ $item->is_selected ? 'checked' : '' }}
-                        onchange="syncTableCheck(this); highlightTile(this)"
+                        onchange="updateCount(); syncTableCheck(this); highlightTile(this)"
                         style="width:18px;height:18px;accent-color:#16a34a;cursor:pointer;">
                 </label>
                 @else
@@ -176,7 +176,7 @@
                     <td style="text-align:center;">
                         <input type="checkbox" class="item-check table-check" data-item-id="{{ $item->id }}" value="{{ $item->id }}"
                             {{ $item->is_selected ? 'checked' : '' }}
-                            onchange="syncTileCheck(this); highlightTableRow(this)"
+                            onchange="updateCount(); syncTileCheck(this); highlightTableRow(this)"
                             style="width:16px;height:16px;accent-color:#16a34a;">
                         {{-- Note: actual form values submitted via tile checkboxes (name="selected_items[]") --}}
                     </td>
@@ -254,16 +254,19 @@ function switchView(view) {
         btnTile.style.background  = '#f8fafc';
         btnTile.style.color       = '#64748b';
     }
-    updateCount();
 }
 
 // ── Select all / clear ───────────────────────────────────────────────────────
 function toggleAll(checked) {
-    document.querySelectorAll('.tile-check, .table-check').forEach(function(cb) {
+    // Toggle all checkboxes in BOTH views
+    document.querySelectorAll('.item-check').forEach(function(cb) {
         cb.checked = checked;
+        if (cb.classList.contains('tile-check')) {
+            highlightTile(cb);
+        } else {
+            highlightTableRow(cb);
+        }
     });
-    document.querySelectorAll('.tile-check').forEach(highlightTile);
-    document.querySelectorAll('.table-check').forEach(highlightTableRow);
     var master = document.getElementById('masterCheck');
     if (master) master.checked = checked;
     updateCount();
@@ -277,7 +280,6 @@ function syncTableCheck(tileCb) {
         tableCb.checked = tileCb.checked;
         highlightTableRow(tableCb);
     }
-    updateCount();
 }
 
 // ── Sync table → tile ────────────────────────────────────────────────────────
@@ -288,7 +290,6 @@ function syncTileCheck(tableCb) {
         tileCb.checked = tableCb.checked;
         highlightTile(tileCb);
     }
-    updateCount();
 }
 
 // ── Visual feedback — tile ───────────────────────────────────────────────────
@@ -303,52 +304,29 @@ function highlightTile(cb) {
 function highlightTableRow(cb) {
     var row = document.getElementById('tablerow-' + cb.getAttribute('data-item-id'));
     if (!row) return;
-    row.style.background = cb.checked ? '#f0fdf4' : '';
-    row.style.borderLeft = cb.checked ? '3px solid #16a34a' : '';
+    row.style.background   = cb.checked ? '#f0fdf4' : '';
+    row.style.borderLeft   = cb.checked ? '3px solid #16a34a' : '';
 }
 
-// ── Selected count (single source of truth) ──────────────────────────────────
+// ── Selected count ───────────────────────────────────────────────────────────
 function updateCount() {
-    // Always count from tile checkboxes — they have name="selected_items[]"
-    // But first ensure they're synced with table checkboxes
-    var count = 0;
-
-    if (currentView === 'table') {
-        // In table view: count table checks, sync to tiles
-        count = document.querySelectorAll('.table-check:checked').length;
-    } else {
-        // In tile view: count tile checks
-        count = document.querySelectorAll('.tile-check:checked').length;
+    // Count only tile checkboxes (authoritative — they hold name="selected_items[]")
+    var count = document.querySelectorAll('.tile-check:checked').length;
+    var tableCount = document.querySelectorAll('.table-check:checked').length;
+    if(tableCount !== count) {
+        count = tableCount;
     }
-
     var el = document.getElementById('selectedCount');
     if (el) el.textContent = count;
 
-    // Sync master checkbox
-    var totalVisible = currentView === 'table'
-        ? document.querySelectorAll('.table-check').length
-        : document.querySelectorAll('.tile-check').length;
-
+ 
+     // Sync master checkbox state
+    var total  = document.querySelectorAll('.tile-check').length;
     var master = document.getElementById('masterCheck');
     if (master) {
-        master.indeterminate = count > 0 && count < totalVisible;
-        master.checked = count === totalVisible && totalVisible > 0;
+        master.indeterminate = count > 0 && count < total;
+        master.checked = count === total && total > 0;
     }
-}
-
-// ── Form submit: ensure tile checkboxes match table (tiles are form authority) ─
-var selectionForm = document.getElementById('selectionForm');
-if (selectionForm) {
-    selectionForm.addEventListener('submit', function() {
-        // Sync all table selections → tile checkboxes before submit
-        document.querySelectorAll('.table-check').forEach(function(tableCb) {
-            var itemId = tableCb.getAttribute('data-item-id');
-            var tileCb = document.querySelector('.tile-check[value="' + itemId + '"]');
-            if (tileCb) {
-                tileCb.checked = tableCb.checked;
-            }
-        });
-    });
 }
 
 // ── Init ─────────────────────────────────────────────────────────────────────

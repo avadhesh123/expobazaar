@@ -7,7 +7,6 @@ use App\Models\{FinanceReceivable, Chargeback, VendorPayout, Vendor, Order, Sale
 use App\Services\{DashboardService, FinanceService, VendorService};
 use Illuminate\Http\Request;
 use App\Services\VendorPayoutService;
-use App\Helpers\FileStorage;
 
 use function PHPUnit\Framework\isArray;
 
@@ -251,7 +250,7 @@ class FinanceController extends Controller
                     $evidencePath = null;
                     if ($request->hasFile("chargeback_items.{$idx}.evidence")) {
                         $evidencePath = $request->file("chargeback_items.{$idx}.evidence")
-                            ->store("chargebacks/{$order->id}/items", FileStorage::disk());
+                            ->store("chargebacks/{$order->id}/items", 'public');
                     }
 
                     $itemsData[] = [
@@ -485,7 +484,7 @@ class FinanceController extends Controller
             'invoice'               => 'required|file|mimes:pdf|max:10240',
             'vendor_invoice_number' => 'required|string|max:100',
         ]);
-        $path = $request->file('invoice')->store('vendor-invoices/' . $payout->vendor_id, FileStorage::disk());
+        $path = $request->file('invoice')->store('vendor-invoices/' . $payout->vendor_id, 'public');
         $payout->update([
             'vendor_invoice_file'   => $path,
             'vendor_invoice_number' => $request->vendor_invoice_number,

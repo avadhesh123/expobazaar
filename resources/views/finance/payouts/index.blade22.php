@@ -128,7 +128,7 @@
                     </td>
                     <td>
                         @if($p->vendor_invoice_file)
-                        <a href="{{ \App\Helpers\FileStorage::url($p->vendor_invoice_file) }}" target="_blank" style="font-size:.72rem;color:#166534;"><i class="fas fa-file-pdf"></i> {{ $p->vendor_invoice_number }}</a>
+                        <a href="{{ asset('storage/' . $p->vendor_invoice_file) }}" target="_blank" style="font-size:.72rem;color:#166534;"><i class="fas fa-file-pdf"></i> {{ $p->vendor_invoice_number }}</a>
                         @elseif($p->status === 'paid')
                         <span style="font-size:.72rem;color:#e8a838;"><i class="fas fa-clock"></i> Pending</span>
                         @else
