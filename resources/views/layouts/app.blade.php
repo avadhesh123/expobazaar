@@ -577,9 +577,9 @@
                 @php
                    $activeCode = session('active_company');
                    $companyLabels = [ 
-    '2100' => '<img src="https://flagcdn.com/w40/us.png" width="25" alt="United States" style="float: left;margin-right: 2px;"> ExpoBazaar USA', 
-    '2200' => '<img src="https://flagcdn.com/w40/eu.png" width="25" alt="European Union" style="float: left;margin-right: 2px;"> ExpoBazaar EU', 
-    '2400' => '<img src="https://flagcdn.com/w40/gb.png" width="25" alt="United Kingdom" style="float: left;margin-right: 2px;"> ExpoBazaar UK' 
+    '2100' => '<img src="https://flagcdn.com/w40/us.png" width="25" alt="United States" style="float: left;margin-right: 2px;margin-top: 2px;"> ExpoBazaar USA', 
+    '2200' => '<img src="https://flagcdn.com/w40/eu.png" width="25" alt="European Union" style="float: left;margin-right: 2px;margin-top: 2px;"> ExpoBazaar EU', 
+    '2400' => '<img src="https://flagcdn.com/w40/gb.png" width="25" alt="United Kingdom" style="float: left;margin-right: 2px;margin-top: 2px;"> ExpoBazaar UK' 
     ];
                    $companyColors = ['2100' => '#1e40af', '2200' => '#16a34a','2400' => '#dc2626'];  
                 @endphp

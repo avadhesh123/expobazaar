@@ -142,11 +142,24 @@ $weightUnit = $isUS ? 'LBS' : 'KG';
                     $finalQty = floatval($d['final_qty'] ?? $item->quantity ?? 0);
                     $totalCartons = $qtyMaster > 0 ? ceil($finalQty / $qtyMaster) : 0;
                     $cbmShipment = $totalCartons * $masterCbm;
-                    $finalFob = floatval($d['final_fob'] ?? $item->unit_price ?? 0);
-                    $dutyAmt = $finalFob * (floatval($d['duty_percent'] ?? 0) / 100);
-                    $freightAmt = floatval($d['freight_factor'] ?? 0) * $finalFob;
+                 
+                   // $finalFob = floatval($d['final_fob'] ?? $item->unit_price ?? 0);
+                   // $dutyAmt = $finalFob * (floatval($d['duty_percent'] ?? 0) / 100);
+                  //  $freightAmt = floatval($d['freight_factor'] ?? 0) * $finalFob;
+                 //   $landedCost = $finalFob + $dutyAmt + $freightAmt;
+                  //  $wsp = $landedCost * floatval($d['wsp_factor'] ?? 0); 
+
+                                        
+                    $finalFob = (float)($d['final_fob'] ?? $item->unit_price);
+                    $dutyPercent = (float)($d['duty_percent'] ?? 0);
+                    $freightFactor = (float)($d['freight_factor'] ?? 0);
+                    $wspFactor = (float)($d['wsp_factor'] ?? 0);
+
+                    $dutyAmt = $finalFob * ($dutyPercent / 100);
+                    $freightAmt = $finalFob * ($freightFactor / 100);
                     $landedCost = $finalFob + $dutyAmt + $freightAmt;
-                    $wsp = $landedCost * floatval($d['wsp_factor'] ?? 0);
+                    $wsp = $landedCost * $wspFactor;
+
                     @endphp
                     <tr>
                         <td style="text-align:center;position:sticky;left:0;background:#fff;z-index:1;">{{ $d['sno'] ?? $loop->iteration }}</td>

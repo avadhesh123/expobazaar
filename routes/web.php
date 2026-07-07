@@ -339,7 +339,10 @@ Route::middleware(['auth'])->group(function () {
         Route::get('live-sheets', [FinanceController::class, 'liveSheets'])->name('live-sheets');
         Route::get('live-sheets/{liveSheet}', [FinanceController::class, 'showLiveSheet'])->name('live-sheets.show');
         Route::post('live-sheets/{liveSheet}/sap', [FinanceController::class, 'updateSapCodes'])->name('live-sheets.sap');
-        Route::post('live-sheets/{liveSheet}/commission',   [FinanceController::class, 'updateCommission'])->name('live-sheets.commission.update');
+        // Route::post('live-sheets/{liveSheet}/commission',   [FinanceController::class, 'updateCommission'])->name('live-sheets.commission.update');
+
+        Route::post('live-sheets/{liveSheet}/commission', [FinanceController::class, 'storeCommissionRevision'])->name('live-sheets.commission.store');
+        Route::delete('commission-revision/{revision}', [FinanceController::class, 'deleteCommissionRevision'])->name('commission-revision.delete');
 
         // NEW — Download pre-filled SAP Excel template
         Route::get('live-sheets/{liveSheet}/sap-download', [FinanceController::class, 'downloadSapTemplate'])

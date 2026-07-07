@@ -17,7 +17,8 @@ class FinanceController extends Controller
         protected DashboardService $dashboardService,
         protected FinanceService $financeService,
         protected VendorService $vendorService
-    ) {}
+    ) {
+    }
 
     public function dashboard(Request $request)
     {
@@ -72,10 +73,10 @@ class FinanceController extends Controller
 
         $receivables = FinanceReceivable::with('order.salesChannel', 'order.chargebacks')
             ->where('company_code', $activeCode)
-            ->when($request->status, fn($q, $v) => $q->where('payment_status', $v))
-            ->when($request->channel, fn($q, $v) => $q->where('sales_channel_id', $v))
-            ->when($request->payment_status, fn($q, $v) => $q->where('payment_status', $v))
-            ->when($request->search, fn($q, $v) => $q->whereHas('order', fn($q) => $q->where('order_number', 'like', "%{$v}%")))
+            ->when($request->status, fn ($q, $v) => $q->where('payment_status', $v))
+            ->when($request->channel, fn ($q, $v) => $q->where('sales_channel_id', $v))
+            ->when($request->payment_status, fn ($q, $v) => $q->where('payment_status', $v))
+            ->when($request->search, fn ($q, $v) => $q->whereHas('order', fn ($q) => $q->where('order_number', 'like', "%{$v}%")))
             ->orderByRaw("FIELD(payment_status, 'unpaid', 'partial', 'paid') ASC")
             ->latest()
             ->paginate(30);
@@ -89,17 +90,17 @@ class FinanceController extends Controller
         // Fix: $summary was never built — blade was crashing with "Undefined variable: summary"
         $summary = [
             'unpaid_count'     => FinanceReceivable::where('payment_status', 'unpaid')
-                ->when($activeCode, fn($q, $v) => $q->where('company_code', $v))->count(),
+                ->when($activeCode, fn ($q, $v) => $q->where('company_code', $v))->count(),
             'unpaid_total'     => FinanceReceivable::where('payment_status', 'unpaid')
-                ->when($activeCode, fn($q, $v) => $q->where('company_code', $v))->sum('net_receivable'),
+                ->when($activeCode, fn ($q, $v) => $q->where('company_code', $v))->sum('net_receivable'),
             'partial_count'    => FinanceReceivable::where('payment_status', 'partial')
-                ->when($activeCode, fn($q, $v) => $q->where('company_code', $v))->count(),
+                ->when($activeCode, fn ($q, $v) => $q->where('company_code', $v))->count(),
             'partial_total'    => FinanceReceivable::where('payment_status', 'partial')
-                ->when($activeCode, fn($q, $v) => $q->where('company_code', $v))->sum('net_receivable'),
-            'total_deductions' => FinanceReceivable::when($activeCode, fn($q, $v) => $q->where('company_code', $v))->sum('platform_commission')
-                + FinanceReceivable::when($activeCode, fn($q, $v) => $q->where('company_code', $v))->sum('platform_fee')
-                + FinanceReceivable::when($activeCode, fn($q, $v) => $q->where('company_code', $v))->sum('insurance_charge')
-                + FinanceReceivable::when($activeCode, fn($q, $v) => $q->where('company_code', $v))->sum('other_deductions'),
+                ->when($activeCode, fn ($q, $v) => $q->where('company_code', $v))->sum('net_receivable'),
+            'total_deductions' => FinanceReceivable::when($activeCode, fn ($q, $v) => $q->where('company_code', $v))->sum('platform_commission')
+                + FinanceReceivable::when($activeCode, fn ($q, $v) => $q->where('company_code', $v))->sum('platform_fee')
+                + FinanceReceivable::when($activeCode, fn ($q, $v) => $q->where('company_code', $v))->sum('insurance_charge')
+                + FinanceReceivable::when($activeCode, fn ($q, $v) => $q->where('company_code', $v))->sum('other_deductions'),
         ];
 
         return view('finance.receivables.index', compact('receivables', 'channels', 'summary'));
@@ -155,7 +156,7 @@ class FinanceController extends Controller
                 return response()->json(['found' => false]);
             }
 
-            $items = $order->items->map(fn($item) => [
+            $items = $order->items->map(fn ($item) => [
                 'id'         => $item->id,
                 'sku'        => $item->sku ?? $item->product->sku ?? '—',
                 'name'       => $item->product->name ?? '—',
@@ -185,15 +186,15 @@ class FinanceController extends Controller
         }
 
         $chargebacks = Chargeback::with('order.salesChannel', 'vendor')
-            ->when($request->status, fn($q, $v) => $q->where('status', $v))
-            ->when($activeCode, fn($q, $v) => $q->whereHas('order', fn($oq) => $oq->where('company_code', $v)))
+            ->when($request->status, fn ($q, $v) => $q->where('status', $v))
+            ->when($activeCode, fn ($q, $v) => $q->whereHas('order', fn ($oq) => $oq->where('company_code', $v)))
             ->latest()->paginate(20);
 
         $stats = [
-            'total'        => Chargeback::when($activeCode, fn($q, $v) => $q->where('company_code', $v))->count(),
-            'pending'      => Chargeback::when($activeCode, fn($q, $v) => $q->where('company_code', $v))->where('status', 'pending_confirmation')->count(),
-            'confirmed'    => Chargeback::when($activeCode, fn($q, $v) => $q->where('company_code', $v))->where('status', 'confirmed')->count(),
-            'total_amount' => Chargeback::when($activeCode, fn($q, $v) => $q->where('company_code', $v))->where('status', 'confirmed')->sum('amount'),
+            'total'        => Chargeback::when($activeCode, fn ($q, $v) => $q->where('company_code', $v))->count(),
+            'pending'      => Chargeback::when($activeCode, fn ($q, $v) => $q->where('company_code', $v))->where('status', 'pending_confirmation')->count(),
+            'confirmed'    => Chargeback::when($activeCode, fn ($q, $v) => $q->where('company_code', $v))->where('status', 'confirmed')->count(),
+            'total_amount' => Chargeback::when($activeCode, fn ($q, $v) => $q->where('company_code', $v))->where('status', 'confirmed')->sum('amount'),
         ];
 
         // Fix #2: $vendors was never passed — blade vendor filter crashed with Undefined variable
@@ -246,7 +247,9 @@ class FinanceController extends Controller
             $itemsData = [];
             if ($request->chargeback_items) {
                 foreach ($request->chargeback_items as $idx => $itemData) {
-                    if (empty($itemData['item_id'])) continue;
+                    if (empty($itemData['item_id'])) {
+                        continue;
+                    }
 
                     $evidencePath = null;
                     if ($request->hasFile("chargeback_items.{$idx}.evidence")) {
@@ -280,17 +283,17 @@ class FinanceController extends Controller
 
         $payouts = VendorPayout::with('vendor')
             ->where('company_code', $activeCode)
-            ->when($request->vendor_id, fn($q, $v) => $q->where('vendor_id', $v))
-            ->when($request->status, fn($q, $v) => $q->where('status', $v))
-            ->when($request->month, fn($q, $v) => $q->where('payout_month', $v))
-            ->when($request->year, fn($q, $v) => $q->where('payout_year', $v))
+            ->when($request->vendor_id, fn ($q, $v) => $q->where('vendor_id', $v))
+            ->when($request->status, fn ($q, $v) => $q->where('status', $v))
+            ->when($request->month, fn ($q, $v) => $q->where('payout_month', $v))
+            ->when($request->year, fn ($q, $v) => $q->where('payout_year', $v))
             ->latest()
             ->paginate(20);
 
         $vendors = Vendor::active()->orderBy('company_name')
             ->where(function ($q) use ($activeCode) {
                 $q->where('company_code', $activeCode)
-                    ->orWhereHas('user', fn($uq) => $uq->whereJsonContains('company_codes', $activeCode));
+                    ->orWhereHas('user', fn ($uq) => $uq->whereJsonContains('company_codes', $activeCode));
             })
             ->get();
 
@@ -342,7 +345,7 @@ class FinanceController extends Controller
 
         if (!empty($snapshot) && !request('recalculate')) {
             // ── Read from saved snapshot ──
-            $lineItems = collect($snapshot['line_items'] ?? [])->map(fn($i) => (object) $i);
+            $lineItems = collect($snapshot['line_items'] ?? [])->map(fn ($i) => (object) $i);
 
             $payoutSummary = $snapshot['summary'] ?? [
                 'total_qty' => $lineItems->sum('qty'),
@@ -362,15 +365,15 @@ class FinanceController extends Controller
                 ->where('charge_year', $payout->payout_year)
                 ->with('warehouse')
                 ->get();
-               // echo '<pre>';
-//print_r( $warehouseCharges->toArray());exit;
+            // echo '<pre>';
+            //print_r( $warehouseCharges->toArray());exit;
             $chargebacks = Chargeback::withoutGlobalScopes()
                 ->where('vendor_id', $payout->vendor_id)
-                ->whereHas('order', fn($q) => $q->withoutGlobalScopes()->where('company_code', $payout->company_code))
+                ->whereHas('order', fn ($q) => $q->withoutGlobalScopes()->where('company_code', $payout->company_code))
                 ->where('status', 'confirmed')
                 ->whereMonth('confirmed_at', $payout->payout_month)
                 ->whereYear('confirmed_at', $payout->payout_year)
-                ->with(['order' => fn($q) => $q->withoutGlobalScopes()])
+                ->with(['order' => fn ($q) => $q->withoutGlobalScopes()])
                 ->get();
 
             $calculatedAt = $snapshot['calculated_at'] ?? null;
@@ -379,7 +382,7 @@ class FinanceController extends Controller
             $service = new \App\Services\VendorPayoutService();
             $data = $service->buildPayoutData($payout->vendor_id, $payout->company_code, $payout->payout_month, $payout->payout_year);
 
-            $lineItems = collect($data['line_items'])->map(fn($i) => (object) $i);
+            $lineItems = collect($data['line_items'])->map(fn ($i) => (object) $i);
             $payoutSummary = $data['summary'];
             $warehouseCharges = $data['warehouse_charges'];
             $chargebacks = $data['chargebacks'];
@@ -387,7 +390,7 @@ class FinanceController extends Controller
         }
 
         $orders = Order::withoutGlobalScopes()
-            ->whereHas('items', fn($q) => $q->where('vendor_id', $payout->vendor_id)->where('shipped_qty', '>', 0))
+            ->whereHas('items', fn ($q) => $q->where('vendor_id', $payout->vendor_id)->where('shipped_qty', '>', 0))
             ->where('company_code', $payout->company_code)
             ->whereMonth('order_date', $payout->payout_month)
             ->whereYear('order_date', $payout->payout_year)
@@ -519,7 +522,7 @@ class FinanceController extends Controller
 
         $liveSheets = \App\Models\LiveSheet::with('vendor', 'offerSheet', 'items.product')
             ->where('company_code', $activeCode)
-            ->when($request->status, fn($q, $v) => $q->where('status', $v))
+            ->when($request->status, fn ($q, $v) => $q->where('status', $v))
             ->latest()->paginate(20);
 
         return view('finance.live-sheets.index', compact('liveSheets'));
@@ -553,7 +556,9 @@ class FinanceController extends Controller
 
         foreach ($request->sap_codes as $idx => $row) {
             $code = trim($row['sap_code'] ?? '');
-            if ($code === '') continue;
+            if ($code === '') {
+                continue;
+            }
 
             // Duplicate within current submission
             if (isset($seen[$code])) {
@@ -563,7 +568,9 @@ class FinanceController extends Controller
             $seen[$code] = true;
 
             $item = \App\Models\LiveSheetItem::find($row['item_id']);
-            if (!$item) continue;
+            if (!$item) {
+                continue;
+            }
 
             // Check products table — exclude the current product (re-saving same code is OK)
 
@@ -679,7 +686,9 @@ class FinanceController extends Controller
             } else {
                 $rows = [];
                 if (($handle = fopen($fullPath, 'r')) !== false) {
-                    while (($row = fgetcsv($handle)) !== false) $rows[] = $row;
+                    while (($row = fgetcsv($handle)) !== false) {
+                        $rows[] = $row;
+                    }
                     fclose($handle);
                 }
             }
@@ -688,15 +697,25 @@ class FinanceController extends Controller
                 return back()->with('error', 'File is empty or has no data rows.');
             }
 
-            $header = array_map(fn($h) => strtolower(trim($h ?? '')), $rows[0]);
+            $header = array_map(fn ($h) => strtolower(trim($h ?? '')), $rows[0]);
             $itemIdCol = $currSapCol = $newSapCol = $currPayoutCol = $newPayoutCol = null;
 
             foreach ($header as $i => $h) {
-                if (in_array($h, ['item id', 'item_id', 'id'])) $itemIdCol = $i;
-                if (in_array($h, ['current sap code', 'current_sap_code'])) $currSapCol = $i;
-                if (in_array($h, ['new sap code', 'new_sap_code', 'sap code', 'sap_code'])) $newSapCol = $i;
-                if (in_array($h, ['current vendor wsp', 'current_vendor_wsp'])) $currPayoutCol = $i;
-                if (in_array($h, ['new vendor wsp', 'new_vendor_wsp', 'vendor wsp', 'vendor_wsp'])) $newPayoutCol = $i;
+                if (in_array($h, ['item id', 'item_id', 'id'])) {
+                    $itemIdCol = $i;
+                }
+                if (in_array($h, ['current sap code', 'current_sap_code'])) {
+                    $currSapCol = $i;
+                }
+                if (in_array($h, ['new sap code', 'new_sap_code', 'sap code', 'sap_code'])) {
+                    $newSapCol = $i;
+                }
+                if (in_array($h, ['current vendor wsp', 'current_vendor_wsp'])) {
+                    $currPayoutCol = $i;
+                }
+                if (in_array($h, ['new vendor wsp', 'new_vendor_wsp', 'vendor wsp', 'vendor_wsp'])) {
+                    $newPayoutCol = $i;
+                }
             }
 
             if ($newSapCol === null && $newPayoutCol === null) {
@@ -722,21 +741,27 @@ class FinanceController extends Controller
                 $rowNum = $i + 1;
 
                 $itemId = $itemIdCol !== null ? intval($row[$itemIdCol] ?? 0) : null;
-                if (!$itemId) continue;
+                if (!$itemId) {
+                    continue;
+                }
 
                 $currentSap = $currSapCol !== null ? trim($row[$currSapCol] ?? '') : '';
                 $newSap     = $newSapCol !== null ? trim($row[$newSapCol] ?? '') : '';
                 $newWsp     = $newPayoutCol !== null ? trim($row[$newPayoutCol] ?? '') : '';
 
                 // Skip row if nothing to update
-                if ($newSap === '' && $newWsp === '') continue;
+                if ($newSap === '' && $newWsp === '') {
+                    continue;
+                }
 
                 // Find live sheet item
                 $item = \App\Models\LiveSheetItem::withoutGlobalScopes()
                     ->where('id', $itemId)
                     ->where('live_sheet_id', $liveSheet->id)
                     ->first();
-                if (!$item) continue;
+                if (!$item) {
+                    continue;
+                }
 
                 // Validate new WSP
                 if ($newWsp !== '' && !is_numeric($newWsp)) {
@@ -757,7 +782,7 @@ class FinanceController extends Controller
                     // Uniqueness against existing products
                     $dup = \App\Models\Product::withoutGlobalScopes()
                         ->where('sap_code', $newSap)
-                        ->when($item->product_id, fn($q) => $q->where('id', '!=', $item->product_id))
+                        ->when($item->product_id, fn ($q) => $q->where('id', '!=', $item->product_id))
                         ->first();
                     if ($dup) {
                         $errors[] = "Row {$rowNum}: SAP '{$newSap}' already used by {$dup->sku}.";
@@ -813,7 +838,7 @@ class FinanceController extends Controller
 
         $rateCards = \App\Models\VendorRateCard::with('vendor', 'creator', 'approver')
             ->where('company_code', $activeCode)
-            ->when($request->vendor_id, fn($q, $v) => $q->where('vendor_id', $v))
+            ->when($request->vendor_id, fn ($q, $v) => $q->where('vendor_id', $v))
             ->orderByDesc('created_at')
             ->paginate(30)
             ->withQueryString();
@@ -876,7 +901,9 @@ class FinanceController extends Controller
 
     public function submitVendorRateCard(\App\Models\VendorRateCard $vendorRateCard)
     {
-        if (!$vendorRateCard->isComplete()) return back()->with('error', 'All rate fields must be filled.');
+        if (!$vendorRateCard->isComplete()) {
+            return back()->with('error', 'All rate fields must be filled.');
+        }
         $vendorRateCard->update(['status' => 'pending_approval']);
         return back()->with('success', 'Submitted for approval.');
     }
@@ -899,7 +926,7 @@ class FinanceController extends Controller
         $year = $request->get('year', now()->year);
         $charges = \App\Models\VendorMonthlyCharge::with('vendor', 'grn', 'warehouse')
             ->where('company_code', $activeCode)
-            ->byMonth($month, $year)->when($request->vendor_id, fn($q, $v) => $q->where('vendor_id', $v))
+            ->byMonth($month, $year)->when($request->vendor_id, fn ($q, $v) => $q->where('vendor_id', $v))
             ->orderBy('vendor_id')->paginate(50)->withQueryString();
 
         $vendors = \App\Models\Vendor::orderBy('company_name')
@@ -921,8 +948,8 @@ class FinanceController extends Controller
 
     public function runVendorCharges(Request $request)
     {
- 
-$companyCode = session('active_company');
+
+        $companyCode = session('active_company');
 
         $request->validate([
             'month' => 'required|integer|min:1|max:12',
@@ -933,7 +960,9 @@ $companyCode = session('active_company');
         $results = $service->runMonthlyCharges($request->month, $request->year, $request->vendor_id, auth()->id(), (bool)$request->dry_run);
 
         $msg = ($request->dry_run ? "[DRY RUN] " : "") . "{$results['created']} created, {$results['skipped']} skipped.";
-        if (!empty($results['errors'])) $msg .= " Errors: " . implode('; ', array_slice($results['errors'], 0, 5));
+        if (!empty($results['errors'])) {
+            $msg .= " Errors: " . implode('; ', array_slice($results['errors'], 0, 5));
+        }
         return back()->with($results['created'] > 0 ? 'success' : 'error', $msg);
     }
 
@@ -960,7 +989,7 @@ $companyCode = session('active_company');
             if (!empty($vendorCompanyCodes) && !in_array($activeCompany, $vendorCompanyCodes)) {
 
                 $companyNames = ['2100' => '🇺🇸 ExpoBazaar USA', '2200' => '🇪🇺 ExpoBazaar EU', '2400' => '🇬🇧 ExpoBazaar UK'];
-                $vendorCompanyLabels = array_map(fn($c) => ($companyNames[$c] ?? $c) . " ($c)", $vendorCompanyCodes);
+                $vendorCompanyLabels = array_map(fn ($c) => ($companyNames[$c] ?? $c) . " ($c)", $vendorCompanyCodes);
 
                 // return redirect()->route('finance.vendor-charges')
                 //                  ->with('error', 'This vendor does not belong to your active company.Please switch company from the profile dropdown.');
@@ -1016,4 +1045,69 @@ $companyCode = session('active_company');
             'message' => 'Commission percentage updated successfully.'
         ]);
     }
+
+
+    public function storeCommissionRevision(Request $request, \App\Models\LiveSheet $liveSheet)
+    {
+        $request->validate([
+            'commission_percentage' => 'required|numeric|min:0|max:100',
+            'effective_from'        => 'required|date',
+            'effective_to'          => 'nullable|date|after_or_equal:effective_from',
+            'remarks'               => 'nullable|string|max:500',
+        ]);
+
+        // Close previous open revision
+        $previousOpen = \App\Models\CommissionRevision::where('live_sheet_id', $liveSheet->id)
+            ->whereNull('effective_to')
+            ->latest('effective_from')
+            ->first();
+
+       // if ($previousOpen && $previousOpen->effective_from < $request->effective_from) {
+            $previousOpen->update([
+                'effective_to' => \Carbon\Carbon::parse($request->effective_from)->subDay()->toDateString(),
+            ]);
+       // }
+
+        $revision = \App\Models\CommissionRevision::create([
+            'live_sheet_id'         => $liveSheet->id,
+            'vendor_id'             => $liveSheet->vendor_id,
+            'company_code'          => $liveSheet->company_code,
+            'commission_percentage' => $request->commission_percentage,
+            'effective_from'        => $request->effective_from,
+            'effective_to'          => $request->effective_to,
+            'remarks'               => $request->remarks,
+            'created_by'            => auth()->id(),
+        ]);
+
+        // Update live sheet's current commission to latest active
+        $activeRate = \App\Models\CommissionRevision::getActiveRate($liveSheet->id);
+        if ($activeRate !== null) {
+            $liveSheet->update(['commission_percentage' => $activeRate]);
+        }
+
+        \App\Models\ActivityLog::log('created', 'commission_revision', $revision, null, [
+            'live_sheet' => $liveSheet->live_sheet_number,
+            'old_rate'   => $previousOpen?->commission_percentage,
+            'new_rate'   => $request->commission_percentage,
+            'from'       => $request->effective_from,
+            'to'         => $request->effective_to,
+        ], "Commission revised: {$request->commission_percentage}% from {$request->effective_from} on {$liveSheet->live_sheet_number}");
+
+        return back()->with('success', "Commission {$request->commission_percentage}% added effective from " . \Carbon\Carbon::parse($request->effective_from)->format('d M Y'));
+    }
+
+    public function deleteCommissionRevision(\App\Models\CommissionRevision $revision)
+    {
+        $liveSheet = $revision->liveSheet;
+        $revision->delete();
+
+        // Recalculate current commission
+        $activeRate = \App\Models\CommissionRevision::getActiveRate($liveSheet->id);
+        if ($activeRate !== null) {
+            $liveSheet->update(['commission_percentage' => $activeRate]);
+        }
+
+        return back()->with('success', 'Commission revision deleted.');
+    }
+
 }

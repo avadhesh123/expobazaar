@@ -167,7 +167,7 @@
                     @if($ins->remarks)<span style="font-size:.65rem;color:#64748b;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="{{ $ins->remarks }}">💬 {{ Str::limit($ins->remarks, 40) }}</span>@endif
                     <span style="font-size:.62rem;color:#94a3b8;">{{ $ins->created_at->format('d M') }} · {{ $ins->uploader->name ?? '—' }}</span>
                     @if($ins->report_file)<a href="{{ \App\Helpers\FileStorage::url($ins->report_file) }}" target="_blank" style="color:#1e40af;font-size:.72rem;" title="Download"><i class="fas fa-download"></i></a>@endif
-                    <form method="POST" action="{{ route('sourcing.inspections.delete', $ins) }}" onsubmit="return confirm('Delete?')" style="display:inline;"><@csrf @method('DELETE')<button type="submit" style="background:none;border:none;color:#dc2626;cursor:pointer;font-size:.72rem;padding:0;" title="Delete"><i class="fas fa-trash"></i></button></form>
+                    <form method="POST" action="{{ route('sourcing.inspections.delete', $ins) }}" onsubmit="return confirm('Delete?')" style="display:inline;">@csrf @method('DELETE')<button type="submit" style="background:none;border:none;color:#dc2626;cursor:pointer;font-size:.72rem;padding:0;" title="Delete"><i class="fas fa-trash"></i></button></form>
                 </div>
                 @endforeach
 

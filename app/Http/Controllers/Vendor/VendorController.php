@@ -24,6 +24,7 @@ class VendorController extends Controller
 
     public function dashboard()
     {
+       // phpinfo();
         $vendor = auth()->user()->vendor;
         if (!$vendor) {
             return redirect()->route('vendor.kyc');
@@ -1109,14 +1110,14 @@ class VendorController extends Controller
             }
 
             // Store new image
-            $path = $request->file('image')->store('offer-thumbnails', $disk);
+            $path = $request->file('image')->store('offer-thumbnails', FileStorage::disk());
 
             // Save path to database
             $item->update(['thumbnail' => $path]);
 
             return response()->json([
                 'success' => true,
-                'image_url' => FileFileStorage::url($path),
+                'image_url' => FileStorage::url($path),
                 'message' => 'Image uploaded successfully.'
             ]);
         }

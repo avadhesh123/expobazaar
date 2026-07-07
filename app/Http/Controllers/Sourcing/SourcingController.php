@@ -433,6 +433,9 @@ class SourcingController extends Controller
             default => 'IN',
         };
 
+        $totalValue = $selectedItems->sum(fn ($i) => floatval($i->total_price));
+        \Log::info("Consignment total_value before save: {$totalValue}");
+
         $consignment = Consignment::create([
             'consignment_number' => Consignment::generateNumber($liveSheet->company_code, $country),
             'vendor_id'          => $liveSheet->vendor_id,
@@ -443,9 +446,11 @@ class SourcingController extends Controller
             'status'             => 'created',
             'total_items'        => $selectedItems->sum('quantity'),
             'total_cbm'          => $selectedItems->sum('total_cbm'),
-            'total_value'        => $selectedItems->sum('total_price'),
+            'total_value'        => $totalValue,//$selectedItems->sum('total_price'),
             'created_by'         => auth()->id(),
         ]);
+
+        \Log::info("Consignment total_value after save: {$consignment->total_value}");
 
         $liveSheet->update(['consignment_id' => $consignment->id]);
 

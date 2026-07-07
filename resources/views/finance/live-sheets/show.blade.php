@@ -31,35 +31,12 @@
                 <div style="font-size:.62rem;color:#64748b;text-transform:uppercase;font-weight:600;">Status</div>
                 <div><span class="badge {{ $liveSheet->is_locked?'badge-success':'badge-warning' }}">{{ $liveSheet->is_locked?'Locked':ucfirst($liveSheet->status) }}</span></div>
             </div>
-            <div style="padding:.5rem; border-radius:8px; flex: 1;  min-width: 175px; background: #eff6ff; border: 1px solid #bfdbfe;">
-                <div style="font-size:.58rem;color:#64748b;text-transform:uppercase;font-weight:600;margin-bottom:6px;">
-                    Commission Percentage (%)
-                </div>
-
-                <div style="display:flex; gap:8px; align-items:center;">
-                    <input type="number"
-                        id="commission_percentage"
-                        name="commission_percentage"
-                        step="0.01"
-                        min="0"
-                        max="100"
-                        value="{{ $liveSheet->commission_percentage ?? 0 }}"
-                        class="form-control"
-                        style="width:120px; border:1px solid #93c5fd; border-radius:6px; font-size:.82rem; font-family:monospace; background:#fff; padding:.35rem .5rem;">
-
-                    <button type="button"
-                        id="saveCommissionBtn"
-                        class="btn btn-sm btn-primary">
-                        <i class="fas fa-save"></i> Save
-                    </button>
-                </div>
-                <span id="commission_status" style="font-size:0.8rem;"></span>
-            </div>
+             
         </div>
     </div>
 
     {{-- Flash messages --}}
-    @if(session('success'))
+    <!-- @if(session('success'))
     <div style="padding:.75rem 1rem;background:#dcfce7;border:1px solid #86efac;border-radius:8px;margin-bottom:1rem;display:flex;gap:.6rem;align-items:flex-start;">
         <i class="fas fa-check-circle" style="color:#16a34a;margin-top:.1rem;flex-shrink:0;"></i>
         <div>
@@ -71,7 +48,7 @@
             @endif
         </div>
     </div>
-    @endif
+    @endif -->
 
     @if(session('warning'))
     <div style="padding:.75rem 1rem;background:#fef3c7;border:1px solid #fde68a;border-radius:8px;margin-bottom:1rem;display:flex;gap:.6rem;align-items:flex-start;">
@@ -144,6 +121,145 @@
             </div>
         </div>
     </div>
+
+{{-- Commission Revisions — add this to finance/live-sheets/show.blade.php --}}
+
+@php
+    $revisions = \App\Models\CommissionRevision::where('live_sheet_id', $liveSheet->id)
+        ->orderByDesc('effective_from')
+        ->with('creator')
+        ->get();
+    $activeRevision = $revisions->first(function($r) {
+        return $r->effective_from <= now() && ($r->effective_to === null || $r->effective_to >= now());
+    });
+@endphp
+
+<div class="card" style="margin-bottom:1.25rem;border-color:#ddd6fe;">
+    <div class="card-header">
+        <h3><i class="fas fa-percent" style="margin-right:.5rem;color:#7c3aed;"></i> Commission Rate</h3>
+        <div style="display:flex;align-items:center;gap:.5rem;">
+            @if($activeRevision)
+            <span style="padding:.2rem .6rem;background:#f5f3ff;border:1px solid #ddd6fe;border-radius:6px;font-size:.82rem;font-weight:700;color:#7c3aed;">
+                Current: {{ $activeRevision->commission_percentage }}%
+            </span>
+            @elseif($liveSheet->commission_percentage)
+            <span style="padding:.2rem .6rem;background:#f5f3ff;border:1px solid #ddd6fe;border-radius:6px;font-size:.82rem;font-weight:700;color:#7c3aed;">
+                Base: {{ $liveSheet->commission_percentage }}%
+            </span>
+            @endif
+            <button type="button" class="btn btn-primary btn-sm" onclick="document.getElementById('commRevisionForm').style.display=document.getElementById('commRevisionForm').style.display==='none'?'block':'none'">
+                <i class="fas fa-plus"></i> Add Revision
+            </button>
+        </div>
+    </div>
+
+    {{-- Add Revision Form --}}
+    <div id="commRevisionForm" style="display:none;padding:1rem 1.4rem;background:#f5f3ff;border-bottom:1px solid #ddd6fe;">
+        <div style="font-size:.72rem;color:#7c3aed;margin-bottom:.5rem;">
+            <i class="fas fa-info-circle"></i>
+            Set a commission rate for a specific period. Leave "Effective To" blank if it should stay active until the next revision.
+        </div>
+        <form method="POST" action="{{ route('finance.live-sheets.commission.store', $liveSheet) }}">
+            @csrf
+            <div style="display:flex;gap:.6rem;align-items:flex-end;flex-wrap:wrap;">
+                <div>
+                    <label style="font-size:.65rem;font-weight:600;color:#64748b;display:block;margin-bottom:.2rem;">Commission % <span style="color:#dc2626;">*</span></label>
+                    <input type="number" name="commission_percentage" step="0.01" min="0" max="100" required placeholder="e.g. 12"
+                        style="width:90px;padding:.35rem .5rem;border:1px solid #ddd6fe;border-radius:6px;font-size:.85rem;font-family:monospace;text-align:center;">
+                </div>
+                <div>
+                    <label style="font-size:.65rem;font-weight:600;color:#64748b;display:block;margin-bottom:.2rem;">Effective From <span style="color:#dc2626;">*</span></label>
+                    <input type="date" name="effective_from" required value="{{ date('Y-m-d') }}"
+                        style="padding:.35rem .5rem;border:1px solid #ddd6fe;border-radius:6px;font-size:.82rem;">
+                </div>
+                <div>
+                    <label style="font-size:.65rem;font-weight:600;color:#64748b;display:block;margin-bottom:.2rem;">Effective To <span style="font-size:.55rem;color:#94a3b8;">(optional)</span></label>
+                    <input type="date" name="effective_to"
+                        style="padding:.35rem .5rem;border:1px solid #ddd6fe;border-radius:6px;font-size:.82rem;">
+                </div>
+                <div style="flex:1;min-width:120px;">
+                    <label style="font-size:.65rem;font-weight:600;color:#64748b;display:block;margin-bottom:.2rem;">Remarks</label>
+                    <input type="text" name="remarks" placeholder="e.g. Q3 revised rate"
+                        style="width:100%;padding:.35rem .5rem;border:1px solid #ddd6fe;border-radius:6px;font-size:.82rem;">
+                </div>
+                <button type="submit" class="btn btn-primary btn-sm"><i class="fas fa-save" style="margin-right:.2rem;"></i> Save</button>
+                <button type="button" class="btn btn-outline btn-sm" onclick="document.getElementById('commRevisionForm').style.display='none'">Cancel</button>
+            </div>
+        </form>
+    </div>
+
+    {{-- Revision History --}}
+    <div class="card-body" style="padding:.85rem 1.25rem;">
+        @if($revisions->isNotEmpty())
+        <table class="data-table" style="font-size:.78rem;margin:0;">
+            <thead>
+                <tr style="background:#f0f4f8;">
+                    <th style="width:30px;">#</th>
+                    <th style="text-align:center;">Commission %</th>
+                    <th>Effective From</th>
+                    <th>Effective To</th>
+                    <th>Status</th>
+                    <th>Remarks</th>
+                    <th>Added By</th>
+                    <th>Date</th>
+                    <th style="width:40px;"></th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach($revisions as $idx => $rev)
+                @php
+                    $isActive = $rev->effective_from <= now() && ($rev->effective_to === null || $rev->effective_to >= now());
+                    $isFuture = $rev->effective_from > now();
+                    $isExpired = $rev->effective_to && $rev->effective_to < now();
+                @endphp
+                <tr style="{{ $isActive ? 'background:#f0fdf4;border-left:3px solid #16a34a;' : ($isFuture ? 'background:#eff6ff;' : '') }}">
+                    <td style="text-align:center;color:#94a3b8;">{{ $revisions->count() - $idx }}</td>
+                    <td style="text-align:center;">
+                        <span style="padding:.2rem .5rem;border-radius:4px;font-weight:700;font-size:.85rem;font-family:monospace;
+                            {{ $isActive ? 'background:#dcfce7;color:#16a34a;' : ($isFuture ? 'background:#dbeafe;color:#1e40af;' : 'color:#94a3b8;') }}">
+                            {{ $rev->commission_percentage }}%
+                        </span>
+                    </td>
+                    <td style="font-family:monospace;font-size:.75rem;">{{ $rev->effective_from->format('d M Y') }}</td>
+                    <td style="font-family:monospace;font-size:.75rem;">
+                        @if($rev->effective_to)
+                            {{ $rev->effective_to->format('d M Y') }}
+                        @else
+                            <span style="font-size:.65rem;color:#16a34a;font-style:italic;">Open-ended</span>
+                        @endif
+                    </td>
+                    <td>
+                        @if($isActive)
+                            <span class="badge badge-success" style="font-size:.6rem;">Active</span>
+                        @elseif($isFuture)
+                            <span class="badge badge-info" style="font-size:.6rem;">Scheduled</span>
+                        @else
+                            <span class="badge badge-gray" style="font-size:.6rem;">Expired</span>
+                        @endif
+                    </td>
+                    <td style="font-size:.72rem;color:#64748b;">{{ $rev->remarks ?? '—' }}</td>
+                    <td style="font-size:.72rem;">{{ $rev->creator->name ?? '—' }}</td>
+                    <td style="font-size:.68rem;color:#94a3b8;">{{ $rev->created_at->format('d M Y') }}</td>
+                    <td>
+                        <form method="POST" action="{{ route('finance.commission-revision.delete', $rev) }}" onsubmit="return confirm('Delete this revision?')" style="display:inline;">
+                            @csrf @method('DELETE')
+                            <button type="submit" style="background:none;border:none;color:#dc2626;cursor:pointer;font-size:.72rem;padding:2px;" title="Delete"><i class="fas fa-trash"></i></button>
+                        </form>
+                    </td>
+                </tr>
+                @endforeach
+            </tbody>
+        </table>
+        @else
+        <div style="padding:1.5rem;text-align:center;color:#94a3b8;font-size:.82rem;">
+            <i class="fas fa-percent" style="font-size:1.5rem;display:block;margin-bottom:.3rem;"></i>
+            No commission revisions yet. Using base rate: <strong>{{ $liveSheet->commission_percentage ?? 0 }}%</strong>
+            <div style="font-size:.72rem;margin-top:.3rem;">Click "+ Add Revision" to set period-specific commission rates.</div>
+        </div>
+        @endif
+    </div>
+</div>
+
 
     {{-- SAP Code Form --}}
     <form method="POST" action="{{ route('finance.live-sheets.sap', $liveSheet) }}">

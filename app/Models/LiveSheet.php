@@ -107,4 +107,8 @@ class LiveSheet extends Model
     {
         return $query->where('is_locked', false);
     }
+    public function commissionRevisions()
+    {
+        return $this->hasMany(\App\Models\CommissionRevision::class)->orderByDesc('effective_from');
+    }
 }

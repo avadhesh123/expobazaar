@@ -60,7 +60,7 @@
 
     {{-- LIST --}}
     <div class="card">
-        <div class="card-header"><h3><i class="fas fa-store" style="margin-right:.5rem;color:#e8a838;"></i> All Channels ({{ $channels->count() }})</h3></div>
+        <div class="card-header"><h3><i class="fas fa-store" style="margin-right:.5rem;color:#e8a838;"></i> All Channels ({{ $channels->total() }})</h3></div>
         <div class="card-body" style="padding:0;overflow-x:auto;">
             <table class="data-table" style="font-size:.78rem;">
                 <thead><tr style="background:#f0f4f8;"><th>Channel</th><th>Type</th><th>Division</th><th>Commission</th><th>Companies</th><th>Status</th><th>Actions</th></tr></thead>
@@ -153,6 +153,9 @@
                     @endforelse
                 </tbody>
             </table>
+            @if($channels->hasPages())
+            <div style="padding:1rem 1.4rem;border-top:1px solid #e8ecf1;">{{ $channels->links() }}</div>
+            @endif
         </div>
     </div>
 </div>
