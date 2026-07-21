@@ -632,6 +632,9 @@
 
                         {{-- Menu Items --}}
                         <div style="padding:.4rem .5rem;">
+                           <a href="{{ route('auth.change-password') }}" style=" text-align:center;">
+                                <i class="fas fa-key"></i> Change Password
+                            </a>
                             <a href="{{ route('auth.logout') }}" onclick="return confirm('Logout?')" style="display:flex;align-items:center;gap:.5rem;padding:.4rem .5rem;border-radius:6px;text-decoration:none;font-size:.78rem;color:#dc2626;" onmouseover="this.style.background='#fef2f2'" onmouseout="this.style.background='transparent'">
                                 <i class="fas fa-sign-out-alt" style="width:16px;text-align:center;"></i> Logout
                             </a>

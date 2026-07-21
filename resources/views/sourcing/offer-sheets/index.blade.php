@@ -50,6 +50,8 @@
                     <td style="font-size:.82rem;color:#64748b;">{{ $sheet->created_at->format('d M Y') }}</td>
                     <td>
                         <div style="display:flex;gap:.3rem;flex-wrap:wrap;">
+                            <a href="{{ route('sourcing.offer-sheets.download', $sheet) }}" class="btn btn-outline btn-sm"><i class="fas fa-download"></i></a>
+                             
                             {{-- Step 1: Review & Select --}}
                             @if(in_array($sheet->status, ['submitted','under_review']))
                                 <a href="{{ route('sourcing.offer-sheets.review', $sheet) }}" class="btn btn-primary btn-sm"><i class="fas fa-check-square"></i> Review & Select</a>
@@ -75,6 +77,9 @@
                             @if($sheet->status === 'converted')
                                 <span style="display:flex;align-items:center;gap:.2rem;font-size:.72rem;color:#166534;font-weight:600;"><i class="fas fa-check-circle"></i> Consignment Created</span>
                             @endif
+
+                          
+
                         </div>
                     </td>
                 </tr>

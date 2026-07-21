@@ -80,6 +80,7 @@
                     <td>
                         <div style="display:flex;gap:.3rem;flex-wrap:wrap;">
                             {{-- View Detail --}}
+                           <a href="{{ route('sourcing.live-sheets.download', $ls) }}" class="btn btn-outline btn-sm"><i class="fas fa-download"></i></a>
                             <a href="{{ route('sourcing.live-sheets.show', $ls) }}" class="btn btn-outline btn-sm"><i class="fas fa-eye"></i></a>
 
                             {{-- Waiting for vendor --}}
@@ -109,6 +110,7 @@
                             @if($ls->is_locked)
                             <span style="display:flex;align-items:center;gap:.2rem;font-size:.72rem;color:#166534;font-weight:600;"><i class="fas fa-check-circle"></i> Sent to Vendor</span>
                             @endif
+                            
                         </div>
                     </td>
                 </tr>

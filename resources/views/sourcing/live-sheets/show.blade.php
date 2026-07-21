@@ -215,6 +215,7 @@ $disabled = $liveSheet->is_locked ? 'disabled' : '';
                         <th style="min-width:80px;">SAP Code</th>
                         <th style="min-width:100px;">Barcode</th>
                         <th style="min-width:160px;">Product Name</th>
+                        <th style="min-width:100px;">Image</th>
                         <th style="min-width:120px;">Description</th>
                         <th style="min-width:80px;">HSN/HTS</th>
                         <th style="min-width:55px;">Duty %</th>
@@ -299,6 +300,33 @@ $disabled = $liveSheet->is_locked ? 'disabled' : '';
                         <td>{{ $d['sap_code'] ?? '—' }}</td>
                         <td>{{ $d['barcode'] ?? '—' }}</td>
                         <td style="font-weight:500;">{{ $item->product->name ?? '—' }}</td>
+                        <td style="text-align:center;">
+                        @php
+                        $imgUrl = null;                        
+                        $thumb = $offerThumbnails[$item->product_id] ?? null;
+                        if ($thumb) {                            
+                            if (str_starts_with($thumb, 'http')) {
+                                $imgUrl = $thumb;
+                            } elseif (str_starts_with($thumb, 'offer-thumbnails/') || str_starts_with($thumb, 'offer-')) {
+                                $imgUrl = \App\Helpers\FileStorage::url($thumb);
+                            } elseif (str_starts_with($thumb, 'storage/')) {
+                                $imgUrl = \App\Helpers\FileStorage::url($thumb);
+                            } else {
+                                $imgUrl = \App\Helpers\FileStorage::url($thumb);
+                            }
+                        }
+                        @endphp
+                        @if($imgUrl)
+                        <a href="{{ $imgUrl }}" target="_blank" title="Click to enlarge">
+                            <img src="{{ $imgUrl }}" style="width:48px;height:48px;object-fit:cover;border-radius:6px;border:1px solid #e2e8f0;cursor:zoom-in;" onerror="this.style.display='none';this.nextElementSibling.style.display='inline';">
+                            <i class="fas fa-image" style="color:#fca5a5;display:none;" title="Image not found"></i>
+                        </a>
+                        @else
+                        <i class="fas fa-image" style="color:#d1d5db;"></i>
+                        @endif
+
+                        
+                    </td>
                         <td style="font-size:.7rem;max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="{{ $d['description'] ?? '' }}">{{ Str::limit($d['description'] ?? '—', 40) }}</td>
                         <td>{{ $d['hsn_hts_code'] ?? '—' }}</td>
                         <td style="text-align:center;">{{ $d['duty_percent'] ?? '—' }}</td>

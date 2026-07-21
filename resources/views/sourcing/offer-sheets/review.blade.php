@@ -166,6 +166,7 @@
                     <th>Color</th>
                     <th>Category</th>
                     <th>FOB</th>
+                    <th>Comments</th>
                 </tr>
             </thead>
             <tbody>
@@ -208,6 +209,8 @@
                     <td style="font-size:.82rem;">{{ $d['color'] ?? '—' }}</td>
                     <td style="font-size:.82rem;">{{ $d['category'] ?? ($item->category->name ?? '—') }}</td>
                     <td style="font-family:monospace;font-weight:700;color:#166534;">{{$activeCurrencySymbol}}{{ number_format($item->vendor_price, 2) }}</td>
+                    <td style="font-size:.78rem;color:#64748b;">{{ $d['comments'] ?? '—' }}</td>
+
                 </tr>
                 @endforeach
             </tbody>

@@ -20,21 +20,38 @@ Route::prefix('auth')->name('auth.')->group(function () {
     Route::get('verify-otp', [AuthController::class, 'showVerifyOtp'])->name('verify-otp');
     Route::post('verify-otp', [AuthController::class, 'verifyOtp'])->name('verify-otp.submit');
     Route::match(['get', 'post'], 'logout', [AuthController::class, 'logout'])->name('logout');
+
+    Route::post('login-password', [AuthController::class, 'loginWithPassword'])->name('login-password');
+    Route::post('change-password', [AuthController::class, 'changePassword'])->name('change-password');
+    Route::post('set-password/{user}', [AuthController::class, 'setPassword'])->name('set-password');
+
+    Route::get('change-password', [AuthController::class, 'showChangePassword'])->name('change-password');
+    Route::post('change-password', [AuthController::class, 'changePassword'])->name('change-password.update');
+
+
 });
 
-Route::get('/', fn() => redirect()->route('auth.login'));
+// Auth group (guest)
+Route::prefix('auth')->name('auth.')->middleware('guest')->group(function () {
+    // ... existing routes ...
+    Route::get('forgot-password', [AuthController::class, 'showForgotPassword'])->name('forgot-password');
+    Route::post('forgot-password', [AuthController::class, 'sendResetOtp'])->name('forgot-password.send');
+    Route::get('reset-password', [AuthController::class, 'showResetPassword'])->name('reset-password');
+    Route::post('reset-password', [AuthController::class, 'resetPassword'])->name('reset-password.update');
+});
+
+Route::get('/', fn () => redirect()->route('auth.login'));
 
 // Default 'login' route alias — Laravel's built-in middleware expects this name
 Route::redirect('/login', '/auth/login')->name('login');
-
-
- 
 
 Route::middleware(['auth'])->group(function () {
 
     // ADMIN
     Route::prefix('admin')->name('admin.')->middleware('user.type:admin')->group(function () {
         Route::get('dashboard', [AdminController::class, 'dashboard'])->name('dashboard');
+
+        Route::post('users/{user}/reset-password', [AdminController::class, 'resetUserPassword'])->name('users.reset-password');
 
         // ── User Management ──
         Route::get('users', [AdminController::class, 'users'])->name('users');
@@ -134,6 +151,9 @@ Route::middleware(['auth'])->group(function () {
             Route::get('payouts', [VendorController::class, 'payouts'])->name('payouts');
             Route::get('payouts/{payout}', [VendorController::class, 'showPayout'])->name('payouts.show');
             Route::post('payouts/{payout}/invoice', [VendorController::class, 'uploadInvoice'])->name('payouts.invoice');
+
+            Route::post('offer-sheets/{offerSheet}/update-items', [VendorController::class, 'updateOfferSheetItems'])->name('offer-sheets.update-items');
+
         });
     });
 
@@ -180,6 +200,12 @@ Route::middleware(['auth'])->group(function () {
         // Chargebacks
         Route::get('chargebacks', [SourcingController::class, 'pendingChargebacks'])->name('chargebacks');
         Route::post('chargebacks/{chargeback}/confirm', [SourcingController::class, 'confirmChargeback'])->name('chargebacks.confirm');
+
+        Route::get('offer-sheets/{offerSheet}/download', [SourcingController::class, 'downloadOfferSheet'])->name('offer-sheets.download');
+        Route::get('live-sheets/{liveSheet}/download', [SourcingController::class, 'downloadLiveSheet'])->name('live-sheets.download');
+        Route::post('live-sheets/{liveSheet}/update-items', [SourcingController::class, 'updateLiveSheetItems'])->name('live-sheets.update-items');
+
+
     });
     // LOGISTICS
     Route::prefix('logistics')->name('logistics.')->middleware('user.type:internal,admin,external', 'module:logistics')
@@ -381,7 +407,7 @@ Route::middleware(['auth'])->group(function () {
     });
 
     // NOTIFICATIONS
-    Route::get('notifications', fn() => view('components.notifications', ['notifications' => auth()->user()->unreadNotifications()->take(50)->get()]))->name('notifications');
-    Route::post('notifications/{id}/read', fn($id) => tap(back(), fn() => auth()->user()->notifications()->where('id', $id)->update(['read_at' => now()])))->name('notifications.read');
-    Route::post('notifications/mark-all-read', fn() => tap(back(), fn() => auth()->user()->unreadNotifications->markAsRead()))->name('notifications.mark-all-read');
+    Route::get('notifications', fn () => view('components.notifications', ['notifications' => auth()->user()->unreadNotifications()->take(50)->get()]))->name('notifications');
+    Route::post('notifications/{id}/read', fn ($id) => tap(back(), fn () => auth()->user()->notifications()->where('id', $id)->update(['read_at' => now()])))->name('notifications.read');
+    Route::post('notifications/mark-all-read', fn () => tap(back(), fn () => auth()->user()->unreadNotifications->markAsRead()))->name('notifications.mark-all-read');
 });

@@ -24,7 +24,7 @@ class VendorController extends Controller
 
     public function dashboard()
     {
-       // phpinfo();
+        // phpinfo();
         $vendor = auth()->user()->vendor;
         if (!$vendor) {
             return redirect()->route('vendor.kyc');
@@ -107,7 +107,7 @@ class VendorController extends Controller
             $finalPayout += $payoutSummary['total_payout'] - $totalWhCharges - $totalChargebacks;
 
 
-        } 
+        }
 
         $data['stats'] = [
             'offer_sheets'   => OfferSheet::where('vendor_id', $vendor->id)->where('company_code', $activeCompany)->count(),
@@ -2809,5 +2809,56 @@ class VendorController extends Controller
         ];
 
         return view('vendor.inspections.index', compact('reports', 'consignments', 'stats', 'vendor'));
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    //   OFFER SHEET INLINE UPDATE (Vendor)
+    // ═══════════════════════════════════════════════════════════
+
+    public function updateOfferSheetItems(Request $request, \App\Models\OfferSheet $offerSheet)
+    {
+        if ($offerSheet->status === 'approved' || $offerSheet->status === 'converted') {
+            return response()->json(['error' => 'Cannot edit approved/converted offer sheet.'], 422);
+        }
+
+        $request->validate([
+            'items'             => 'required|array',
+            'items.*.id'        => 'required|exists:offer_sheet_items,id',
+            'items.*.vendor_price' => 'nullable|numeric|min:0',
+            'items.*.length'    => 'nullable|numeric|min:0',
+            'items.*.width'     => 'nullable|numeric|min:0',
+            'items.*.height'    => 'nullable|numeric|min:0',
+            'items.*.weight'    => 'nullable|numeric|min:0',
+            'items.*.material'  => 'nullable|string|max:200',
+            'items.*.color'     => 'nullable|string|max:100',
+            'items.*.finish'    => 'nullable|string|max:100',
+            'items.*.category'  => 'nullable|string|max:100',
+            'items.*.sub_category' => 'nullable|string|max:100',
+            'items.*.comments'  => 'nullable|string|max:500',
+        ]);
+
+        $updated = 0;
+        foreach ($request->items as $data) {
+            $item = \App\Models\OfferSheetItem::where('id', $data['id'])
+                ->where('offer_sheet_id', $offerSheet->id)->first();
+            if (!$item) {
+                continue;
+            }
+
+            $details = $item->product_details ?? [];
+            foreach (['length', 'width', 'height', 'weight', 'material', 'color', 'finish', 'category', 'sub_category', 'comments'] as $field) {
+                if (isset($data[$field])) {
+                    $details[$field] = $data[$field];
+                }
+            }
+
+            $item->update([
+                'vendor_price'    => $data['vendor_price'] ?? $item->vendor_price,
+                'product_details' => $details,
+            ]);
+            $updated++;
+        }
+
+        return response()->json(['success' => true, 'message' => "{$updated} item(s) updated."]);
     }
 }

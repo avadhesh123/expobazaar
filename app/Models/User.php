@@ -9,14 +9,16 @@ use Illuminate\Notifications\Notifiable;
 
 class User extends Authenticatable
 {
-    use HasFactory, Notifiable, SoftDeletes;
+    use HasFactory;
+    use Notifiable;
+    use SoftDeletes;
 
     protected $fillable = [
-        'name', 'email', 'user_type', 'department', 'company_codes',
-        'status', 'phone', 'avatar', 'email_verified_at', 'last_login_at',
+        'name', 'email', 'password', 'user_type', 'department', 'company_codes',
+    'status', 'phone', 'avatar', 'email_verified_at', 'last_login_at',
     ];
 
-    protected $hidden = ['remember_token'];
+    protected $hidden = ['password', 'remember_token'];
 
     protected $casts = [
         'email_verified_at' => 'datetime',
@@ -99,9 +101,11 @@ class User extends Authenticatable
 
     public function hasPermission(string $permission): bool
     {
-        if ($this->isAdmin()) return true;
+        if ($this->isAdmin()) {
+            return true;
+        }
         return $this->permissions()->where('name', $permission)->exists()
-            || $this->roles()->whereHas('permissions', fn($q) => $q->where('name', $permission))->exists();
+            || $this->roles()->whereHas('permissions', fn ($q) => $q->where('name', $permission))->exists();
     }
 
     public function assignRole(string $roleName): void

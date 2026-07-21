@@ -1062,11 +1062,11 @@ class FinanceController extends Controller
             ->latest('effective_from')
             ->first();
 
-       // if ($previousOpen && $previousOpen->effective_from < $request->effective_from) {
+       if ($previousOpen ) {
             $previousOpen->update([
                 'effective_to' => \Carbon\Carbon::parse($request->effective_from)->subDay()->toDateString(),
             ]);
-       // }
+        }
 
         $revision = \App\Models\CommissionRevision::create([
             'live_sheet_id'         => $liveSheet->id,

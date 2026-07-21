@@ -164,6 +164,20 @@ class AdminController extends Controller
         return redirect()->route('admin.users')->with('success', "User '{$user->name}' updated successfully.");
     }
 
+    public function resetUserPassword(Request $request, \App\Models\User $user)
+    {
+        $request->validate([
+            'password' => 'required|string|min:6|confirmed',
+        ]);
+
+        $user->update(['password' => \Illuminate\Support\Facades\Hash::make($request->password)]);
+
+        \App\Models\ActivityLog::log('reset_password', 'user', $user, null, [
+            'reset_by' => auth()->user()->name,
+        ], "Password reset for {$user->name} by " . auth()->user()->name);
+
+        return back()->with('success', "Password reset for {$user->name}.");
+    }
     // =====================================================================
     //  USER PERMISSIONS — Manage roles + direct permissions per user
     // =====================================================================

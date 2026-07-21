@@ -141,6 +141,9 @@
                                 <div style="display:flex;gap:.3rem;flex-wrap:wrap;">
                                     <a href="{{ route('admin.users.show',$u) }}" class="btn btn-outline btn-sm" title="View"><i class="fas fa-eye"></i></a>
                                     <a href="{{ route('admin.users.edit',$u) }}" class="btn btn-outline btn-sm" title="Edit"><i class="fas fa-edit"></i></a>
+                                  <button type="button" class="btn btn-outline btn-sm" onclick="resetPasswordModal({{ $u->id }}, '{{ e($u->name) }}')" title="Reset Password">
+                                    <i class="fas fa-key"></i>
+                                </button>
                                     @if($u->id !== auth()->id())
                                         @if($u->status==='active')
                                             <button type="button" class="btn btn-sm" style="background:#fef3c7;color:#92400e;border:1px solid #fde68a;" title="Suspend" onclick="submitAction('{{ route('admin.users.toggle-status',[$u,'suspended']) }}','POST')"><i class="fas fa-ban"></i></button>
@@ -175,9 +178,57 @@
     @csrf
     <input type="hidden" name="_method" id="rowActionMethod" value="POST">
 </form>
+{{-- MODAL (add before closing @endsection) --}}
+<div id="resetPasswordModal" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.4);z-index:9999;align-items:center;justify-content:center;">
+    <div style="background:#fff;border-radius:12px;padding:1.5rem;width:400px;max-width:90%;box-shadow:0 8px 32px rgba(0,0,0,.15);">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;">
+            <h3 style="font-size:1rem;font-weight:700;color:#0d1b2a;">
+                <i class="fas fa-key" style="color:#e8a838;margin-right:.3rem;"></i> Reset Password
+            </h3>
+            <button onclick="closeResetModal()" style="background:none;border:none;cursor:pointer;font-size:1.2rem;color:#94a3b8;">&times;</button>
+        </div>
 
+        <div id="resetUserName" style="padding:.4rem .6rem;background:#f1f5f9;border-radius:6px;font-size:.82rem;font-weight:600;margin-bottom:1rem;"></div>
+
+        <form id="resetPasswordForm" method="POST">
+            @csrf
+            <div class="form-group" style="margin-bottom:1rem;">
+                <label style="font-size:.78rem;font-weight:600;color:#374151;display:block;margin-bottom:.3rem;">New Password</label>
+                <input type="password" name="password" required minlength="6" placeholder="Min 6 characters"
+                    style="width:100%;padding:.6rem .75rem;border:1.5px solid #d1d5db;border-radius:8px;font-size:.85rem;">
+            </div>
+            <div class="form-group" style="margin-bottom:1.25rem;">
+                <label style="font-size:.78rem;font-weight:600;color:#374151;display:block;margin-bottom:.3rem;">Confirm Password</label>
+                <input type="password" name="password_confirmation" required minlength="6" placeholder="Confirm password"
+                    style="width:100%;padding:.6rem .75rem;border:1.5px solid #d1d5db;border-radius:8px;font-size:.85rem;">
+            </div>
+            <div style="display:flex;gap:.5rem;justify-content:flex-end;">
+                <button type="button" class="btn btn-outline btn-sm" onclick="closeResetModal()">Cancel</button>
+                <button type="submit" class="btn btn-primary btn-sm" onclick="return confirm('Reset password for this user?')">
+                    <i class="fas fa-save" style="margin-right:.2rem;"></i> Reset Password
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
 @push('scripts')
 <script>
+    function resetPasswordModal(userId, userName) {
+    document.getElementById('resetUserName').textContent = userName;
+    document.getElementById('resetPasswordForm').action = '/admin/users/' + userId + '/reset-password';
+    var modal = document.getElementById('resetPasswordModal');
+    modal.style.display = 'flex';
+}
+
+function closeResetModal() {
+    document.getElementById('resetPasswordModal').style.display = 'none';
+    document.getElementById('resetPasswordForm').reset();
+}
+
+// Close on backdrop click
+document.getElementById('resetPasswordModal').addEventListener('click', function(e) {
+    if (e.target === this) closeResetModal();
+});
 function filterByStatus(s){document.getElementById('statusFilter').value=s;document.getElementById('filterForm').submit();}
 function toggleAll(el){document.querySelectorAll('.user-checkbox').forEach(c=>c.checked=el.checked);updateBulkBar();}
 function updateBulkBar(){const n=document.querySelectorAll('.user-checkbox:checked').length;document.getElementById('bulkBar').style.display=n>0?'block':'none';document.getElementById('selectedCount').textContent=n;}

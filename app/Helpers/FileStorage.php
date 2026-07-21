@@ -52,12 +52,38 @@ class FileStorage
     /**
      * Get public URL for a file
      */
-    public static function url(?string $path): string
+    public static function urlBAK(?string $path): string
     {
-        if (!$path) return '';
-        if (str_starts_with($path, 'http')) return $path;
+        if (!$path) {
+            return '';
+        }
+        if (str_starts_with($path, 'http')) {
+            return $path;
+        }
 
         return static::storage()->url($path);
+    }
+    public static function url(?string $path): string
+    {
+        if (!$path) {
+            return '';
+        }
+        if (str_starts_with($path, 'http')) {
+            return $path;
+        }
+
+        $path = str_replace('storage/app/public/', '', $path);
+        $path = str_replace('storage/', '', $path);
+        $path = str_replace('public/', '', $path);
+        $path = ltrim($path, '/');
+
+        $disk = static::disk();
+
+        if ($disk === 's3') {
+            return Storage::disk('s3')->temporaryUrl($path, now()->addMinutes(60));
+        }
+
+        return Storage::disk($disk)->url($path);
     }
 
     /**
@@ -65,7 +91,9 @@ class FileStorage
      */
     public static function exists(?string $path): bool
     {
-        if (!$path) return false;
+        if (!$path) {
+            return false;
+        }
         return static::storage()->exists($path);
     }
 
@@ -74,7 +102,9 @@ class FileStorage
      */
     public static function delete(?string $path): bool
     {
-        if (!$path) return false;
+        if (!$path) {
+            return false;
+        }
         if (static::exists($path)) {
             return static::storage()->delete($path);
         }
@@ -95,7 +125,9 @@ class FileStorage
      */
     public static function get(?string $path): ?string
     {
-        if (!$path || !static::exists($path)) return null;
+        if (!$path || !static::exists($path)) {
+            return null;
+        }
         return static::storage()->get($path);
     }
 

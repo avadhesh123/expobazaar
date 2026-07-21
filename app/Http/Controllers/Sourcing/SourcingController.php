@@ -6,7 +6,9 @@ use App\Http\Controllers\Controller;
 use App\Models\{Vendor, OfferSheet, OfferSheetItem, Consignment, LiveSheet, LiveSheetItem, Product};
 use App\Services\{DashboardService, VendorService, SourcingService};
 use Illuminate\Http\Request;
-
+use PhpOffice\PhpSpreadsheet\Spreadsheet;
+use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
+use PhpOffice\PhpSpreadsheet\Worksheet\Drawing;
 use App\Helpers\FileStorage;
 
 class SourcingController extends Controller
@@ -15,7 +17,8 @@ class SourcingController extends Controller
         protected DashboardService $dashboardService,
         protected VendorService $vendorService,
         protected SourcingService $sourcingService
-    ) {}
+    ) {
+    }
 
     public function dashboard()
     {
@@ -57,9 +60,9 @@ class SourcingController extends Controller
         $userCompanyCodes = array_filter(array_map('strval', $userCompanyCodes));
 
         $vendors = Vendor::with('user')
-            ->when(!$user->isAdmin() && !empty($userCompanyCodes), fn($q) => $q->whereIn('company_code', $userCompanyCodes))
-            ->when($request->company_code, fn($q, $v) => $q->where('company_code', $v))
-            ->when($request->status, fn($q, $v) => $q->where('status', $v))
+            ->when(!$user->isAdmin() && !empty($userCompanyCodes), fn ($q) => $q->whereIn('company_code', $userCompanyCodes))
+            ->when($request->company_code, fn ($q, $v) => $q->where('company_code', $v))
+            ->when($request->status, fn ($q, $v) => $q->where('status', $v))
             //     ->when($request->company_code, fn($q, $v) => $q->where('company_code', $v))
             ->latest()->paginate(25);
         return view('sourcing.vendors.index', compact('vendors'));
@@ -80,7 +83,7 @@ class SourcingController extends Controller
         $activeCompany = session('active_company');
 
         $sheets = OfferSheet::with('vendor', 'items')
-            ->when($request->status, fn($q, $v) => $q->where('status', $v))
+            ->when($request->status, fn ($q, $v) => $q->where('status', $v))
             ->where('company_code', $activeCompany)
             ->latest()->paginate(20);
         return view('sourcing.offer-sheets.index', compact('sheets'));
@@ -190,10 +193,10 @@ class SourcingController extends Controller
     public function liveSheets(Request $request)
     {
         $activeCompany = session('active_company');
+        
         $liveSheets = LiveSheet::with('vendor', 'offerSheet', 'consignment', 'items.product')
-            ->when($request->status, fn($q, $v) => $q->where('status', $v))
+            ->when($request->status, fn ($q, $v) => $q->where('status', $v))
             ->where('company_code', $activeCompany)
-            ->when($request->company_code, fn($q, $v) => $q->where('company_code', $v))
             ->latest()->paginate(20);
         return view('sourcing.live-sheets.index', compact('liveSheets'));
     }
@@ -204,7 +207,15 @@ class SourcingController extends Controller
     public function showLiveSheet(LiveSheet $liveSheet)
     {
         $liveSheet->load('vendor', 'offerSheet', 'consignment', 'items.product');
-        return view('sourcing.live-sheets.show', compact('liveSheet'));
+
+        // Get thumbnails from offer_sheet_items by product_id
+        $productIds = $liveSheet->items->pluck('product_id')->filter();
+        $offerThumbnails = \App\Models\OfferSheetItem::whereIn('product_id', $productIds)
+            ->whereNotNull('thumbnail')
+            ->pluck('thumbnail', 'product_id');
+
+        // $liveSheet->load('vendor', 'offerSheet', 'consignment', 'items.product');
+        return view('sourcing.live-sheets.show', compact('liveSheet', 'offerThumbnails'));
     }
 
     /**
@@ -282,7 +293,9 @@ class SourcingController extends Controller
 
         foreach ($request->items as $row) {
             $item = LiveSheetItem::find($row['item_id']);
-            if (!$item || $item->live_sheet_id !== $liveSheet->id) continue;
+            if (!$item || $item->live_sheet_id !== $liveSheet->id) {
+                continue;
+            }
 
             $details = $item->product_details ?? [];
             $finalQty = $row['final_qty'] ?? $details['final_qty'] ?? $item->quantity;
@@ -446,7 +459,7 @@ class SourcingController extends Controller
             'status'             => 'created',
             'total_items'        => $selectedItems->sum('quantity'),
             'total_cbm'          => $selectedItems->sum('total_cbm'),
-            'total_value'        => $totalValue,//$selectedItems->sum('total_price'),
+            'total_value'        => $totalValue, //$selectedItems->sum('total_price'),
             'created_by'         => auth()->id(),
         ]);
 
@@ -483,9 +496,9 @@ class SourcingController extends Controller
     {
         $activeCompany = session('active_company');
         $consignments = Consignment::with('vendor', 'liveSheet', 'inspectionReports')
-            ->when($request->status, fn($q, $v) => $q->where('status', $v))
+            ->when($request->status, fn ($q, $v) => $q->where('status', $v))
             ->where('company_code', $activeCompany)
-            ->when($request->company_code, fn($q, $v) => $q->where('company_code', $v))
+            ->when($request->company_code, fn ($q, $v) => $q->where('company_code', $v))
             ->latest()->paginate(20);
         return view('sourcing.consignments.index', compact('consignments'));
     }
@@ -505,9 +518,9 @@ class SourcingController extends Controller
         $activeCompany = session('active_company');
 
         $inspections = \App\Models\InspectionReport::with('consignment.vendor', 'uploader')
-            ->when($request->type, fn($q, $v) => $q->where('inspection_type', $v))
-            ->when($request->consignment_id, fn($q, $v) => $q->where('consignment_id', $v))
-            ->when($request->result, fn($q, $v) => $q->where('result', $v))
+            ->when($request->type, fn ($q, $v) => $q->where('inspection_type', $v))
+            ->when($request->consignment_id, fn ($q, $v) => $q->where('consignment_id', $v))
+            ->when($request->result, fn ($q, $v) => $q->where('result', $v))
             ->when(!empty($activeCompany), function ($q) use ($activeCompany) {
                 $q->whereHas('consignment', function ($cq) use ($activeCompany) {
                     $cq->where('company_code', $activeCompany);
@@ -716,7 +729,7 @@ class SourcingController extends Controller
                 }
 
                 // Find matching live sheet item by SKU
-                $item = $liveSheet->items()->whereHas('product', fn($q) => $q->where('sku', $sku))->first();
+                $item = $liveSheet->items()->whereHas('product', fn ($q) => $q->where('sku', $sku))->first();
 
                 if (!$item) {
                     $errors[] = "Row " . ($idx) . ": SKU '{$sku}' not found in this live sheet.";
@@ -754,5 +767,347 @@ class SourcingController extends Controller
         } catch (\Exception $e) {
             return back()->with('error', 'Error processing file: ' . $e->getMessage());
         }
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // 1. DOWNLOAD OFFER SHEET (Sourcing)
+    // ═══════════════════════════════════════════════════════════
+
+    public function downloadOfferSheet(\App\Models\OfferSheet $offerSheet)
+    {
+        $items = $offerSheet->items()->with(['product' => fn ($q) => $q->withoutGlobalScopes()])->get();
+
+        $spreadsheet = new Spreadsheet();
+        $sheet = $spreadsheet->getActiveSheet();
+        $sheet->setTitle('Offer Sheet');
+
+        $activeCompany = session('active_company') ?? '2100';
+        $isUS = ($activeCompany === '2100');
+        $currency = trim(config('app.active_currency_symbol')); // $, ₹, €
+        $lwhUnit = $isUS ? 'Inches' : 'CM';
+        $weightUnit = $isUS ? 'LBS' : 'KG';
+
+        // Header
+        $headers = [
+            'S.No',
+            'SKU',
+            'Product Name',
+            'Image',
+            "Length ({$lwhUnit})",
+            "Width ({$lwhUnit})",
+            "Height ({$lwhUnit})",
+            "Weight ({$weightUnit})",
+            'Material',
+            'Color',
+            'Finish',
+            'Category',
+            'Sub Category',
+            "Vendor FOB({$currency})",
+            'Selected',
+            'Comments'
+        ];
+
+        foreach ($headers as $col => $h) {
+            $sheet->setCellValue([$col + 1, 1], $h);
+        }
+
+        // Style header
+        $headerStyle = [
+            'font' => ['bold' => true, 'color' => ['rgb' => 'FFFFFF'], 'name' => 'Arial', 'size' => 10],
+            'fill' => ['fillType' => \PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID, 'startColor' => ['rgb' => '1E3A5F']],
+            'alignment' => ['horizontal' => \PhpOffice\PhpSpreadsheet\Style\Alignment::HORIZONTAL_CENTER],
+        ];
+        $sheet->getStyle([1, 1, count($headers), 1])->applyFromArray($headerStyle);
+
+        // Data rows
+        $row = 2;
+        foreach ($items as $idx => $item) {
+            $d = $item->product_details ?? [];
+            $product = $item->product;
+
+            $sheet->setCellValue([1, $row], $idx + 1);
+            $sheet->setCellValue([2, $row], $product->sku ?? $item->product_sku ?? '');
+            $sheet->setCellValue([3, $row], $product->name ?? $item->product_name ?? '');
+            // Column 4 (Image) — insert image if available
+            if ($item->thumbnail || $product->thumbnail) {
+                $imgPath = $item->thumbnail ?: $product->thumbnail;
+                try {
+                    if (\App\Helpers\FileStorage::disk() === 's3') {
+                        $tempPath = tempnam(sys_get_temp_dir(), 'img_');
+                        file_put_contents($tempPath, \App\Helpers\FileStorage::get($imgPath));
+                        $localPath = $tempPath;
+                    } else {
+                        $localPath = storage_path('app/public/' . $imgPath);
+                    }
+
+                    if (file_exists($localPath)) {
+                        $drawing = new Drawing();
+                        $drawing->setPath($localPath);
+                        $drawing->setCoordinates(\PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex(4) . $row);
+                        $drawing->setWidth(50);
+                        $drawing->setHeight(50);
+                        $drawing->setOffsetX(5);
+                        $drawing->setOffsetY(5);
+                        $drawing->setWorksheet($sheet);
+                    }
+                } catch (\Exception $e) {
+                    $sheet->setCellValue([4, $row], 'Image N/A');
+                }
+            }
+
+            $sheet->setCellValue([5, $row], $d['length'] ?? $product->length ?? '');
+            $sheet->setCellValue([6, $row], $d['width'] ?? $product->width ?? '');
+            $sheet->setCellValue([7, $row], $d['height'] ?? $product->height ?? '');
+            $sheet->setCellValue([8, $row], $d['weight'] ?? $product->weight ?? '');
+            $sheet->setCellValue([9, $row], $d['material'] ?? $product->material ?? '');
+            $sheet->setCellValue([10, $row], $d['color'] ?? '');
+            $sheet->setCellValue([11, $row], $d['finish'] ?? '');
+            $sheet->setCellValue([12, $row], $d['category'] ?? '');
+            $sheet->setCellValue([13, $row], $d['sub_category'] ?? '');
+            $sheet->setCellValue([14, $row], $item->vendor_price ?? $product->vendor_price ?? '');
+            $sheet->setCellValue([15, $row], $item->is_selected ? 'Yes' : 'No');
+            $sheet->setCellValue([16, $row], $d['comments'] ?? '');
+
+            $sheet->getRowDimension($row)->setRowHeight($item->thumbnail ? 45 : 20);
+            $row++;
+        }
+
+        // Auto-size columns (except image column)
+        foreach (range(1, count($headers)) as $col) {
+            if ($col === 4) {
+                $sheet->getColumnDimensionByColumn($col)->setWidth(10);
+            } else {
+                $sheet->getColumnDimensionByColumn($col)->setAutoSize(true);
+            }
+        }
+
+        $filename = "{$offerSheet->offer_sheet_number}.xlsx";
+        $path = storage_path("app/temp/{$filename}");
+        @mkdir(dirname($path), 0775, true);
+
+        $writer = new Xlsx($spreadsheet);
+        $writer->save($path);
+
+        return response()->download($path, $filename)->deleteFileAfterSend(true);
+    }
+
+
+    // ═══════════════════════════════════════════════════════════
+    // 2. DOWNLOAD LIVE SHEET WITH IMAGES (Sourcing/Finance)
+    // ═══════════════════════════════════════════════════════════
+
+    public function downloadLiveSheet(\App\Models\LiveSheet $liveSheet)
+    {
+        $items = $liveSheet->items()->with(['product' => fn ($q) => $q->withoutGlobalScopes()])->get();
+        $spreadsheet = new Spreadsheet();
+        $sheet = $spreadsheet->getActiveSheet();
+        $sheet->setTitle('Live Sheet');
+
+        $activeCompany = session('active_company') ?? '2100';
+        $isUS = ($activeCompany === '2100');
+        $currency = trim(config('app.active_currency_symbol')); // $, ₹, €
+        $lwhUnit = $isUS ? 'Inches' : 'CM';
+        $weightUnit = $isUS ? 'LBS' : 'KG';
+
+        $headers = [
+            'S.No',
+            'SKU',
+            'SAP Code',
+            'Barcode',
+            'Product Name',
+            'Image',
+            'Description',
+            'HSN/HTS',
+            'Qty',
+            "Vendor FOB({$currency})",
+            "Vendor WSP({$currency})",
+            "Total Price({$currency})",
+            "Length ({$lwhUnit})",
+            "Width ({$lwhUnit})",
+            "Height ({$lwhUnit})",
+            "Weight ({$weightUnit})",
+            'Material',
+            'Color',
+            'Finish',
+            'Category',
+            'Qty/Inner Pack',
+            'Inner Carton Length',
+            'Inner Carton Width',
+            'Inner Carton Height',
+            'Inner Carton Weight',
+            'Qty/Master Pack',
+            'Master Carton Length',
+            'Master Carton Width',
+            'Master Carton Height',
+            'Master Carton Weight',
+            'CBM/Unit',
+            'Total CBM'
+        ];
+
+        foreach ($headers as $col => $h) {
+            $sheet->setCellValue([$col + 1, 1], $h);
+        }
+
+        $headerStyle = [
+            'font' => ['bold' => true, 'color' => ['rgb' => 'FFFFFF'], 'name' => 'Arial', 'size' => 9],
+            'fill' => ['fillType' => \PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID, 'startColor' => ['rgb' => '1E3A5F']],
+        ];
+        $sheet->getStyle([1, 1, count($headers), 1])->applyFromArray($headerStyle);
+
+        $row = 2;
+        foreach ($items as $idx => $item) {
+            $d = $item->product_details ?? [];
+            $product = $item->product;
+
+            $sheet->setCellValue([1, $row], $idx + 1);
+            $sheet->setCellValue([2, $row], $product->sku ?? '');
+            $sheet->setCellValue([3, $row], $d['sap_code'] ?? $product->sap_code ?? '');
+            $sheet->setCellValue([4, $row], $d['barcode'] ?? $product->barcode ?? '');
+            $sheet->setCellValue([5, $row], $product->name ?? '');
+
+            // Column 6 — Image
+            $imgPath = $product->thumbnail ?? null;
+            if ($imgPath) {
+                try {
+                    if (\App\Helpers\FileStorage::disk() === 's3') {
+                        $tempPath = tempnam(sys_get_temp_dir(), 'lsimg_');
+                        file_put_contents($tempPath, \App\Helpers\FileStorage::get($imgPath));
+                        $localPath = $tempPath;
+                    } else {
+                        $localPath = storage_path('app/public/' . $imgPath);
+                    }
+
+                    if (file_exists($localPath)) {
+                        $drawing = new Drawing();
+                        $drawing->setPath($localPath);
+                        $drawing->setCoordinates(\PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex(6) . $row);
+                        $drawing->setWidth(45);
+                        $drawing->setHeight(45);
+                        $drawing->setOffsetX(3);
+                        $drawing->setOffsetY(3);
+                        $drawing->setWorksheet($sheet);
+                    }
+                } catch (\Exception $e) {
+                    // Skip image
+                }
+            }
+
+            $sheet->setCellValue([7, $row], $d['description'] ?? $product->description ?? '');
+            $sheet->setCellValue([8, $row], $d['hsn_hts_code'] ?? $product->hsn_code ?? '');
+            $sheet->setCellValue([9, $row], $item->quantity ?? 0);
+            $sheet->setCellValue([10, $row], $d['vendor_fob'] ?? $item->unit_price ?? '');
+            $sheet->setCellValue([11, $row], $d['vendor_wsp'] ?? $d['wsp'] ?? '');
+            $sheet->setCellValue([12, $row], $item->total_price ?? 0);
+            $sheet->setCellValue([13, $row], $d['length'] ?? $product->length ?? '');
+            $sheet->setCellValue([14, $row], $d['width'] ?? $product->width ?? '');
+            $sheet->setCellValue([15, $row], $d['height'] ?? $product->height ?? '');
+            $sheet->setCellValue([16, $row], $d['weight'] ?? $product->weight ?? '');
+            $sheet->setCellValue([17, $row], $d['material'] ?? $product->material ?? '');
+            $sheet->setCellValue([18, $row], $d['color'] ?? '');
+            $sheet->setCellValue([19, $row], $d['finish'] ?? '');
+            $sheet->setCellValue([20, $row], $d['category'] ?? '');
+            $sheet->setCellValue([21, $row], $d['qty_inner_pack'] ?? '');
+            $sheet->setCellValue([22, $row], $d['inner_carton_length'] ?? '');
+            $sheet->setCellValue([23, $row], $d['inner_carton_width'] ?? '');
+            $sheet->setCellValue([24, $row], $d['inner_carton_height'] ?? '');
+            $sheet->setCellValue([25, $row], $d['inner_carton_weight'] ?? '');
+            $sheet->setCellValue([26, $row], $d['qty_master_pack'] ?? '');
+            $sheet->setCellValue([27, $row], $d['master_carton_length'] ?? '');
+            $sheet->setCellValue([28, $row], $d['master_carton_width'] ?? '');
+            $sheet->setCellValue([29, $row], $d['master_carton_height'] ?? '');
+            $sheet->setCellValue([30, $row], $d['master_carton_weight'] ?? '');
+            $sheet->setCellValue([31, $row], $item->cbm_per_unit ?? '');
+            $sheet->setCellValue([32, $row], $item->total_cbm ?? '');
+
+            $sheet->getRowDimension($row)->setRowHeight($imgPath ? 40 : 18);
+            $row++;
+        }
+
+        foreach (range(1, count($headers)) as $col) {
+            $sheet->getColumnDimensionByColumn($col)->setWidth($col === 6 ? 9 : ($col <= 5 ? 14 : 12));
+        }
+
+        $filename = "{$liveSheet->live_sheet_number}.xlsx";
+        $path = storage_path("app/temp/{$filename}");
+        @mkdir(dirname($path), 0775, true);
+
+        (new Xlsx($spreadsheet))->save($path);
+        return response()->download($path, $filename)->deleteFileAfterSend(true);
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // 3. LIVE SHEET INLINE UPDATE (Sourcing)
+    // ═══════════════════════════════════════════════════════════
+
+    public function updateLiveSheetItems(Request $request, \App\Models\LiveSheet $liveSheet)
+    {
+        if ($liveSheet->is_locked) {
+            return response()->json(['error' => 'Cannot edit locked live sheet.'], 422);
+        }
+
+        $request->validate([
+            'items'               => 'required|array',
+            'items.*.id'          => 'required|exists:live_sheet_items,id',
+            'items.*.quantity'    => 'nullable|integer|min:0',
+            'items.*.unit_price'  => 'nullable|numeric|min:0',
+            'items.*.vendor_wsp'  => 'nullable|numeric|min:0',
+            'items.*.description' => 'nullable|string|max:500',
+            'items.*.hsn_code'    => 'nullable|string|max:50',
+            'items.*.barcode'     => 'nullable|string|max:100',
+            'items.*.length'      => 'nullable|numeric',
+            'items.*.width'       => 'nullable|numeric',
+            'items.*.height'      => 'nullable|numeric',
+            'items.*.weight'      => 'nullable|numeric',
+            'items.*.material'    => 'nullable|string|max:200',
+            'items.*.color'       => 'nullable|string|max:100',
+            'items.*.qty_inner_pack'  => 'nullable|integer|min:0',
+            'items.*.qty_master_pack' => 'nullable|integer|min:0',
+        ]);
+
+        $updated = 0;
+        foreach ($request->items as $data) {
+            $item = \App\Models\LiveSheetItem::where('id', $data['id'])
+                ->where('live_sheet_id', $liveSheet->id)->first();
+            if (!$item) {
+                continue;
+            }
+
+            $details = $item->product_details ?? [];
+
+            // Update product_details JSON fields
+            $detailFields = [
+                'vendor_wsp',
+                'description',
+                'hsn_hts_code',
+                'barcode',
+                'length',
+                'width',
+                'height',
+                'weight',
+                'material',
+                'color',
+                'qty_inner_pack',
+                'qty_master_pack'
+            ];
+            foreach ($detailFields as $field) {
+                $inputKey = str_replace('hsn_hts_code', 'hsn_code', $field);
+                if (isset($data[$inputKey])) {
+                    $details[$field] = $data[$inputKey];
+                }
+            }
+
+            $qty = intval($data['quantity'] ?? $item->quantity);
+            $unitPrice = floatval($data['unit_price'] ?? $item->unit_price);
+
+            $item->update([
+                'quantity'         => $qty,
+                'unit_price'       => $unitPrice,
+                'total_price'      => round($qty * $unitPrice, 2),
+                'product_details'  => $details,
+            ]);
+            $updated++;
+        }
+
+        return response()->json(['success' => true, 'message' => "{$updated} item(s) updated."]);
     }
 }

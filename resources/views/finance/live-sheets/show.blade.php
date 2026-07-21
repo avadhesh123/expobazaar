@@ -143,9 +143,9 @@
                 Current: {{ $activeRevision->commission_percentage }}%
             </span>
             @elseif($liveSheet->commission_percentage)
-            <span style="padding:.2rem .6rem;background:#f5f3ff;border:1px solid #ddd6fe;border-radius:6px;font-size:.82rem;font-weight:700;color:#7c3aed;">
+            <!-- <span style="padding:.2rem .6rem;background:#f5f3ff;border:1px solid #ddd6fe;border-radius:6px;font-size:.82rem;font-weight:700;color:#7c3aed;">
                 Base: {{ $liveSheet->commission_percentage }}%
-            </span>
+            </span> -->
             @endif
             <button type="button" class="btn btn-primary btn-sm" onclick="document.getElementById('commRevisionForm').style.display=document.getElementById('commRevisionForm').style.display==='none'?'block':'none'">
                 <i class="fas fa-plus"></i> Add Revision
