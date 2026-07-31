@@ -430,7 +430,20 @@
 </head>
 
 <body>
+    @if(session('impersonating_from'))
+<div style="position:fixed;top:0;left:0;width:100%;z-index:99999;background:#dc2626;color:#fff;padding:6px 16px;font-size:.78rem;display:flex;justify-content:space-between;align-items:center;">
+    <span>
+        <i class="fas fa-user-secret" style="margin-right:.3rem;"></i>
+        <strong>Admin View</strong> — Viewing as <strong>{{ auth()->user()->vendor->company_name ?? auth()->user()->name }}</strong>
+    </span>
+    <a href="{{ route('admin.stop-impersonating') }}" style="background:#fff;color:#dc2626;padding:3px 12px;border-radius:5px;font-weight:700;text-decoration:none;font-size:.72rem;">
+        <i class="fas fa-sign-out-alt" style="margin-right:.2rem;"></i> Back to Admin
+    </a>
+</div>
+<div style="height:32px;"></div>
+@endif
     <aside class="sidebar">
+        
         <div class="logo">
             <img src="{{ asset('images/logo.svg') }}" alt="ExpoBazaar" loading="eager"  style="background: #fff; padding: 5px; border-radius: 5px;"sizes="200px" data-animate="fadein"> 
             <h1>EB Partner Home</h1>
@@ -460,7 +473,7 @@
       //  if ($moduleKey !== 'vendor' && $isVendor) continue;
 
         // ── ADMIN: sees everything from config ──
-        if ($isAdmin && false) {
+        if ($isAdmin) {
         $features = [];
         foreach ($moduleConfig['entities'] as $entityKey => $entityConfig) {
         if (isset($entityConfig['sidebar']) && $entityConfig['sidebar'] === false) continue;

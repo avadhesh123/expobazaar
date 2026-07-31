@@ -39,6 +39,8 @@ class LogisticsService
                 'port_of_discharge' => $data['port_of_discharge'] ?? null,
                 'destination_warehouse_id' => $data['warehouse_id'] ?? null,
                 'created_by' => auth()->id(),
+               // 'shipment_date' => $data['custom_date'] ?? now()->toDateString(),
+                'created_at'    => $data['custom_date'] ? \Carbon\Carbon::parse($data['custom_date']) : now(),
             ]);
 
             // Attach consignments and update their status
@@ -68,7 +70,7 @@ class LogisticsService
     {
         return DB::transaction(function () use ($shipment, $data, $user) {
 
-            if ($data['sailing_date'])
+            if ($data['sailing_date']) {
                 $shipment->update([
                     'sailing_date' => $data['sailing_date'],
                     'eta_date' => $data['eta_date'] ?? null,
@@ -95,6 +97,7 @@ class LogisticsService
 
 
                 ]);
+            }
             //'planning','shipment','consolidated','locked','asn_generated','in_transit','arrived','grn_pending','grn_completed','cancelled'
             // Auto-generate ASN
             // $asn = $this->generateAsn($shipment);
@@ -128,7 +131,7 @@ class LogisticsService
             // ]);
 
             // Auto-generate ASN
-            $asn = $this->generateAsn($shipment);
+            $asn = $this->generateAsn($shipment, $data['custom_date'] ?? null);
             $shipment->update(['status' => 'asn_generated', 'locked_by' => $user->id, 'locked_at' => now(),]);
             ActivityLog::log('locked', 'shipment', $shipment, null, null, 'Shipment locked and ASN generated');
 
@@ -148,7 +151,7 @@ class LogisticsService
     /**
      * Auto-generate ASN from locked shipment
      */
-    public function generateAsn(Shipment $shipment): Asn
+    public function generateAsn(Shipment $shipment, ?string $customDate = null): Asn
     {
         $items = [];
         foreach ($shipment->consignments as $consignment) {
@@ -190,7 +193,8 @@ class LogisticsService
             'total_cbm'    => $shipment->total_cbm,
             'total_items'  => $shipment->total_items,
             'generated_by' => auth()->id(),
-            'generated_at' => now(),
+            'generated_at'    => $customDate ? \Carbon\Carbon::parse($customDate) : now(),
+
         ]);
     }
 
@@ -200,6 +204,9 @@ class LogisticsService
     public function uploadGrn(Shipment $shipment, array $data, array $items): Grn
     {
         return DB::transaction(function () use ($shipment, $data, $items) {
+
+            $custom_date = $data['custom_date'] ? \Carbon\Carbon::parse($data['custom_date']) : now();
+
             $grn = Grn::create([
                 'grn_number' => Grn::generateNumber($shipment->shipment_code),
                 'shipment_id' => $shipment->id,
@@ -215,6 +222,7 @@ class LogisticsService
                 'grn_file' => $data['grn_file'] ?? null,
                 'remarks' => $data['remarks'] ?? null,
                 'uploaded_by' => auth()->id(),
+                'created_at'    => $custom_date,
             ]);
 
             foreach ($items as $item) {
@@ -231,7 +239,7 @@ class LogisticsService
                 ]);
 
                 // Add to inventory
-                $this->addToInventory($item['product_id'], $data['warehouse_id'], $shipment->company_code, $item['received_quantity'], $grn, $item['consignment_id'] ?? null);
+                $this->addToInventory($item['product_id'], $data['warehouse_id'], $shipment->company_code, $item['received_quantity'], $grn, $item['consignment_id'] ?? null, $custom_date);
             }
 
             $shipment->update(['status' => 'grn_completed']);
@@ -253,11 +261,11 @@ class LogisticsService
     /**
      * Add received goods to inventory
      */
-    protected function addToInventory(int $productId, int $warehouseId, string $companyCode, int $quantity, Grn $grn, ?int $consignmentId): void
+    protected function addToInventory(int $productId, int $warehouseId, string $companyCode, int $quantity, Grn $grn, ?int $consignmentId, string $custom_date): void
     {
         $inventory = Inventory::firstOrCreate(
             ['product_id' => $productId, 'warehouse_id' => $warehouseId, 'company_code' => $companyCode],
-            ['quantity' => 0, 'reserved_quantity' => 0, 'available_quantity' => 0, 'received_date' => now()]
+            ['quantity' => 0, 'reserved_quantity' => 0, 'available_quantity' => 0, 'received_date' => $custom_date]
         );
 
         $inventory->increment('quantity', $quantity);
@@ -453,10 +461,10 @@ class LogisticsService
     {
         $warehouse = Warehouse::findOrFail($warehouseId);
         $inventory = Inventory::where('warehouse_id', $warehouseId)
-            ->whereHas('product', fn($q) => $q->where('vendor_id', $vendorId))
+            ->whereHas('product', fn ($q) => $q->where('vendor_id', $vendorId))
             ->get();
 
-        $totalCbm = $inventory->sum(fn($inv) => $inv->product->cbm * $inv->quantity);
+        $totalCbm = $inventory->sum(fn ($inv) => $inv->product->cbm * $inv->quantity);
 
         $charges = [];
 

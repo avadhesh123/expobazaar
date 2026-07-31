@@ -13,32 +13,24 @@ use App\Http\Controllers\Hod\HodController;
 use App\Http\Controllers\Hod\DropshipController;
 use Illuminate\Support\Facades\Auth;
 
-// Authentication (Email OTP)
+// Auth routes — no middleware (guests can access login, forgot password etc.)
 Route::prefix('auth')->name('auth.')->group(function () {
     Route::get('login', [AuthController::class, 'showLogin'])->name('login');
+    Route::post('login-password', [AuthController::class, 'loginWithPassword'])->name('login-password');
     Route::post('request-otp', [AuthController::class, 'requestOtp'])->name('request-otp');
     Route::get('verify-otp', [AuthController::class, 'showVerifyOtp'])->name('verify-otp');
     Route::post('verify-otp', [AuthController::class, 'verifyOtp'])->name('verify-otp.submit');
-    Route::match(['get', 'post'], 'logout', [AuthController::class, 'logout'])->name('logout');
-
-    Route::post('login-password', [AuthController::class, 'loginWithPassword'])->name('login-password');
-    Route::post('change-password', [AuthController::class, 'changePassword'])->name('change-password');
-    Route::post('set-password/{user}', [AuthController::class, 'setPassword'])->name('set-password');
-
-    Route::get('change-password', [AuthController::class, 'showChangePassword'])->name('change-password');
-    Route::post('change-password', [AuthController::class, 'changePassword'])->name('change-password.update');
-
-
-});
-
-// Auth group (guest)
-Route::prefix('auth')->name('auth.')->middleware('guest')->group(function () {
-    // ... existing routes ...
     Route::get('forgot-password', [AuthController::class, 'showForgotPassword'])->name('forgot-password');
     Route::post('forgot-password', [AuthController::class, 'sendResetOtp'])->name('forgot-password.send');
     Route::get('reset-password', [AuthController::class, 'showResetPassword'])->name('reset-password');
     Route::post('reset-password', [AuthController::class, 'resetPassword'])->name('reset-password.update');
+    //Route::post('logout', [AuthController::class, 'logout'])->name('logout');
+    Route::match(['get', 'post'], 'logout', [AuthController::class, 'logout'])->name('logout');
+
 });
+
+
+
 
 Route::get('/', fn () => redirect()->route('auth.login'));
 
@@ -46,6 +38,13 @@ Route::get('/', fn () => redirect()->route('auth.login'));
 Route::redirect('/login', '/auth/login')->name('login');
 
 Route::middleware(['auth'])->group(function () {
+
+    // Change password (any logged-in user)
+    Route::get('change-password', [AuthController::class, 'showChangePassword'])->name('auth.change-password');
+    Route::post('change-password', [AuthController::class, 'changePassword'])->name('auth.change-password.update');
+
+
+    Route::get('admin/stop-impersonating', [AdminController::class, 'stopImpersonating'])->name('admin.stop-impersonating');
 
     // ADMIN
     Route::prefix('admin')->name('admin.')->middleware('user.type:admin')->group(function () {
@@ -101,6 +100,11 @@ Route::middleware(['auth'])->group(function () {
         Route::get('profile', [AdminController::class, 'profile'])->name('profile');
         Route::get('profile/edit', [AdminController::class, 'editProfile'])->name('profile.edit');
         Route::put('profile', [AdminController::class, 'updateProfile'])->name('profile.update');
+
+
+        Route::get('vendor-access', [AdminController::class, 'vendorAccess'])->name('vendor-access');
+        Route::get('vendors/{vendor}/impersonate', [AdminController::class, 'impersonateVendor'])->name('vendors.impersonate');
+
     });
 
     // VENDOR (External)
@@ -377,6 +381,11 @@ Route::middleware(['auth'])->group(function () {
         // NEW — Upload filled SAP Excel and apply codes
         Route::post('live-sheets/{liveSheet}/sap-upload', [FinanceController::class, 'uploadSapCodes'])
             ->name('live-sheets.sap-upload');     // → finance.live-sheets.sap-upload
+
+
+        Route::post('live-sheets/{liveSheet}/wsp', [FinanceController::class, 'storeWspRevision'])->name('live-sheets.wsp.store');
+        Route::delete('wsp-revision/{revision}', [FinanceController::class, 'deleteWspRevision'])->name('wsp-revision.delete');
+
 
     });
 

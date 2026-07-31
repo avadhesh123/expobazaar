@@ -78,11 +78,11 @@
     <div class="card" style="border-color:#e8a838;">
         <div class="card-body">
             <form method="POST" action="{{ route('finance.payouts.calculate') }}" style="display:flex;flex-wrap:wrap;gap:.75rem;align-items:flex-end;">@csrf
-                <div class="form-group" style="margin-bottom:0;min-width:200px;"><label>Vendor *</label><select name="vendor_id" required>
+                <div class="form-group" style="margin-bottom:0;min-width:200px;"><label>Vendor *</label><select name="pay_vendor_id" required>
                         <option value="">Select...</option>@foreach($vendors as $v)<option value="{{ $v->id }}">{{ $v->company_name }} ({{ $v->vendor_code }})</option>@endforeach
                     </select></div>
-                <div class="form-group" style="margin-bottom:0;"><label>Month *</label><select name="month" required>@for($m=1;$m<=12;$m++)<option value="{{ $m }}" {{ $m==date('n')?'selected':'' }}>{{ date('F',mktime(0,0,0,$m,1)) }}</option>@endfor</select></div>
-                <div class="form-group" style="margin-bottom:0;"><label>Year *</label><input type="number" name="year" value="{{ date('Y') }}" required min="2020" style="width:80px;"></div>
+                <div class="form-group" style="margin-bottom:0;"><label>Month *</label><select name="pay_month" required>@for($m=1;$m<=12;$m++)<option value="{{ $m }}" {{ $m==date('n')?'selected':'' }}>{{ date('F',mktime(0,0,0,$m,1)) }}</option>@endfor</select></div>
+                <div class="form-group" style="margin-bottom:0;"><label>Year *</label><input type="number" name="pay_year" value="{{ date('Y') }}" required min="2020" style="width:80px;"></div>
                 <button type="submit" class="btn btn-secondary"><i class="fas fa-calculator" style="margin-right:.3rem;"></i> Calculate Payout</button>
             </form>
             <div style="margin-top:.5rem;font-size:.72rem;color:#64748b;"><i class="fas fa-info-circle"></i> Calculates: sales − storage charges − inward charges − logistics charges − platform deductions − chargebacks = net payout.</div>

@@ -33,7 +33,7 @@ class VendorPayoutService
                 'status'                   => 'calculated',
                 'calculation_snapshot'      => [
                     'line_items'       => $data['line_items'],
-                    'warehouse_charges' => $data['warehouse_charges_raw'],
+                    'warehouse_charges'=> $data['warehouse_charges_raw'],
                     'chargebacks'      => $data['chargebacks_raw'],
                     'summary'          => $data['summary'],
                     'calculated_at'    => now()->toISOString(),
@@ -58,63 +58,44 @@ class VendorPayoutService
      */
     public function buildPayoutData(int $vendorId, string $companyCode, int $month, int $year): array
     {
-        $logFile = storage_path('logs/vendor_payout_'.now()->format('Y-m-d').'.log');
-
         $periodStart = \Carbon\Carbon::create($year, $month, 1)->startOfMonth();
         $periodEnd   = \Carbon\Carbon::create($year, $month, 1)->endOfMonth();
 
         // ── 1. Get shipped orders for this vendor in this period ──
         $orders = Order::withoutGlobalScopes()
-            ->whereHas('items', fn ($q) => $q->where('vendor_id', $vendorId)->where('shipped_qty', '>', 0))
+            ->whereHas('items', fn($q) => $q->where('vendor_id', $vendorId)->where('shipped_qty', '>', 0))
             ->where('company_code', $companyCode)
             ->whereMonth('order_date', $month)
             ->whereYear('order_date', $year)
             ->whereIn('status', ['shipped', 'delivered'])
             ->with([
                 'salesChannel',
-                'items' => fn ($q) => $q->where('vendor_id', $vendorId)
+                'items' => fn($q) => $q->where('vendor_id', $vendorId)
                     ->where('shipped_qty', '>', 0)
-                    ->with(['product' => fn ($pq) => $pq->withoutGlobalScopes()])
+                    ->with(['product' => fn($pq) => $pq->withoutGlobalScopes()])
             ])
             ->get();
 
         // ── 2. Build FIFO queue from live sheets ──
-        // $fifoQueue = $this->buildFifoQueue($vendorId, $companyCode);
-        // In buildPayoutData(), change:
-        $fifoQueue = $this->buildFifoQueue($vendorId, $companyCode, $periodEnd->toDateString());
-       //  file_put_contents($logFile, "V {$vendorId}  : periodStart {$periodStart} fifoQueue " . json_encode($fifoQueue) . "\n", FILE_APPEND);
+        $fifoQueue = $this->buildFifoQueue($vendorId, $companyCode);
 
         // ── 3. Deduct prior months' shipped qty from FIFO queue ──
         $priorShipped = OrderItem::withoutGlobalScopes()
             ->where('vendor_id', $vendorId)
             ->where('shipped_qty', '>', 0)
-            ->whereHas('order', fn ($q) => $q->withoutGlobalScopes()
+            ->whereHas('order', fn($q) => $q->withoutGlobalScopes()
                 ->where('company_code', $companyCode)
-                //->where('order_date', '<', $periodStart)
-                 ->whereBetween('order_date', [$periodStart, $periodEnd])
+                ->where('order_date', '<', $periodStart)
                 ->whereIn('status', ['shipped', 'delivered']))
             ->select('product_id', DB::raw('SUM(shipped_qty) as shipped'))
             ->groupBy('product_id')
             ->pluck('shipped', 'product_id');
 
-
-        // Print SQL
-        // dd($query->toSql(), $query->getBindings());
-
-        // // Execute
-        // $priorShipped = $query->pluck('shipped', 'product_id');
-
-         file_put_contents($logFile, "ORDERS PID periodStart:{$periodStart} periodEnd:{$periodEnd} " . json_encode($priorShipped) . "  \n", FILE_APPEND);
-
         foreach ($priorShipped as $pid => $shippedQty) {
-            if (!isset($fifoQueue[$pid])) {
-                continue;
-            }
+            if (!isset($fifoQueue[$pid])) continue;
             $remaining = intval($shippedQty);
             foreach ($fifoQueue[$pid] as &$batch) {
-                if ($remaining <= 0) {
-                    break;
-                }
+                if ($remaining <= 0) break;
                 $deduct = min($remaining, $batch['remaining_qty']);
                 $batch['remaining_qty'] -= $deduct;
                 $remaining -= $deduct;
@@ -132,18 +113,11 @@ class VendorPayoutService
         foreach ($orders as $order) {
             foreach ($order->items as $item) {
                 $product = $item->product;
-                if (!$product) {
-                    continue;
-                }
+                if (!$product) continue;
 
                 $pid = $product->id;
-                
-                file_put_contents($logFile, "PID {$pid}  \n", FILE_APPEND);
-
                 $shippedQty = intval($item->shipped_qty);
-                if ($shippedQty <= 0) {
-                    continue;
-                }
+                if ($shippedQty <= 0) continue;
 
                 $qtyToAllocate = $shippedQty;
                 $itemSaleAmount = 0;
@@ -151,19 +125,11 @@ class VendorPayoutService
                 $itemPayout = 0;
                 $details = [];
 
-
                 // FIFO allocation
                 if (isset($fifoQueue[$pid])) {
-
-                    file_put_contents($logFile, "PID {$pid}  \n", FILE_APPEND);
-
                     foreach ($fifoQueue[$pid] as &$batch) {
-                        if ($qtyToAllocate <= 0) {
-                            break;
-                        }
-                        if ($batch['remaining_qty'] <= 0) {
-                            continue;
-                        }
+                        if ($qtyToAllocate <= 0) break;
+                        if ($batch['remaining_qty'] <= 0) continue;
 
                         $allocate = min($qtyToAllocate, $batch['remaining_qty']);
                         $batchSale = round($batch['vendor_wsp'] * $allocate, 2);
@@ -222,16 +188,16 @@ class VendorPayoutService
             ->with('warehouse')
             ->get();
 
-        $totalWarehouseCharges = $warehouseCharges->sum(fn ($c) => floatval($c->total_charge ?? $c->calculated_amount ?? 0));
+        $totalWarehouseCharges = $warehouseCharges->sum(fn($c) => floatval($c->total_charge ?? $c->calculated_amount ?? 0));
 
         // ── 6. Chargebacks ──
         $chargebacks = Chargeback::withoutGlobalScopes()
             ->where('vendor_id', $vendorId)
-            ->whereHas('order', fn ($q) => $q->withoutGlobalScopes()->where('company_code', $companyCode))
+            ->whereHas('order', fn($q) => $q->withoutGlobalScopes()->where('company_code', $companyCode))
             ->where('status', 'confirmed')
             ->whereMonth('confirmed_at', $month)
             ->whereYear('confirmed_at', $year)
-            ->with(['order' => fn ($q) => $q->withoutGlobalScopes()])
+            ->with(['order' => fn($q) => $q->withoutGlobalScopes()])
             ->get();
 
         $totalChargebacks = $chargebacks->sum('amount');
@@ -243,12 +209,12 @@ class VendorPayoutService
             'line_items' => $lineItems,
             'orders' => $orders,
             'warehouse_charges' => $warehouseCharges,
-            'warehouse_charges_raw' => $warehouseCharges->map(fn ($c) => [
+            'warehouse_charges_raw' => $warehouseCharges->map(fn($c) => [
                 'warehouse' => $c->warehouse->name ?? '—',
                 'amount' => floatval($c->total_charge ?? $c->calculated_amount ?? 0),
             ])->toArray(),
             'chargebacks' => $chargebacks,
-            'chargebacks_raw' => $chargebacks->map(fn ($c) => [
+            'chargebacks_raw' => $chargebacks->map(fn($c) => [
                 'order' => $c->order->order_number ?? '—',
                 'amount' => floatval($c->amount),
                 'reason' => $c->reason ?? '—',
@@ -264,105 +230,29 @@ class VendorPayoutService
             ],
         ];
     }
-    private function buildFifoQueue(int $vendorId, string $companyCode, ?string $asOfDate = null): array
-    {
-       // $logFile = storage_path('logs/vendor_payout_'.now()->format('Y-m-d').'.log');
 
-        $asOfDate = $asOfDate ?? now()->toDateString();
-
-        $liveSheets = LiveSheet::withoutGlobalScopes()
-            ->where('vendor_id', $vendorId)
-            ->where('company_code', $companyCode)
-          //  ->where('status', 'locked')
-            ->orderBy('approved_at', 'asc')
-            ->with(['items' => fn ($q) => $q->select('id', 'live_sheet_id', 'product_id', 'quantity', 'unit_price', 'product_details')])
-            ->get();
-
-        $lsIds = $liveSheets->pluck('id');
-
-        // Get commission active AS OF the payout period, not today
-        $activeRevisions = \App\Models\CommissionRevision::whereIn('live_sheet_id', $lsIds)
-            ->where('effective_from', '<=', $asOfDate)
-            ->where(fn ($q) => $q->whereNull('effective_to')->orWhere('effective_to', '>=', $asOfDate))
-            ->orderByDesc('effective_from')
-            ->get()
-            ->unique('live_sheet_id')
-            ->keyBy('live_sheet_id');
-
-        $fifoQueue = [];
-
-        foreach ($liveSheets as $ls) {
-            $commPercent = isset($activeRevisions[$ls->id])
-                ? floatval($activeRevisions[$ls->id]->commission_percentage)
-                : floatval($ls->commission_percentage ?? 0);
-
-            \Log::channel('daily')->info("FIFO: LS {$ls->live_sheet_number} commission={$commPercent}% (as of {$asOfDate})");
-            //file_put_contents($logFile, "FIFO: LS {$ls->live_sheet_number} commission={$commPercent}% (as of {$asOfDate})   "  . "\n", FILE_APPEND);
-            foreach ($ls->items as $lsItem) {
-                $pid = $lsItem->product_id;
-                $d = $lsItem->product_details ?? [];
-                $batchWsp = floatval($d['wsp'] ?? $d['vendor_wsp'] ?? $lsItem->unit_price ?? 0);
-                //file_put_contents($logFile, "FIFO LS: PID {$pid}   "  . "\n", FILE_APPEND);
-
-                if (!isset($fifoQueue[$pid])) {
-                    $fifoQueue[$pid] = [];
-                }
-                $fifoQueue[$pid][] = [
-                    'live_sheet_id'     => $ls->id,
-                    'live_sheet_number' => $ls->live_sheet_number ?? '',
-                    'vendor_wsp'        => $batchWsp,
-                    'commission'        => $commPercent,
-                    'remaining_qty'     => intval($lsItem->quantity),
-                ];
-            }
-        }
-
-        return $fifoQueue;
-    }
     /**
      * Build FIFO queue from approved/locked live sheets
      */
-    private function buildFifoQueueBAK(int $vendorId, string $companyCode): array
+    private function buildFifoQueue(int $vendorId, string $companyCode): array
     {
-        $logFile = storage_path('logs/vendor_payout_'.now()->format('Y-m-d').'.log');
-
         $liveSheets = LiveSheet::withoutGlobalScopes()
             ->where('vendor_id', $vendorId)
             ->where('company_code', $companyCode)
             ->where('status', 'locked')
             ->orderBy('approved_at', 'asc')
-            ->with(['items' => fn ($q) => $q->select('id', 'live_sheet_id', 'product_id', 'quantity', 'unit_price', 'product_details')])
+            ->with(['items' => fn($q) => $q->select('id', 'live_sheet_id', 'product_id', 'quantity', 'unit_price', 'product_details')])
             ->get();
 
         $fifoQueue = [];
-
-        $lsIds = $liveSheets->pluck('id');
-        $activeRevisions = \App\Models\CommissionRevision::whereIn('live_sheet_id', $lsIds)
-            ->where('effective_from', '<=', now())
-            ->where(fn ($q) => $q->whereNull('effective_to')->orWhere('effective_to', '>=', now()))
-            ->orderByDesc('effective_from')
-            ->get()
-            ->unique('live_sheet_id')  // one per live sheet (latest active)
-            ->keyBy('live_sheet_id');
-
-
         foreach ($liveSheets as $ls) {
-            //  $commPercent = floatval($ls->commission_percentage ?? 0);
-            $commPercent = isset($activeRevisions[$ls->id])
-                    ? floatval($activeRevisions[$ls->id]->commission_percentage)
-                    : floatval($ls->commission_percentage ?? 0);
-
-
-            file_put_contents($logFile, "LS {$ls->live_sheet_number}  {$ls->id}:  commission_percentage {$commPercent}\n", FILE_APPEND);
-
+            $commPercent = floatval($ls->commission_percentage ?? 0);
             foreach ($ls->items as $lsItem) {
                 $pid = $lsItem->product_id;
                 $d = $lsItem->product_details ?? [];
                 $batchWsp = floatval($d['wsp'] ?? $d['vendor_wsp'] ?? $lsItem->unit_price ?? 0);
 
-                if (!isset($fifoQueue[$pid])) {
-                    $fifoQueue[$pid] = [];
-                }
+                if (!isset($fifoQueue[$pid])) $fifoQueue[$pid] = [];
                 $fifoQueue[$pid][] = [
                     'live_sheet_id' => $ls->id,
                     'live_sheet_number' => $ls->live_sheet_number ?? '',

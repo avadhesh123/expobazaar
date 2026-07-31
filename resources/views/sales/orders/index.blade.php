@@ -5,8 +5,8 @@
 @section('content')
 {{-- KPI Stats --}}
 <div class="grid-kpi" style="grid-template-columns:repeat(4,1fr);">
-    <div class="kpi-card"><div class="kpi-label">Total Orders</div><div class="kpi-value">{{ number_format($stats['total_orders'] ?? 0) }}</div></div>
-    <div class="kpi-card" style="border-left:3px solid #16a34a;"><div class="kpi-label">Total Revenue</div><div class="kpi-value" style="color:#16a34a;font-size:1.2rem;">${{ number_format($stats['total_revenue'] ?? 0, 2) }}</div></div>
+    <div class="kpi-card"><div class="kpi-label">rrrTotal Orders</div><div class="kpi-value">{{$activeCurrencySymbol}}{{ number_format($stats['total_orders'] ?? 0) }}</div></div>
+    <div class="kpi-card" style="border-left:3px solid #16a34a;"><div class="kpi-label">{{$activeCurrencySymbol}}Total Revenue</div><div class="kpi-value" style="color:#16a34a;font-size:1.2rem;">${{ number_format($stats['total_revenue'] ?? 0, 2) }}</div></div>
     <div class="kpi-card" style="border-left:3px solid #e8a838;"><div class="kpi-label">Pending</div><div class="kpi-value" style="color:#e8a838;">{{ number_format($stats['pending_orders'] ?? 0) }}</div></div>
     <div class="kpi-card" style="border-left:3px solid #1e40af;"><div class="kpi-label">Today</div><div class="kpi-value" style="color:#1e40af;">{{ number_format($stats['today_orders'] ?? 0) }}</div><div style="font-size:.65rem;color:#94a3b8;">${{ number_format($stats['today_revenue'] ?? 0, 0) }}</div></div>
 </div>

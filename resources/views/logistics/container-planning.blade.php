@@ -49,6 +49,7 @@
     <div class="card" style="margin-bottom:1rem;border-color:#e8a838;">
         <div class="card-body" style="padding:.85rem 1.4rem;">
             <div style="display:flex;flex-wrap:wrap;gap:1rem;align-items:flex-end;">
+               
                 <div style="flex:1;min-width:250px;">
                     <div style="display:flex;justify-content:space-between;margin-bottom:.3rem;">
                         <span style="font-size:.72rem;font-weight:600;color:#64748b;">Selected CBM</span>
@@ -71,7 +72,15 @@
                     </span>
                     <input type="hidden" name="company_code" value="{{ $activeCode }}">
                 </div>
-                <div><label style="font-size:.7rem;font-weight:600;color:#64748b;display:block;margin-bottom:.25rem;">Container #</label><input type="text" name="container_number" placeholder="Optional" style="width:120px;padding:.4rem .5rem;border:1px solid #d1d5db;border-radius:8px;font-size:.82rem;"></div>
+                <div><label style="font-size:.7rem;font-weight:600;color:#64748b;display:block;margin-bottom:.25rem;">Container #</label>
+                    <input type="text" name="container_number" placeholder="Optional" style="width:120px;padding:.4rem .5rem;border:1px solid #d1d5db;border-radius:8px;font-size:.82rem;">
+                </div>
+                 {{-- Add this inside each form, before the submit button --}}
+                <div style="background-color: #eba6a6;">
+                    <label style="font-size:.7rem;font-weight:600;color:#64748b;display:block;margin-bottom:.25rem;">Created Date </label>
+                    <input type="date" name="custom_date" value="{{ old('custom_date', date('Y-m-d')) }}" style="max-width:200px;">
+                </div>
+                {{-- End of Date Input --}}
                 <button type="submit" class="btn btn-primary"><i class="fas fa-ship" style="margin-right:.3rem;"></i> Create Shipment</button>
             </div>
         </div>

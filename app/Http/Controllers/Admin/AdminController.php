@@ -13,11 +13,12 @@ class AdminController extends Controller
     public function __construct(
         protected DashboardService $dashboardService,
         protected VendorService $vendorService
-    ) {}
+    ) {
+    }
 
     public function dashboard(Request $request)
     {
-      //  $companyCode = $request->get('company_code');
+        //  $companyCode = $request->get('company_code');
         $companyCode = session('active_company');
         $data = $this->dashboardService->getAdminDashboard($companyCode);
         return view('admin.dashboard', compact('data', 'companyCode'));
@@ -43,10 +44,10 @@ class AdminController extends Controller
             });
         }
 
-        $query->when($request->type, fn($q, $v) => $q->where('user_type', $v));
-        $query->when($request->department, fn($q, $v) => $q->where('department', $v));
-        $query->when($request->status, fn($q, $v) => $q->where('status', $v));
-        $query->when($request->company_code, fn($q, $v) => $q->whereJsonContains('company_codes', $v));
+        $query->when($request->type, fn ($q, $v) => $q->where('user_type', $v));
+        $query->when($request->department, fn ($q, $v) => $q->where('department', $v));
+        $query->when($request->status, fn ($q, $v) => $q->where('status', $v));
+        $query->when($request->company_code, fn ($q, $v) => $q->whereJsonContains('company_codes', $v));
 
         $sortField = in_array($request->sort, ['name', 'email', 'user_type', 'department', 'status', 'created_at', 'last_login_at'])
             ? $request->sort : 'created_at';
@@ -199,7 +200,7 @@ class AdminController extends Controller
         $userDirectPermissionIds = $user->permissions->pluck('id')->toArray();
 
         // IDs of permissions the user gets via their roles (read-only, shown grayed out)
-        $rolePermissionIds = $user->roles->flatMap(fn($role) => $role->permissions->pluck('id'))->unique()->toArray();
+        $rolePermissionIds = $user->roles->flatMap(fn ($role) => $role->permissions->pluck('id'))->unique()->toArray();
 
         return view('admin.users.permissions', compact(
             'user',
@@ -321,7 +322,7 @@ class AdminController extends Controller
             'user_ids.*'  => 'exists:users,id',
         ]);
 
-        $userIds = collect($request->user_ids)->reject(fn($id) => (int)$id === auth()->id());
+        $userIds = collect($request->user_ids)->reject(fn ($id) => (int)$id === auth()->id());
         if ($userIds->isEmpty()) {
             return back()->with('error', 'No valid users selected.');
         }
@@ -355,9 +356,9 @@ class AdminController extends Controller
     public function exportUsers(Request $request)
     {
         $users = User::with('roles')
-            ->when($request->type, fn($q, $v) => $q->where('user_type', $v))
-            ->when($request->department, fn($q, $v) => $q->where('department', $v))
-            ->when($request->status, fn($q, $v) => $q->where('status', $v))
+            ->when($request->type, fn ($q, $v) => $q->where('user_type', $v))
+            ->when($request->department, fn ($q, $v) => $q->where('department', $v))
+            ->when($request->status, fn ($q, $v) => $q->where('status', $v))
             ->orderBy('name')->get();
 
         $csv = "ID,Name,Email,Phone,Type,Department,Company Codes,Status,Roles,Created,Last Login\n";
@@ -636,11 +637,11 @@ class AdminController extends Controller
     public function activityLog(Request $request)
     {
         $logs = \App\Models\ActivityLog::with('user')
-            ->when($request->module, fn($q, $v) => $q->where('module', $v))
-            ->when($request->action, fn($q, $v) => $q->where('action', $v))
-            ->when($request->user_id, fn($q, $v) => $q->where('user_id', $v))
-            ->when($request->date_from, fn($q, $v) => $q->whereDate('created_at', '>=', $v))
-            ->when($request->date_to, fn($q, $v) => $q->whereDate('created_at', '<=', $v))
+            ->when($request->module, fn ($q, $v) => $q->where('module', $v))
+            ->when($request->action, fn ($q, $v) => $q->where('action', $v))
+            ->when($request->user_id, fn ($q, $v) => $q->where('user_id', $v))
+            ->when($request->date_from, fn ($q, $v) => $q->whereDate('created_at', '>=', $v))
+            ->when($request->date_to, fn ($q, $v) => $q->whereDate('created_at', '<=', $v))
             ->when($request->search, function ($q, $v) {
                 $q->where(function ($sub) use ($v) {
                     $sub->where('description', 'LIKE', "%{$v}%")
@@ -667,7 +668,7 @@ class AdminController extends Controller
 
         return view('admin.activity-log', compact('logs', 'modules', 'actions', 'users', 'stats'));
     }
-        // =====================================================================
+    // =====================================================================
     //  USER PROFILE (Self Management)
     // =====================================================================
 
@@ -720,5 +721,49 @@ class AdminController extends Controller
 
         return redirect()->route('admin.profile')
             ->with('success', 'Profile updated successfully!');
+    }
+
+    public function vendorAccess(Request $request)
+    {
+        $vendors = \App\Models\Vendor::with('user')
+            ->when($request->search, fn ($q, $v) => $q->where('company_name', 'LIKE', "%{$v}%")
+                ->orWhereHas('user', fn ($uq) => $uq->where('email', 'LIKE', "%{$v}%")))
+            ->when($request->status, fn ($q, $v) => $q->where('status', $v))
+            ->latest()
+            ->paginate(25);
+
+        return view('admin.vendor-access', compact('vendors'));
+    }
+
+    public function impersonateVendor(\App\Models\Vendor $vendor)
+    {
+        if (auth()->user()->user_type !== 'admin') {
+            abort(403);
+        }
+
+        if (!$vendor->user) {
+            return back()->with('error', 'This vendor has no user account.');
+        }
+
+        session(['impersonating_from' => auth()->id()]);
+        \Auth::login($vendor->user);
+
+        $companyCodes = $vendor->user->company_codes ?? [];
+        if (!empty($companyCodes)) {
+            session(['active_company' => $companyCodes[0]]);
+        }
+
+        return redirect()->route('vendor.dashboard');
+    }
+
+    public function stopImpersonating()
+    {
+        $adminId = session('impersonating_from');
+        if ($adminId) {
+            \Auth::loginUsingId($adminId);
+            session()->forget('impersonating_from');
+        }
+
+        return redirect()->route('admin.dashboard');
     }
 }

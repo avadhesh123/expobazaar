@@ -293,12 +293,15 @@
                             <th style="min-width:110px;">Vendor SKU</th>
                             <th style="min-width:200px;">Product Name</th>
                             <th style="min-width:80px;">Category</th>
-                            <th style="min-width:60px;">FOB</th>
+                            <th style="min-width:50px;">FOB</th>
                             <th style="min-width:40px;">WSP</th>
-                            <th style="min-width:40px;">Qty</th>
+                            <th style="min-width:30px;">Qty</th>
                             <th style="min-width:100px;">Barcode</th>
-                            <th style="min-width:160px;background:#eff6ff;">SAP Code *</th>
-                            <th style="min-width:100px;background:#eff6ff;">Vendor WSP</th>
+                            <th style="min-width:130px;background:#eff6ff;">SAP Code *</th>
+                            <th style="min-width:110px;background:#e0ded5;">Vendor WSP</th>
+                            <th style="background:#e0ded5;">Eeffective From</th>
+                            <th style="background:#e0ded5;">Eeffective To</th>
+                            <th style="background:#e0ded5;width:60px;"></th>
                             <th style="width:60px;">Status</th>
                         </tr>
                     </thead>
@@ -315,8 +318,6 @@
                       //  $landedCost = $finalFob + $dutyAmt + $freightAmt;
                       //  $wsp = $landedCost * floatval($d['wsp_factor'] ?? 0); 
 
-
-
                         
                     $finalFob = (float)($d['final_fob'] ?? $item->unit_price);
                     $dutyPercent = (float)($d['duty_percent'] ?? 0);
@@ -327,9 +328,21 @@
                     $freightAmt = $finalFob * ($freightFactor / 100);
                     $landedCost = $finalFob + $dutyAmt + $freightAmt;
                     $wsp = $landedCost * $wspFactor;
+ 
+                    $wspRevision = \App\Models\WspRevision::getActiveWsp($liveSheet->id, $item->product_id);
+                    $currentWsp = $wspRevision['wsp'] ?? null;
+                 
+                    $effectiveFrom = !empty($wspRevision['effective_from'])
+                        ? \Carbon\Carbon::parse($wspRevision['effective_from'])->format('Y-m-d')
+                        : null;
 
+                    $effectiveTo = !empty($wspRevision['effective_to'])
+                        ? \Carbon\Carbon::parse($wspRevision['effective_to'])->format('Y-m-d')
+                        : null;
 
-                        @endphp
+                    $wspCount = \App\Models\WspRevision::where('live_sheet_id', $liveSheet->id)->where('product_id', $item->product_id)->count();
+ 
+                    @endphp
                         <tr style="{{ !empty($sapCode) ? 'background:#f0fdf4;' : '' }}">
                             <td style="text-align:center;color:#94a3b8;">{{ $idx + 1 }}</td>
                             <td style="font-family:monospace;font-weight:600;font-size:.82rem;">{{ $item->product->sku ?? '—' }}</td>
@@ -344,13 +357,34 @@
                                 <input type="text" name="sap_codes[{{ $idx }}][sap_code]" value="{{ $sapCode }}" placeholder="Enter SAP code..."
                                     style="width:100%;padding:.35rem .5rem;border:1px solid {{ !empty($sapCode) ? '#86efac' : '#93c5fd' }};border-radius:6px;font-size:.82rem;font-family:monospace;background:#fff;">
                             </td>
-                            <td>
+                            <td style="background: #e0ded5;">
                                 <input type="number" step="0.01"
                                     name="sap_codes[{{ $idx }}][vendor_wsp]"
-                                    value="{{ $vendorWsp }}"
+                                    value="{{  $currentWsp ?? $vendorWsp }}"
                                     placeholder="0.00"
+                                    id="wsp-{{ $item->id }}"
                                     style="width:100%;padding:.35rem .5rem;border:1px solid {{ !empty($vendorWsp) ? '#86efac' : '#93c5fd' }};border-radius:6px;font-size:.82rem;font-family:monospace;background:#fff;">
+                            </td>                            
+                            <td style="background:#e0ded5;">
+                                <input type="date" id="wsp-from-{{ $item->id }}" value="{{ $effectiveFrom ?? date('Y-m-d') }}"
+                                    style="width:110px;padding:.2rem .3rem;border:1px solid #fde68a;border-radius:4px;font-size:.7rem;">
                             </td>
+                            <td style="background:#e0ded5;"> 
+                                <input type="date" id="wsp-to-{{ $item->id }}" value="{{ $effectiveTo ?? '' }}"
+                                    style="width:110px;padding:.2rem .3rem;border:1px solid #fde68a;border-radius:4px;font-size:.7rem;">
+                            </td>
+                            <td style="background:#e0ded5;text-align:center;">
+                                <button type="button" onclick="saveWsp({{ $item->id }}, {{ $item->product_id }})" class="btn btn-outline btn-sm" style="padding:2px 6px;" title="Save WSP">
+                                    <i class="fas fa-save" style="color:#e8a838;"></i>
+                                </button>
+                                @if($wspCount > 0)
+                                <button type="button" onclick="showWspHistory({{ $item->product_id }}, '{{ $item->product->sku ?? '' }}')" style="background:none;border:none;cursor:pointer;padding:2px;position:relative;" title="{{ $wspCount }} revision(s)">
+                                    <i class="fas fa-history" style="color:#94a3b8;font-size:.7rem;"></i>
+                                    <span style="position:absolute;top:-4px;right:-4px;background:#e8a838;color:#fff;font-size:.5rem;width:12px;height:12px;border-radius:50%;display:flex;align-items:center;justify-content:center;">{{ $wspCount }}</span>
+                                </button>
+                                @endif
+                            </td>
+
                             <td style="text-align:center;">
                                 @if(!empty($sapCode))
                                 <i class="fas fa-check-circle" style="color:#16a34a;" title="SAP code assigned"></i>
@@ -372,7 +406,142 @@
             </button>
         </div>
     </form>
+{{-- WSP Save + History Modal --}}
+<div id="wspHistoryModal" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.4);z-index:9999;align-items:center;justify-content:center;">
+    <div style="background:#fff;border-radius:12px;width:600px;max-width:92%;max-height:80vh;overflow-y:auto;box-shadow:0 8px 32px rgba(0,0,0,.15);">
+        <div style="padding:.75rem 1.25rem;border-bottom:1px solid #e2e8f0;display:flex;justify-content:space-between;align-items:center;position:sticky;top:0;background:#fff;border-radius:12px 12px 0 0;">
+            <h3 style="font-size:.95rem;font-weight:700;color:#0d1b2a;margin:0;">
+                <i class="fas fa-history" style="color:#e8a838;margin-right:.3rem;"></i>
+                WSP History — <span id="wspHistorySku" style="font-family:monospace;color:#e8a838;"></span>
+            </h3>
+            <button onclick="document.getElementById('wspHistoryModal').style.display='none'" style="background:none;border:none;cursor:pointer;font-size:1.3rem;color:#94a3b8;">&times;</button>
+        </div>
+        <div id="wspHistoryContent" style="padding:1rem 1.25rem;">
+            <div style="text-align:center;color:#94a3b8;padding:2rem;">Loading...</div>
+        </div>
+    </div>
+</div>
 
+<script>
+function saveWsp(itemId, productId) {
+    var wsp = document.getElementById('wsp-' + itemId).value;
+    var from = document.getElementById('wsp-from-' + itemId).value;
+    var to = document.getElementById('wsp-to-' + itemId).value;
+
+    if (!wsp || !from) {
+        alert('WSP and Effective From are required.');
+        return;
+    }
+
+    fetch('{{ route("finance.live-sheets.wsp.store", $liveSheet) }}', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRF-TOKEN': '{{ csrf_token() }}',
+            'Accept': 'application/json',
+        },
+        body: JSON.stringify({
+            vendor_wsp: wsp,
+            effective_from: from,
+            effective_to: to || null,
+            product_id: productId,
+            remarks: null,
+        })
+    })
+    .then(function(r) {
+        if (r.redirected) {
+            window.location.reload();
+            return;
+        }
+        return r.json();
+    })
+    .then(function(data) {
+        if (data && data.error) {
+            alert(data.error);
+        } else {
+            // Flash green on saved input
+            var input = document.getElementById('wsp-' + itemId);
+            input.style.borderColor = '#16a34a';
+            input.style.background = '#f0fdf4';
+            setTimeout(function() {
+                input.style.borderColor = '#fde68a';
+                input.style.background = '';
+            }, 2000);
+
+            // Update history badge
+            location.reload();
+        }
+    })
+    .catch(function(err) { alert('Error: ' + err.message); });
+}
+
+function showWspHistory(productId, sku) {
+    document.getElementById('wspHistorySku').textContent = sku;
+    var modal = document.getElementById('wspHistoryModal');
+    var content = document.getElementById('wspHistoryContent');
+    modal.style.display = 'flex';
+    content.innerHTML = '<div style="text-align:center;color:#94a3b8;padding:2rem;">Loading...</div>';
+
+    // Load history via inline data (no extra AJAX needed)
+    var rows = document.querySelectorAll('.wsp-history-row[data-product="' + productId + '"]');
+    if (rows.length === 0) {
+        content.innerHTML = '<div style="text-align:center;color:#94a3b8;padding:2rem;"><i class="fas fa-dollar-sign" style="font-size:1.5rem;display:block;margin-bottom:.3rem;"></i>No WSP revisions yet.</div>';
+        return;
+    }
+
+    var html = '<table style="width:100%;font-size:.78rem;border-collapse:collapse;">';
+    html += '<thead><tr style="background:#f0f4f8;"><th style="padding:.4rem .6rem;text-align:left;">#</th><th style="padding:.4rem .6rem;text-align:center;">WSP</th><th style="padding:.4rem .6rem;">From</th><th style="padding:.4rem .6rem;">To</th><th style="padding:.4rem .6rem;">Status</th><th style="padding:.4rem .6rem;">By</th><th style="padding:.4rem .6rem;">Date</th></tr></thead><tbody>';
+
+    rows.forEach(function(row, idx) {
+        html += row.innerHTML;
+    });
+    html += '</tbody></table>';
+    content.innerHTML = html;
+}
+
+// Close modal on backdrop
+document.getElementById('wspHistoryModal').addEventListener('click', function(e) {
+    if (e.target === this) this.style.display = 'none';
+});
+</script>
+
+{{-- Hidden history rows for each product --}}
+@php
+    $allWspRevisions = \App\Models\WspRevision::where('live_sheet_id', $liveSheet->id)
+        ->whereNotNull('product_id')
+        ->orderByDesc('effective_from')
+        ->with('creator')
+        ->get()
+        ->groupBy('product_id');
+@endphp
+
+@foreach($allWspRevisions as $pid => $revisions)
+@foreach($revisions as $idx => $rev)
+@php
+    $isActive = $rev->effective_from <= now() && ($rev->effective_to === null || $rev->effective_to >= now());
+    $isFuture = $rev->effective_from > now();
+@endphp
+<template class="wsp-history-row" data-product="{{ $pid }}">
+    <tr style="{{ $isActive ? 'background:#fefce8;border-left:3px solid #e8a838;' : '' }}">
+        <td style="padding:.3rem .6rem;color:#94a3b8;">{{ $revisions->count() - $idx }}</td>
+        <td style="padding:.3rem .6rem;text-align:center;">
+            <span style="padding:.15rem .4rem;border-radius:4px;font-weight:700;font-family:monospace;{{ $isActive ? 'background:#fef3c7;color:#854d0e;' : ($isFuture ? 'background:#dbeafe;color:#1e40af;' : 'color:#94a3b8;') }}">
+                {{ $activeCurrencySymbol ?? '$' }}{{ number_format($rev->vendor_wsp, 2) }}
+            </span>
+        </td>
+        <td style="padding:.3rem .6rem;font-family:monospace;font-size:.72rem;">{{ $rev->effective_from->format('d M Y') }}</td>
+        <td style="padding:.3rem .6rem;font-family:monospace;font-size:.72rem;">{{ $rev->effective_to ? $rev->effective_to->format('d M Y') : 'Open' }}</td>
+        <td style="padding:.3rem .6rem;">
+            @if($isActive)<span style="color:#e8a838;font-weight:700;font-size:.65rem;">Active</span>
+            @elseif($isFuture)<span style="color:#1e40af;font-size:.65rem;">Scheduled</span>
+            @else<span style="color:#94a3b8;font-size:.65rem;">Expired</span>@endif
+        </td>
+        <td style="padding:.3rem .6rem;font-size:.7rem;">{{ $rev->creator->name ?? '—' }}</td>
+        <td style="padding:.3rem .6rem;font-size:.68rem;color:#94a3b8;">{{ $rev->created_at->format('d M Y') }}</td>
+    </tr>
+</template>
+@endforeach
+@endforeach
     <script>
         $(document).ready(function() {
 

@@ -7,13 +7,14 @@
     <a href="{{ route('sales.orders') }}" class="btn btn-outline btn-sm"><i class="fas fa-arrow-left"></i> All Orders</a>
 </div>
 @php
-$currency = match ($order->company_code) {
-'2000' => 'INR',
-'2100' => 'USD',
-'2200' => 'EUR',
-'2400' =>'GBP',
-default => 'USD',
-};
+ 
+//$currency = match ($order->company_code) {
+// '2000' => 'INR',
+// '2200' => 'EUR',
+//2400' =>'GBP',
+// default => 'USD',
+//};
+$currency = $activeCurrencySymbol;
 
 @endphp
 {{-- Order Header --}}
@@ -199,23 +200,23 @@ default => 'USD',
                     <td colspan="5" style="text-align:right;">Subtotal</td>
                     <!-- <td style="text-align:center;">{{ $order->items->sum('quantity') }}</td> -->
                     <td style="text-align:center;">{{ $order->items->sum('shipped_qty') }}</td>
-                    <td style="font-family:monospace;">{{$currency }}{{ number_format($order->subtotal, 2) }}</td>
+                    <td style="font-family:monospace;">{{$order->currency }}{{ number_format($order->subtotal, 2) }}</td>
                 </tr>
                 @if($order->shipping_amount > 0)<tr style="background:#f8fafc;">
                     <td colspan="6" style="text-align:right;font-size:.82rem;">Shipping</td>
-                    <td style="font-family:monospace;">{{$currency }}{{ number_format($order->shipping_amount, 2) }}</td>
+                    <td style="font-family:monospace;">{{$order->currency  }}{{ number_format($order->shipping_amount, 2) }}</td>
                 </tr>@endif
                 @if($order->tax_amount > 0)<tr style="background:#f8fafc;">
                     <td colspan="6" style="text-align:right;font-size:.82rem;">Tax</td>
-                    <td style="font-family:monospace;">{{$currency }}{{ number_format($order->tax_amount, 2) }}</td>
+                    <td style="font-family:monospace;">{{$order->currency  }}{{ number_format($order->tax_amount, 2) }}</td>
                 </tr>@endif
                 @if($order->discount_amount > 0)<tr style="background:#f8fafc;">
                     <td colspan="6" style="text-align:right;font-size:.82rem;color:#dc2626;">Discount</td>
-                    <td style="font-family:monospace;color:#dc2626;">-{{$currency }}{{ number_format($order->discount_amount, 2) }}</td>
+                    <td style="font-family:monospace;color:#dc2626;">-{{$order->currency }}{{ number_format($order->discount_amount, 2) }}</td>
                 </tr>@endif
                 <tr style="background:#dcfce7;">
                     <td colspan="6" style="text-align:right;font-weight:800;font-size:.9rem;color:#166534;">TOTAL</td>
-                    <td style="font-family:monospace;font-weight:800;font-size:1rem;color:#166534;">{{ $currency  }}{{ number_format($order->total_amount, 2) }}</td>
+                    <td style="font-family:monospace;font-weight:800;font-size:1rem;color:#166534;">{{ $order->currency  }}{{ number_format($order->total_amount, 2) }}</td>
                 </tr>
             </tbody>
         </table>
@@ -241,7 +242,7 @@ default => 'USD',
             <tbody>
                 @foreach($order->chargebacks as $cb)
                 <tr>
-                    <td style="font-family:monospace;font-weight:700;color:#dc2626;">${{ number_format($cb->amount, 2) }}</td>
+                    <td style="font-family:monospace;font-weight:700;color:#dc2626;">{{$order->currency }}{{ number_format($cb->amount, 2) }}</td>
                     <td style="font-size:.82rem;">{{ $cb->reason }}</td>
                     <td><span class="badge {{ $cb->status==='confirmed'?'badge-danger':($cb->status==='rejected'?'badge-gray':'badge-warning') }}">{{ ucfirst($cb->status) }}</span></td>
                     <td style="font-size:.82rem;">{{ $cb->created_at->format('d M Y') }}</td>

@@ -137,13 +137,14 @@ class SourcingService
      * Vendor submits live sheet with detailed product info
      * Updates existing items (created when live sheet was generated from offer sheet)
      */
-    public function submitLiveSheet(LiveSheet $liveSheet, array $items): LiveSheet
+    public function submitLiveSheet(LiveSheet $liveSheet, array $items, string $submitter=''): LiveSheet
     {
-        return DB::transaction(function () use ($liveSheet, $items) {
+        return DB::transaction(function () use ($liveSheet, $items, $submitter) {
             $totalCbm = 0;
             $totalValue = 0;
 
             foreach ($items as $item) {
+print_r($item);exit;
                 $quantity = $item['quantity'] ?? 1;
                 $unitPrice = $item['unit_price'] ?? 0;
                 $cbmPerUnit = $item['cbm_per_unit'] ?? 0;
@@ -162,16 +163,23 @@ class SourcingService
                     ->first();
 
                 if ($existing) {
-                    $existing->update([
-                        'quantity'        => $quantity,
-                        'unit_price'      => $unitPrice,
-                        'total_price'     => $totalPrice,
-                        'cbm_per_unit'    => $cbmPerUnit,
-                        'total_cbm'       => $totalItemCbm,
-                        'weight_per_unit' => $weightPerUnit,
-                        'total_weight'    => $totalWeight,
-                        'product_details' => $item['details'] ?? $existing->product_details,
-                    ]);
+
+                    if ($submitter === 'vendor') {
+                        $existing->update(['quantity'=> $quantity]);
+                    } else {
+                        $existing->update([
+                                               'quantity'        => $quantity,
+                                               'unit_price'      => $unitPrice,
+                                               'total_price'     => $totalPrice,
+                                               'cbm_per_unit'    => $cbmPerUnit,
+                                               'total_cbm'       => $totalItemCbm,
+                                               'weight_per_unit' => $weightPerUnit,
+                                               'total_weight'    => $totalWeight,
+                                               'product_details' => $item['details'] ?? $existing->product_details,
+                                           ]);
+
+                    }
+
                 } else {
                     LiveSheetItem::create([
                         'live_sheet_id'   => $liveSheet->id,
@@ -269,5 +277,5 @@ class SourcingService
         ActivityLog::log('unlocked', 'live_sheet', $liveSheet, null, null, 'Live sheet unlocked by admin');
         return $liveSheet;
     }
-    
+
 }

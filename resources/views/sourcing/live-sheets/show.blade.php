@@ -19,7 +19,14 @@ $disabled = $liveSheet->is_locked ? 'disabled' : '';
     @endif
     @endif
     @if($liveSheet->is_locked && !$liveSheet->consignment)
-    <form method="POST" action="{{ route('sourcing.live-sheets.create-consignment', $liveSheet) }}" style="display:inline;" onsubmit="return confirm('Create consignment from this live sheet?')">@csrf<button type="submit" class="btn btn-primary btn-sm"><i class="fas fa-box"></i> Create Consignment</button></form>
+    <form method="POST" action="{{ route('sourcing.live-sheets.create-consignment', $liveSheet) }}" style="display:inline;" onsubmit="return confirm('Create consignment from this live sheet?')">@csrf
+         {{-- Add this inside each form, before the submit button --}}
+        <div style="background-color: #eba6a6; padding:.5rem 1rem;border-radius:6px;">
+            <label>Created Date:  </label>
+            <input type="date" name="custom_date" value="{{ old('custom_date', date('Y-m-d')) }}" style="max-width:200px;">
+        </div>
+        {{-- End of Date Input --}}
+    <button type="submit" class="btn btn-primary btn-sm"><i class="fas fa-box"></i> Create Consignment</button></form>
     @endif
 </div>
 
@@ -299,7 +306,13 @@ $disabled = $liveSheet->is_locked ? 'disabled' : '';
                         </td>
                         <td>{{ $d['sap_code'] ?? '—' }}</td>
                         <td>{{ $d['barcode'] ?? '—' }}</td>
-                        <td style="font-weight:500;">{{ $item->product->name ?? '—' }}</td>
+                        <td style="font-weight:500;max-width:160px;">
+                            <span class="cell-text">{{ $item->product->name ?? '—' }}</span>
+                            @if(!$liveSheet->is_locked)
+                            <i class="fas fa-pen cell-edit-icon" onclick="editCell({{ $item->id }}, 'product_name', this)" title="Edit"></i>
+                            @endif
+                        </td>
+ 
                         <td style="text-align:center;">
                         @php
                         $imgUrl = null;                        
@@ -327,14 +340,24 @@ $disabled = $liveSheet->is_locked ? 'disabled' : '';
 
                         
                     </td>
-                        <td style="font-size:.7rem;max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="{{ $d['description'] ?? '' }}">{{ Str::limit($d['description'] ?? '—', 40) }}</td>
-                        <td>{{ $d['hsn_hts_code'] ?? '—' }}</td>
+                    <td>
+                        <span class="cell-text" title="{{ $d['description'] ?? '' }}">{{ Str::limit($d['description'] ?? '—', 40) }}</span>
+                        @if(!$liveSheet->is_locked)
+                        <i class="fas fa-pen cell-edit-icon" onclick="editCell({{ $item->id }}, 'description', this)"></i>
+                        @endif
+                    </td>                       
+                     <td><span class="cell-text" title="{{ $d['hsn_hts_code'] ?? '' }}">{{ $d['hsn_hts_code'] ?? '—' }}</span>
+                        @if(!$liveSheet->is_locked)
+                        <i class="fas fa-pen cell-edit-icon" onclick="editCell({{ $item->id }}, 'hsn_hts_code', this)"></i>
+                        @endif                        
+                       </td>
                         <td style="text-align:center;">{{ $d['duty_percent'] ?? '—' }}</td>
                         <td style="text-align:center;font-family:monospace;">{{ $d['length'] ?? $d['length_inches'] ?? '—' }}</td>
                         <td style="text-align:center;font-family:monospace;">{{ $d['width'] ?? $d['width_inches'] ?? '—' }}</td>
                         <td style="text-align:center;font-family:monospace;">{{ $d['height'] ?? $d['height_inches'] ?? '—' }}</td>
                         <td style="text-align:center;font-family:monospace;">{{ $d['weight'] ?? $d['weight_grams'] ?? '—' }}</td>
-                        <td>{{ $d['material'] ?? '—' }}</td>
+                        <td class="td-font"><input {{$disabled }} type="text" name="items[{{ $idx }}][material]" value="{{ $d['material'] ?? '' }}" style="width:70px;" class="edit-input"></td>
+
                         <td>{{ $d['other_material'] ?? '—' }}</td>
                         <td>{{ $d['color'] ?? '—' }}</td>
                         <td>{{ $d['finish'] ?? '—' }}</td>
@@ -353,22 +376,22 @@ $disabled = $liveSheet->is_locked ? 'disabled' : '';
                         <td style="text-align:center;">{{ $item->quantity }}</td>
                         <td style="font-family:monospace;">{{$activeCurrencySymbol}}{{ number_format($d['vendor_fob'] ?? 0, 2) }}</td>
                         {{-- EDITABLE: Target FOB --}}
-                        <td style="background:#eff6ff;"><input {{$disabled }} type="number" step="0.01" name="items[{{ $idx }}][target_fob]" value="{{ $d['target_fob'] ?? '' }}" placeholder="0.00" style="width:70px;padding:.2rem .3rem;border:1px solid #93c5fd;border-radius:4px;font-size:.78rem;font-family:monospace;text-align:right;background:#fff;"></td>
+                        <td style="background:#eff6ff;"><input {{$disabled }} type="number" step="0.01" name="items[{{ $idx }}][target_fob]" value="{{ $d['target_fob'] ?? '' }}" placeholder="0.00" style="width:70px;" class="edit-input"></td>
                         {{-- EDITABLE: Final Qty --}}
-                        <td style="background:#eff6ff;"><input {{$disabled }} type="number" name="items[{{ $idx }}][final_qty]" value="{{ $d['final_qty'] ?? $item->quantity }}" min="1" style="width:60px;padding:.2rem .3rem;border:1px solid #93c5fd;border-radius:4px;font-size:.78rem;text-align:center;background:#fff;"></td>
+                        <td style="background:#eff6ff;"><input {{$disabled }} type="number" name="items[{{ $idx }}][final_qty]" value="{{ $d['final_qty'] ?? $item->quantity }}" min="1" style="width:60px;" class="edit-input"></td>
                         <td style="text-align:center;">{{ $totalCartons ?: '—' }}</td>
                         <td style="font-family:monospace;">{{ $masterCbm > 0 ? number_format($masterCbm, 4) : '—' }}</td>
                         <td style="font-family:monospace;font-weight:600;color:#1e40af;">{{ $cbmShipment > 0 ? number_format($cbmShipment, 4) : number_format($item->total_cbm, 4) }}</td>
                         {{-- EDITABLE: Final FOB --}}
-                        <td style="background:#eff6ff;"><input {{$disabled }} readonly type="number" step="0.01" name="items[{{ $idx }}][final_fob]" value="{{ $d['final_fob'] ?? '' }}" placeholder="0.00" style="width:70px;padding:.2rem .3rem;border:1px solid #93c5fd;border-radius:4px;font-size:.78rem;font-family:monospace;text-align:right;background:#fff;"></td>
+                        <td style="background:#eff6ff;"><input {{$disabled }} readonly type="number" step="0.01" name="items[{{ $idx }}][final_fob]" value="{{ $d['final_fob'] ?? '' }}" placeholder="0.00" style="width:70px;" class="edit-input"></td>
                         <td style="font-family:monospace;" id="duty-amt-{{ $idx }}">{{ $dutyAmt > 0 ? $activeCurrencySymbol.number_format($dutyAmt, 2) : '—' }}</td> {{-- EDITABLE: Freight Factor --}}
-                        <td style="background:#eff6ff;"><input {{$disabled }} type="number" step="0.01" name="items[{{ $idx }}][freight_factor]" value="{{ $d['freight_factor'] ?? '' }}" placeholder="0.00" style="width:60px;padding:.2rem .3rem;border:1px solid #93c5fd;border-radius:4px;font-size:.78rem;font-family:monospace;text-align:right;background:#fff;"></td>
+                        <td style="background:#eff6ff;"><input {{$disabled }} type="number" step="0.01" name="items[{{ $idx }}][freight_factor]" value="{{ $d['freight_factor'] ?? '' }}" placeholder="0.00" style="width:60px;" class="edit-input"></td>
                         <td style="font-family:monospace;" id="freight-amt-{{ $idx }}">{{ $freightAmt > 0 ? $activeCurrencySymbol.number_format($freightAmt, 2) : '—' }}</td>
-                        <td style="font-family:monospace;font-weight:600;" id="landed-cost-{{ $idx }}">{{ $landedCost > 0 ? $activeCurrencySymbol.number_format($landedCost, 2) : '—' }}</td> {{-- EDITABLE: WSP Factor --}}
-                        <td style="background:#eff6ff;"><input {{$disabled }} type="number" step="0.01" name="items[{{ $idx }}][wsp_factor]" value="{{ $d['wsp_factor'] ?? '' }}" placeholder="0.00" style="width:60px;padding:.2rem .3rem;border:1px solid #93c5fd;border-radius:4px;font-size:.78rem;font-family:monospace;text-align:right;background:#fff;"></td>
-                        <td style="font-family:monospace;font-weight:700;color:#166534;" id="wsp-val-{{ $idx }}">{{ $wsp > 0 ? $activeCurrencySymbol.number_format($wsp, 2) : '—' }}</td>
+                        <td class="td-font" id="landed-cost-{{ $idx }}">{{ $landedCost > 0 ? $activeCurrencySymbol.number_format($landedCost, 2) : '—' }}</td> {{-- EDITABLE: WSP Factor --}}
+                        <td style="background:#eff6ff;"><input {{$disabled }} type="number" step="0.01" name="items[{{ $idx }}][wsp_factor]" value="{{ $d['wsp_factor'] ?? '' }}" placeholder="0.00" style="width:60px;" class="edit-input"></td>
+                        <td class="td-font" id="wsp-val-{{ $idx }}">{{ $wsp > 0 ? $activeCurrencySymbol.number_format($wsp, 2) : '—' }}</td>
                         {{-- EDITABLE: Comments --}}
-                        <td style="background:#eff6ff;"><input {{$disabled }} type="text" name="items[{{ $idx }}][comments]" value="{{ $d['comments'] ?? '' }}" placeholder="..." style="width:110px;padding:.2rem .3rem;border:1px solid #93c5fd;border-radius:4px;font-size:.78rem;background:#fff;"></td>
+                        <td style="background:#eff6ff;"><input {{$disabled }} type="text" name="items[{{ $idx }}][comments]" value="{{ $d['comments'] ?? '' }}" placeholder="..." style="width:110px;" class="edit-input"></td>
                     </tr>
                     @endforeach
                     {{-- Totals --}}
@@ -404,6 +427,12 @@ $disabled = $liveSheet->is_locked ? 'disabled' : '';
     .data-table th {
         padding: .5rem;
         text-align: center;
+    }
+    .edit-input{
+        padding:.2rem .3rem;border:1px solid #93c5fd;border-radius:4px;font-size:.78rem;font-family:monospace  ;background:#fff;
+    }
+    .td-font{
+       font-family:monospace;font-weight:700;color:#166534;
     }
 </style>
 <script>
@@ -470,5 +499,204 @@ const activeCurrencySymbol = "{{ $activeCurrencySymbol }}";
             });
         }, 300);
     };
+</script>
+<!-- Edit Code  -->
+<style>
+.cell-edit-icon {
+    font-size:.55rem;
+    color:#94a3b8;
+    cursor:pointer;
+    margin-left:3px;
+    opacity:0;
+    transition:opacity .15s;
+    vertical-align:middle;
+}
+td:hover .cell-edit-icon { opacity:1; }
+.cell-edit-icon:hover { color:#1e40af; }
+
+.cell-input {
+    padding:.25rem .35rem;
+    border:1.5px solid #3b82f6;
+    border-radius:4px;
+    font-size:.78rem;
+    font-family:inherit;
+    background:#eff6ff;
+    outline:none;
+    box-shadow:0 0 0 2px rgba(59,130,246,.15);
+}
+.cell-textarea {
+    padding:.25rem .35rem;
+    border:1.5px solid #3b82f6;
+    border-radius:4px;
+    font-size:.78rem;
+    font-family:inherit;
+    background:#eff6ff;
+    outline:none;
+    resize:vertical;
+    box-shadow:0 0 0 2px rgba(59,130,246,.15);
+    min-height:50px;
+    width:100%;
+}
+.cell-saving { opacity:.5; pointer-events:none; }
+</style>
+
+<script>
+var fieldConfig = {
+    product_name: { type: 'textarea', width: '180px' },
+    description:  { type: 'textarea', width: '180px' },
+    barcode:      { type: 'text',     width: '100px' },
+    hsn_code:     { type: 'text',     width: '80px' },
+    length:       { type: 'number',   width: '60px' },
+    width:        { type: 'number',   width: '60px' },
+    height:       { type: 'number',   width: '60px' },
+    weight:       { type: 'number',   width: '60px' },
+    material:     { type: 'text',     width: '90px' },
+    color:        { type: 'text',     width: '70px' },
+    finish:       { type: 'text',     width: '70px' },
+};
+function editCell(itemId, field, icon) {
+    var td = icon.closest('td');
+    var textSpan = td.querySelector('.cell-text');
+    if (!textSpan) return;
+
+    var currentVal = textSpan.getAttribute('title') || textSpan.textContent.trim();
+    if (currentVal === '—') currentVal = '';
+    var config = fieldConfig[field] || { type: 'text', width: '80px' };
+
+    textSpan.style.display = 'none';
+    icon.style.display = 'none';
+
+    var input;
+    if (config.type === 'textarea') {
+        input = document.createElement('textarea');
+        input.className = 'cell-textarea';
+        input.rows = 2;
+        input.style.width = config.width;
+    } else {
+        input = document.createElement('input');
+        input.className = 'cell-input';
+        input.type = config.type;
+        input.style.width = config.width;
+        if (config.type === 'number') input.step = '0.1';
+    }
+    input.value = currentVal;
+    td.appendChild(input);
+    input.focus();
+    input.select();
+
+    input.addEventListener('keydown', function(e) {
+        if (config.type === 'textarea') {
+            if (e.key === 'Enter' && e.ctrlKey) saveCell(itemId, field, input, textSpan, icon);
+        } else {
+            if (e.key === 'Enter') saveCell(itemId, field, input, textSpan, icon);
+        }
+        if (e.key === 'Escape') cancelEdit(input, textSpan, icon);
+    });
+
+    input.addEventListener('blur', function() {
+        setTimeout(function() { saveCell(itemId, field, input, textSpan, icon); }, 150);
+    });
+}
+function editCellBB(itemId, field, icon) {
+    var td = icon.closest('td');
+    var textSpan = document.getElementById('text-' + field + '-' + itemId);
+    var currentVal = textSpan.getAttribute('title') || textSpan.textContent.trim();
+    if (currentVal === '—') currentVal = '';
+    var config = fieldConfig[field] || { type: 'text', width: '80px' };
+
+    // Hide text and icon
+    textSpan.style.display = 'none';
+    icon.style.display = 'none';
+
+    // Create input
+    var input;
+    if (config.type === 'textarea') {
+        input = document.createElement('textarea');
+        input.className = 'cell-textarea';
+        input.rows = 2;
+        input.style.width = config.width;
+    } else {
+        input = document.createElement('input');
+        input.className = 'cell-input';
+        input.type = config.type;
+        input.style.width = config.width;
+        if (config.type === 'number') input.step = '0.1';
+    }
+    input.value = currentVal;
+    td.appendChild(input);
+    input.focus();
+    input.select();
+
+    // Save on Enter (for input) or Ctrl+Enter (for textarea)
+    input.addEventListener('keydown', function(e) {
+        if (config.type === 'textarea') {
+            if (e.key === 'Enter' && e.ctrlKey) { saveCell(itemId, field, input, textSpan, icon); }
+        } else {
+            if (e.key === 'Enter') { saveCell(itemId, field, input, textSpan, icon); }
+        }
+        if (e.key === 'Escape') { cancelEdit(input, textSpan, icon); }
+    });
+
+    // Save on blur
+    input.addEventListener('blur', function() {
+        setTimeout(function() { saveCell(itemId, field, input, textSpan, icon); }, 150);
+    });
+}
+
+function cancelEdit(input, textSpan, icon) {
+    input.remove();
+    textSpan.style.display = '';
+    icon.style.display = '';
+}
+
+function saveCell(itemId, field, input, textSpan, icon) {
+    var newVal = input.value.trim();
+    var oldVal = textSpan.getAttribute('title') || textSpan.textContent.trim();
+    if (oldVal === '—') oldVal = '';
+
+    // No change — just close
+    if (newVal === oldVal) {
+        cancelEdit(input, textSpan, icon);
+        return;
+    }
+
+    input.classList.add('cell-saving');
+
+    var payload = { items: [{ id: itemId }] };
+    payload.items[0][field] = newVal;
+
+    fetch('{{ route("sourcing.live-sheets.update-items", $liveSheet) }}', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRF-TOKEN': '{{ csrf_token() }}',
+            'Accept': 'application/json',
+        },
+        body: JSON.stringify(payload)
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+        if (data.success) {
+            // Update display text
+            var displayVal = newVal || '—';
+            if (field === 'description' || field === 'product_name') {
+                textSpan.textContent = displayVal.length > 40 ? displayVal.substring(0, 40) + '...' : displayVal;
+                textSpan.setAttribute('title', displayVal);
+            } else {
+                textSpan.textContent = displayVal;
+            }
+            // Flash green
+            textSpan.style.color = '#16a34a';
+            setTimeout(function() { textSpan.style.color = ''; }, 1500);
+        } else {
+            alert(data.error || 'Save failed.');
+        }
+        cancelEdit(input, textSpan, icon);
+    })
+    .catch(function(err) {
+        alert('Error: ' + err.message);
+        cancelEdit(input, textSpan, icon);
+    });
+}
 </script>
 @endsection

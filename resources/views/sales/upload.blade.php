@@ -50,6 +50,12 @@
                     <label style="font-size:.7rem;font-weight:600;color:#64748b;display:block;margin-bottom:.25rem;">Sales File (CSV / XLSX) *</label>
                     <input type="file" name="sales_file" required accept=".csv,.xlsx,.xls" style="font-size:.82rem;">
                 </div>
+                 {{-- Add this inside each form, before the submit button --}}
+                <div style="background-color: #eba6a6; padding:.5rem 1rem;border-radius:6px;">
+                    <label>Upload Date:  </label>
+                    <input type="date" name="custom_date" value="{{ old('custom_date', date('Y-m-d')) }}" style="max-width:200px;">
+                </div>
+                {{-- End of Date Input --}}
                 <button type="submit" class="btn btn-primary" onclick="return confirm('Upload and process sales data?')"><i class="fas fa-upload" style="margin-right:.3rem;"></i> Upload & Process</button>
             </div>
         </form>

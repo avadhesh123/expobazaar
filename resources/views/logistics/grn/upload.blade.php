@@ -171,6 +171,12 @@
 
     <div style="margin-top:1.25rem;display:flex;gap:.5rem;justify-content:flex-end;">
         <a href="{{ route('logistics.grn') }}" class="btn btn-outline">Cancel</a>
+        {{-- Add this inside each form, before the submit button --}}
+        <div style="background-color: #eba6a6; padding:.5rem 1rem;border-radius:6px;">
+            <label>Upload Date:  </label>
+            <input type="date" name="custom_date" value="{{ old('custom_date', date('Y-m-d')) }}" style="max-width:200px;">
+        </div>
+        {{-- End of Date Input --}}
         <button type="submit" class="btn btn-primary" id="submitBtn">
             <i class="fas fa-upload" style="margin-right:.3rem;"></i> Upload GRN & Update Inventory
         </button>

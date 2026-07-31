@@ -283,7 +283,7 @@ class SalesController extends Controller
                 return back()->with('error', 'File is empty or has no data rows.');
             }
 
-            $result = $this->salesService->processUploadedRows($rows, $request->company_code);
+            $result = $this->salesService->processUploadedRows($rows, $request->company_code, $request->custom_date ?? null);
 
             \App\Models\ActivityLog::log('uploaded', 'sales_data', auth()->user(), null, [
                 'company_code' => $request->company_code,

@@ -53,9 +53,9 @@ class SalesService
      * Create a single order with items, inventory reservation, receivable, and log
      * Used by both file upload and manual entry
      */
-    public function createOrder(array $orderData, array $items, string $companyCode, int  $warehouseId): Order
+    public function createOrder(array $orderData, array $items, string $companyCode, int  $warehouseId, ?string $uploadDate = null): Order
     {
-        return DB::transaction(function () use ($orderData, $items, $companyCode, $warehouseId) {
+        return DB::transaction(function () use ($orderData, $items, $companyCode, $warehouseId, $uploadDate) {
 
             $currency = $this->getCurrency($companyCode);
 
@@ -95,6 +95,7 @@ class SalesService
                 'payment_status'    => $orderData['payment_status'] ?? 'unpaid',
                 'status'            => ($shipMethod === 'sp') ? 'delivered' : 'open',
                 'uploaded_by'       => auth()->id(),
+                'created_at'        => $uploadDate ? \Carbon\Carbon::parse($uploadDate) : now(),
             ]);
 
             // Create order items and reserve inventory
@@ -187,7 +188,7 @@ class SalesService
     /**
      * Process uploaded file rows and create orders
      */
-    public function processUploadedRows(array $rows, string $companyCode): array
+    public function processUploadedRows(array $rows, string $companyCode, ?string $uploadDate = null): array
     {
         $header = array_map(fn($h) => strtolower(trim($h ?? '')), $rows[0]);
         $colMap = [];
@@ -400,7 +401,7 @@ class SalesService
                 $group['order_data']['total_amount'] = $group['total_amount'];
                 $group['order_data']['subtotal'] = $group['total_amount'];
 
-                $this->createOrder($group['order_data'], $group['items'], $companyCode, $warehouseId);
+                $this->createOrder($group['order_data'], $group['items'], $companyCode, $warehouseId, $uploadDate);
                 $created++;
             } catch (\Exception $e) {
                 $errors[] = "PO '{$poNumber}': Failed — " . $e->getMessage();

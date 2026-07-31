@@ -193,7 +193,7 @@ class SourcingController extends Controller
     public function liveSheets(Request $request)
     {
         $activeCompany = session('active_company');
-        
+
         $liveSheets = LiveSheet::with('vendor', 'offerSheet', 'consignment', 'items.product')
             ->when($request->status, fn ($q, $v) => $q->where('status', $v))
             ->where('company_code', $activeCompany)
@@ -275,6 +275,26 @@ class SourcingController extends Controller
      * Sourcing team updates: Target FOB, Final Qty, Final FOB, Freight Factor, WSP Factor, Comments
      */
     public function updateSourcingFields(Request $request, LiveSheet $liveSheet)
+    {
+        if ($liveSheet->isLocked()) {
+            return back()->with('error', 'This Live Sheet is locked. SAP codes and other fields can no longer be modified.');
+        }
+
+        $request->validate([
+            'items'        => 'required|array',
+            'change_reason' => 'nullable|string|max:500',
+        ]);
+
+        $service = new \App\Services\LiveSheetService();
+        $result = $service->updateItems($liveSheet, $request->items, 'sourcing', $request->change_reason);
+
+        if (!$result['success']) {
+            return back()->with('error', $result['message']);
+        }
+
+        return back()->with('success', $result['message']);
+    }
+    public function updateSourcingFields27072026(Request $request, LiveSheet $liveSheet)
     {
         if ($liveSheet->isLocked()) {
             return back()->with('error', 'This Live Sheet is locked. SAP codes and other fields can no longer be modified.');
@@ -420,7 +440,7 @@ class SourcingController extends Controller
     /**
      * Create consignment from an approved live sheet
      */
-    public function createConsignment(LiveSheet $liveSheet)
+    public function createConsignment(LiveSheet $liveSheet, Request $request)
     {
 
         if (!$liveSheet->is_locked) {
@@ -461,6 +481,8 @@ class SourcingController extends Controller
             'total_cbm'          => $selectedItems->sum('total_cbm'),
             'total_value'        => $totalValue, //$selectedItems->sum('total_price'),
             'created_by'         => auth()->id(),
+            'created_at' => $request->custom_date ? \Carbon\Carbon::parse($request->custom_date) : now(),
+
         ]);
 
         \Log::info("Consignment total_value after save: {$consignment->total_value}");
@@ -1052,7 +1074,7 @@ class SourcingController extends Controller
             'items.*.unit_price'  => 'nullable|numeric|min:0',
             'items.*.vendor_wsp'  => 'nullable|numeric|min:0',
             'items.*.description' => 'nullable|string|max:500',
-            'items.*.hsn_code'    => 'nullable|string|max:50',
+            'items.*.hsn_hts_code'    => 'nullable|string|max:50',
             'items.*.barcode'     => 'nullable|string|max:100',
             'items.*.length'      => 'nullable|numeric',
             'items.*.width'       => 'nullable|numeric',
@@ -1090,7 +1112,7 @@ class SourcingController extends Controller
                 'qty_master_pack'
             ];
             foreach ($detailFields as $field) {
-                $inputKey = str_replace('hsn_hts_code', 'hsn_code', $field);
+                $inputKey = $field;//str_replace('hsn_hts_code', 'hsn_code', $field);
                 if (isset($data[$inputKey])) {
                     $details[$field] = $data[$inputKey];
                 }
@@ -1108,6 +1130,6 @@ class SourcingController extends Controller
             $updated++;
         }
 
-        return response()->json(['success' => true, 'message' => "{$updated} item(s) updated."]);
+        return response()->json(['success' => true, 'message' => "{$updated} item(s) updated.", 'details' => $details]);
     }
 }

@@ -7,14 +7,14 @@
     <a href="{{ route('sales.orders') }}" class="btn btn-outline btn-sm"><i class="fas fa-arrow-left"></i> All Orders</a>
 </div>
 @php
- 
 
-$currency = match ($order->company_code) {
-    '2000' => 'INR',
-    '2200' => 'EUR',
-    default => 'USD',
-};
 
+//$currency = match ($order->company_code) {
+// '2000' => 'INR',
+// '2200' => 'EUR',
+// default => 'USD',
+//};
+$currency = $activeCurrencySymbol;
 @endphp
 {{-- Order Header --}}
 <div class="card" style="margin-bottom:1.25rem;">
@@ -143,7 +143,7 @@ $currency = match ($order->company_code) {
                     <th>Product</th>
                     <th>Vendor</th>
                     <th style="text-align: center;">Qty</th>
-                     <th style="text-align: center;">Shipped Qty</th>
+                    <th style="text-align: center;">Shipped Qty</th>
                     <th>Unit Price</th>
                     <th>Total</th>
                 </tr>

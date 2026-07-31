@@ -9,8 +9,12 @@ class CheckDepartment
 {
     public function handle(Request $request, Closure $next, string ...$departments)
     {
+        // if (!auth()->check()) {
+        //     return redirect()->route('auth.login');
+        // }
+
         if (!auth()->check()) {
-            return redirect()->route('auth.login');
+            return $next($request);
         }
 
         $user = auth()->user();

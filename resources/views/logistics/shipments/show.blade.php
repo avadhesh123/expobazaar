@@ -30,6 +30,12 @@
               style="margin:0;" 
               onsubmit="return confirm('Lock this shipment?\n\nThis will lock the shipment and auto-generate an ASN for HOD pricing.')">
             @csrf
+             {{-- Add this inside each form, before the submit button --}}
+                <div class="form-group" style="background-color: #eba6a6;">
+                    <label>Created Date </label>
+                    <input type="date" name="custom_date" value="{{ old('custom_date', date('Y-m-d')) }}" style="max-width:200px;">
+                </div>
+                {{-- End of Date Input --}}
             <button type="submit" class="btn btn-success">
                 <i class="fas fa-lock" style="margin-right:.4rem;"></i> 
                 Generate ASN

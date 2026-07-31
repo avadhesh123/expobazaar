@@ -1379,8 +1379,28 @@ class VendorController extends Controller
         // }
         return view('vendor.live-sheets.edit', compact('liveSheet', 'vendor'));
     }
-
     public function submitLiveSheet(Request $request, LiveSheet $liveSheet)
+    {
+        $request->validate([
+            'items'              => 'required|array|min:1',
+            'items.*.product_id' => 'required|exists:products,id',
+            'items.*.quantity'   => 'required|integer|min:1',
+        ]);
+
+        $service = new \App\Services\LiveSheetService();
+        $result = $service->updateItems($liveSheet, $request->items, 'vendor', $request->change_reason);
+
+        if (!$result['success']) {
+            return back()->with('error', $result['message']);
+        }
+
+        // Submit for approval
+        $liveSheet->update(['status' => 'submitted']);
+
+        return redirect()->route('vendor.live-sheets')
+            ->with('success', 'Live sheet submitted for Sourcing approval.');
+    }
+    public function submitLiveSheet27072026(Request $request, LiveSheet $liveSheet)
     {
         $request->validate([
             'items'                    => 'required|array|min:1',
@@ -1416,7 +1436,7 @@ class VendorController extends Controller
             \Log::warning('Vendor submit tracking failed: ' . $e->getMessage());
         }
 
-        $this->sourcingService->submitLiveSheet($liveSheet, $request->items);
+        $this->sourcingService->submitLiveSheet($liveSheet, $request->items, 'vendor');
         return redirect()->route('vendor.live-sheets')->with('success', 'Live sheet submitted for Sourcing approval.');
     }
 
@@ -1782,7 +1802,7 @@ class VendorController extends Controller
                     'description'      => $row['description'] ?? null,
                     'specification'    => $row['specification'] ?? null,
                     'hsn_hts_code'     => $row['hsn_code'] ?? null,
-                    'duty_percent'     => $row['duty_percent'] ?? null,
+                    'duty_percent'     => trim(str_replace('%', '', $row['duty_percent'])) ?? null,
                     'length'           => $row['length'] ?? null,
                     'width'            => $row['width'] ?? null,
                     'height'           => $row['height'] ?? null,
@@ -1947,8 +1967,10 @@ class VendorController extends Controller
                         $colMap['width'] = $col;
                     } elseif (str_contains($val, 'product height')) {
                         $colMap['height'] = $col;
-                    } elseif (str_contains($val, 'product weight') || str_contains($val, 'weight')) {
+                    } elseif (str_contains($val, 'product weight')) {
                         $colMap['weight'] = $col;
+                        //  file_put_contents(storage_path('logs/live_sheet_parse.log'), "Live sheet col map: {$col} = {$val}\n", FILE_APPEND);
+
                     } elseif (str_contains($val, 'material') && !str_contains($val, 'other')) {
                         $colMap['material'] = $col;
                     } elseif (str_contains($val, 'other material')) {
@@ -2015,6 +2037,8 @@ class VendorController extends Controller
 
                 $getVal = fn ($key, $default = null) => isset($colMap[$key]) ? $sheet->getCell($colMap[$key] . $r)->getValue() : $default;
 
+                // file_put_contents(storage_path('logs/live_sheet_parse_v.log'), "Live sheet col map: {$sku} = {$getVal('weight')}\n", FILE_APPEND);
+
                 $rows[] = [
                     'sno'             => $getVal('sno'),
                     'vendor_sku'      => $sku,
@@ -2025,7 +2049,7 @@ class VendorController extends Controller
                     'description'     => $getVal('description'),
                     'specification'   => $getVal('specification'),
                     'hsn_code'        => $getVal('hsn_code'),
-                    'duty_percent'    => $getVal('duty_percent'),
+                    'duty_percent'    => trim(str_replace('%', '', $getVal('duty_percent'))),
                     'length'          => $getVal('length'),
                     'width'           => $getVal('width'),
                     'height'          => $getVal('height'),
@@ -2716,8 +2740,9 @@ class VendorController extends Controller
         $maxExFactory = now()->addDays(90)->toDateString();
 
         $request->validate([
-            'ex_factory_date'        => "nullable|date|after_or_equal:{$today}|before_or_equal:{$maxExFactory}",
-            'final_inspection_date'  => 'nullable|date',
+           // 'ex_factory_date'        => "nullable|date|after_or_equal:{$today}|before_or_equal:{$maxExFactory}",
+           'ex_factory_date' => 'nullable|date',
+           'final_inspection_date'  => 'nullable|date',
             'factory_location'       => 'nullable|string|max:500',
         ]);
 

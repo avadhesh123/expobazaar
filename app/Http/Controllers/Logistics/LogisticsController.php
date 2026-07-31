@@ -33,7 +33,7 @@ class LogisticsController extends Controller
         $activeCode = session('active_company');
 
         $consignments = Consignment::with('vendor', 'liveSheet')
-            ->where('status', 'created')
+            ->whereIN('status', ['created', 'live_sheet_locked'])
             ->where('company_code', $activeCode)
             //  ->when($request->company_code, fn($q, $v) => $q->where('company_code', $v))
             ->whereDoesntHave('shipments')
@@ -231,7 +231,7 @@ class LogisticsController extends Controller
             'items.*.excess_quantity'   => 'nullable|integer|min:0',
         ]);
 
-        $data = $request->only(['warehouse_id', 'receipt_date', 'remarks']);
+        $data = $request->only(['warehouse_id', 'receipt_date', 'remarks','custom_date']);
 
         if ($request->hasFile('grn_file')) {
             $data['grn_file'] = $request->file('grn_file')->store("grn/{$shipment->id}", FileStorage::disk());

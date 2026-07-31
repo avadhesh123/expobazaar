@@ -7,7 +7,7 @@
 <div class="grid-kpi" style="grid-template-columns:repeat(4,1fr);">
     <div class="kpi-card">
         <div class="kpi-label">Total Orders</div>
-        <div class="kpi-value">{{$activeCurrencySymbol}} {{ number_format($stats['total_orders'] ?? 0) }}</div>
+        <div class="kpi-value"> {{ number_format($stats['total_orders'] ?? 0) }}</div>
     </div>
     <div class="kpi-card" style="border-left:3px solid #16a34a;">
         <div class="kpi-label">Total Revenue</div>

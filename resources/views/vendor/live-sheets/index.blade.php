@@ -44,7 +44,7 @@
                 @forelse($liveSheets as $ls)
                 @php
 
-                $today = now()->toDateString();
+                $today = now()->subDays(940)->toDateString();
                 $exFactoryDate = now()->addDays(75);
                 $maxExFactory = $exFactoryDate->toDateString();
                 $exFactory = $ls->ex_factory_date?->toDateString() ?? '';
@@ -204,7 +204,8 @@
 <script>
     (function() {
         var csrfToken = '{{ csrf_token() }}';
-        var today = '{{ now()->toDateString() }}';
+        var today = '{{ now()->subDays(940)->toDateString() }}';
+        console.log('Today (for min date):', today);
         var maxExFactory = '{{ now()->addDays(75)->toDateString() }}';
 
         // ── Helper: add days to a yyyy-mm-dd string ──────────────────────────────

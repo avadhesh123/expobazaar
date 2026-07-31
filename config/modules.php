@@ -12,6 +12,7 @@ return [
             'access'        => ['label' => 'Access Admin Panel',    'actions' => ['view'], 'route' => 'admin.dashboard',         'icon' => 'fas fa-tachometer-alt'],
             'user'          => ['label' => 'Users',                 'actions' => ['view', 'create', 'edit', 'delete'], 'route' => 'admin.users',         'icon' => 'fas fa-users-cog'],
             'vendor'        => ['label' => 'Vendor Approvals',      'actions' => ['view', 'approve'],                  'route' => 'admin.vendors.pending', 'icon' => 'fas fa-user-check'],
+            'vendor-access' => ['label'   => 'Vendor Access',       'actions' => ['view'],                             'route'   => 'admin.vendor-access', 'icon'    => 'fas fa-user-secret'],
             'role'          => ['label' => 'Roles & Permissions',   'actions' => ['view', 'create', 'edit', 'delete'], 'route' => 'admin.roles',         'icon' => 'fas fa-shield-alt'],
             'category'      => ['label' => 'Categories',            'actions' => ['view', 'create', 'edit'],           'route' => 'admin.categories',    'icon' => 'fas fa-sitemap'],
             'sales-channel' => ['label' => 'Sales Channels',        'actions' => ['view', 'create', 'edit'],           'route' => 'admin.sales-channels', 'icon' => 'fas fa-store'],
@@ -122,7 +123,7 @@ return [
             'rate-card'   => ['label' => 'Rate Card',               'actions' => ['view'], 'route' => 'vendor.rate-card',     'icon' => 'fas fa-file-invoice-dollar'],
             'payout'      => ['label' => 'Payouts',                 'actions' => ['view', 'invoice'], 'route' => 'vendor.payouts', 'icon' => 'fas fa-money-check-alt'],
             'chargeback'  => ['label' => 'Chargebacks',             'actions' => ['view'], 'route' => 'vendor.chargebacks',   'icon' => 'fas fa-exclamation-triangle'],
-           // 'sale'        => ['label' => 'Sales Report',            'actions' => ['view'], 'route' => 'vendor.sales',         'icon' => 'fas fa-chart-bar'],
+            // 'sale'        => ['label' => 'Sales Report',            'actions' => ['view'], 'route' => 'vendor.sales',         'icon' => 'fas fa-chart-bar'],
         ],
     ],
 ];

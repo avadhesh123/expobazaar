@@ -363,6 +363,7 @@ class FinanceController extends Controller
                 ->where('company_code', $payout->company_code)
                 ->where('charge_month', $payout->payout_month)
                 ->where('charge_year', $payout->payout_year)
+                ->where('status', 'approved')
                 ->with('warehouse')
                 ->get();
             // echo '<pre>';
@@ -413,20 +414,20 @@ class FinanceController extends Controller
     public function calculatePayout(Request $request)
     {
         $request->validate([
-            'vendor_id' => 'required|exists:vendors,id',
-            'month'     => 'required|integer|between:1,12',
-            'year'      => 'required|integer|min:2024',
+            'pay_vendor_id' => 'required|exists:vendors,id',
+            'pay_month'     => 'required|integer|between:1,12',
+            'pay_year'      => 'required|integer|min:2024',
         ]);
 
         $activeCode = session('active_company');
-        $vendor = Vendor::findOrFail($request->vendor_id);
+        $vendor = Vendor::findOrFail($request->pay_vendor_id);
         $service = new \App\Services\VendorPayoutService();
 
         $result = $service->calculateAndSave(
             $vendor->id,
             $activeCode ?? $vendor->company_code,
-            $request->month,
-            $request->year
+            $request->pay_month,
+            $request->pay_year
         );
 
         if ($result['success']) {
@@ -952,12 +953,14 @@ class FinanceController extends Controller
         $companyCode = session('active_company');
 
         $request->validate([
-            'month' => 'required|integer|min:1|max:12',
-            'year' => 'required|integer|min:2024',
-            'vendor_id' => 'nullable|exists:vendors,id'
+            'charge_month' => 'required|integer|min:1|max:12',
+            'charge_year' => 'required|integer|min:2024',
+            'charge_vendor_id' => 'nullable|exists:vendors,id'
         ]);
         $service = new \App\Services\VendorChargesService();
-        $results = $service->runMonthlyCharges($request->month, $request->year, $request->vendor_id, auth()->id(), (bool)$request->dry_run);
+        // echo $request->charge_month. ", " . $request->charge_year . ", " . $request->charge_vendor_id . ", " . $request->dry_run;
+        //exit;
+        $results = $service->runMonthlyCharges($request->charge_month, $request->charge_year, $request->charge_vendor_id, auth()->id(), (bool)$request->dry_run);
 
         $msg = ($request->dry_run ? "[DRY RUN] " : "") . "{$results['created']} created, {$results['skipped']} skipped.";
         if (!empty($results['errors'])) {
@@ -1062,7 +1065,7 @@ class FinanceController extends Controller
             ->latest('effective_from')
             ->first();
 
-       if ($previousOpen ) {
+        if ($previousOpen) {
             $previousOpen->update([
                 'effective_to' => \Carbon\Carbon::parse($request->effective_from)->subDay()->toDateString(),
             ]);
@@ -1109,5 +1112,114 @@ class FinanceController extends Controller
 
         return back()->with('success', 'Commission revision deleted.');
     }
+
+
+    /**
+     *
+     * Routes (inside finance group):
+     *   Route::post('live-sheets/{liveSheet}/wsp', [FinanceController::class, 'storeWspRevision'])->name('live-sheets.wsp.store');
+     *   Route::delete('wsp-revision/{revision}', [FinanceController::class, 'deleteWspRevision'])->name('wsp-revision.delete');
+     */
+
+    public function storeWspRevision(Request $request, \App\Models\LiveSheet $liveSheet)
+    {
+        $request->validate([
+            'vendor_wsp'      => 'required|numeric|min:0',
+            'effective_from'  => 'required|date',
+            'effective_to'    => 'nullable|date|after_or_equal:effective_from',
+            'product_id'      => 'nullable|exists:products,id',
+            'remarks'         => 'nullable|string|max:500',
+        ]);
+
+        // Close previous open revision (same scope: sheet-level or product-level)
+        $previousQuery = \App\Models\WspRevision::where('live_sheet_id', $liveSheet->id)
+            ->whereNull('effective_to')
+            ->latest('effective_from');
+
+        if ($request->product_id) {
+            $previousQuery->where('product_id', $request->product_id);
+        } else {
+            $previousQuery->whereNull('product_id');
+        }
+
+        $previousOpen = $previousQuery->first();
+
+        if ($previousOpen && $previousOpen->effective_from < $request->effective_from) {
+            $previousOpen->update([
+                'effective_to' => \Carbon\Carbon::parse($request->effective_from)->subDay()->toDateString(),
+            ]);
+        }
+
+        $revision = \App\Models\WspRevision::create([
+            'live_sheet_id'      => $liveSheet->id,
+            'live_sheet_item_id' => $request->product_id
+                ? \App\Models\LiveSheetItem::where('live_sheet_id', $liveSheet->id)->where('product_id', $request->product_id)->value('id')
+                : null,
+            'product_id'         => $request->product_id,
+            'vendor_id'          => $liveSheet->vendor_id,
+            'company_code'       => $liveSheet->company_code,
+            'vendor_wsp'         => $request->vendor_wsp,
+            'effective_from'     => $request->effective_from,
+            'effective_to'       => $request->effective_to,
+            'remarks'            => $request->remarks,
+            'created_by'         => auth()->id(),
+        ]);
+
+        // Update live sheet items' product_details with latest WSP
+        if ($request->product_id) {
+            // Product-specific: update just that item
+            $item = \App\Models\LiveSheetItem::where('live_sheet_id', $liveSheet->id)
+                ->where('product_id', $request->product_id)->first();
+            if ($item) {
+                $details = $item->product_details ?? [];
+                $details['vendor_wsp'] = floatval($request->vendor_wsp);
+                $details['wsp'] = floatval($request->vendor_wsp);
+                $item->update(['product_details' => $details]);
+            }
+        } else {
+            // Sheet-level: update all items
+            foreach ($liveSheet->items as $item) {
+                $details = $item->product_details ?? [];
+                $details['vendor_wsp'] = floatval($request->vendor_wsp);
+                $details['wsp'] = floatval($request->vendor_wsp);
+                $item->update(['product_details' => $details]);
+            }
+        }
+
+        // Update product master
+        if ($request->product_id) {
+            \App\Models\Product::withoutGlobalScopes()->where('id', $request->product_id)
+                ->update(['vendor_wsp' => $request->vendor_wsp]);
+        }
+
+        \App\Models\ActivityLog::log('created', 'wsp_revision', $revision, null, [
+            'live_sheet'  => $liveSheet->live_sheet_number,
+            'product_id'  => $request->product_id,
+            'old_wsp'     => $previousOpen?->vendor_wsp,
+            'new_wsp'     => $request->vendor_wsp,
+            'from'        => $request->effective_from,
+            'to'          => $request->effective_to,
+        ], "WSP revised: {$request->vendor_wsp} from {$request->effective_from} on {$liveSheet->live_sheet_number}");
+
+        $productLabel = $request->product_id
+            ? (\App\Models\Product::find($request->product_id)?->sku ?? 'Product')
+            : 'All items';
+
+        if ($request->expectsJson()) {
+            // ... existing logic ...
+            return response()->json(['success' => true, 'message' => "WSP saved"]);
+        }
+
+        return back()->with('success', "WSP {$request->vendor_wsp} set for {$productLabel} effective from " . \Carbon\Carbon::parse($request->effective_from)->format('d M Y'));
+    }
+
+    public function deleteWspRevision(\App\Models\WspRevision $revision)
+    {
+        $liveSheet = $revision->liveSheet;
+        $revision->delete();
+
+        return back()->with('success', 'WSP revision deleted.');
+    }
+
 
 }
