@@ -18,6 +18,7 @@ class VendorService
             $user = User::create([
                 'name' => $data['contact_person'],
                 'email' => $data['email'],
+                'password'   => \Illuminate\Support\Facades\Hash::make('Vendor@2026'), 
                 'user_type' => 'external',
                 'company_codes' => [$data['company_code']],
                 'status' => 'pending',

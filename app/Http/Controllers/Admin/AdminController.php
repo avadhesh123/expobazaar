@@ -102,7 +102,7 @@ class AdminController extends Controller
 
         // print_r($validated);
         // exit;
-
+ 
         $user = User::create([
             'name'              => $validated['name'],
             'email'             => $validated['email'],
@@ -112,6 +112,7 @@ class AdminController extends Controller
             'company_codes'     => $validated['company_codes'],
             'status'            => $validated['status'] ?? 'active',
             'email_verified_at' => now(),
+            'password'          => \Illuminate\Support\Facades\Hash::make('Noida@2026'),
         ]);
 
         if (!empty($validated['roles'])) {
