@@ -933,14 +933,16 @@ class FinanceController extends Controller
         $vendors = \App\Models\Vendor::orderBy('company_name')
             ->where('company_code', $activeCode)
             ->get();
-        $baseQ = \App\Models\VendorMonthlyCharge::where('company_code', $activeCode)->byMonth($month, $year);
+        $baseQ = \App\Models\VendorMonthlyCharge::where('company_code', $activeCode)
+        ->byMonth($month, $year);
+
         $stats = [
-            'total_charges' => (float)(clone $baseQ)->sum('total_charges'),
-            'total_inward' => (float)(clone $baseQ)->sum('inward_charge'),
-            'total_storage' => (float)(clone $baseQ)->sum('storage_charge'),
-            'total_fulfill' => (float)(clone $baseQ)->sum('fulfillment_charge'),
-            'total_pickpack' => (float)(clone $baseQ)->sum('pick_pack_charge'),
-            'total_material' => (float)(clone $baseQ)->sum('material_cost'),
+            'total_charges' => (float)(clone $baseQ)->where('status', 'approved')->sum('total_charges'),
+            'total_inward' => (float)(clone $baseQ)->where('status', 'approved')->sum('inward_charge'),
+            'total_storage' => (float)(clone $baseQ)->where('status', 'approved')->sum('storage_charge'),
+            'total_fulfill' => (float)(clone $baseQ)->where('status', 'approved')->sum('fulfillment_charge'),
+            'total_pickpack' => (float)(clone $baseQ)->where('status', 'approved')->sum('pick_pack_charge'),
+            'total_material' => (float)(clone $baseQ)->where('status', 'approved')->sum('material_cost'),
             'vendor_count' => (int)(clone $baseQ)->distinct('vendor_id')->count('vendor_id'),
             'pending_count' => (int)(clone $baseQ)->where('status', 'calculated')->count(),
         ];

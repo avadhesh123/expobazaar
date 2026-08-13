@@ -4,6 +4,12 @@
 
 @section('content')
 {{-- KPIs --}}
+<style>
+    .data-table td {
+        border-bottom: 1px solid #ccc;
+    }
+</style>
+
 <div style="display:flex;gap:1rem;margin-bottom:1.25rem;">
     <div class="kpi-card" style="flex:1;border-left:3px solid #e8a838;">
         <div class="kpi-label">Pending Shipment</div>

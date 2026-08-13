@@ -62,7 +62,7 @@
         <div style="display:flex;justify-content:space-between;">
             <div>
                 <div class="kpi-label">Pending Payout</div>
-                <div class="kpi-value" style="color:#e8a838;">{{ ($data['stats']['pending_payout'] ?? 0) < 0 ? '-' : '' }}{{ $activeCurrencySymbol }}{{ number_format(abs($data['stats']['pending_payout'] ?? 0), 0) }}</div>
+                <div class="kpi-value" style="color:#e8a838;">{{ ($data['stats']['pending_payout'] ?? 0) < 0 ? '-' : '' }}{{ $activeCurrencySymbol }}{{ number_format(abs($data['stats']['pending_payout'] ?? 0), 2) }}</div>
             </div>
             <div class="kpi-icon" style="background:#fef3c7;color:#e8a838;"><i class="fas fa-money-check-alt"></i></div>
         </div>

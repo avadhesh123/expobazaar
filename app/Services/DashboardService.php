@@ -105,7 +105,7 @@ class DashboardService
     {
         $vendor = Vendor::findOrFail($vendorId);
         $activeCode = session('active_company');
-
+     
         return [
             'kpis' => [
                 'products_approved' => Product::where('vendor_id', $vendorId)->where('company_code', $activeCode)->whereIn('status', ['approved', 'listed'])->count(),
@@ -116,7 +116,7 @@ class DashboardService
                 'monthly_sales' => Order::whereHas('items', fn($q) => $q->where('vendor_id', $vendorId))
                     ->where('company_code', $activeCode)
                     ->whereMonth('order_date', now()->month)->sum('total_amount'),
-                'pending_payout' => VendorPayout::where('vendor_id', $vendorId)->pending()->sum('net_payout'),
+                'pending_payout' => VendorPayout::where('vendor_id', $vendorId)->where('status', 'approved')->sum('net_payout'),
                 'chargebacks' => \App\Models\Chargeback::where('vendor_id', $vendorId)
                     ->whereIn('status', ['raised', 'pending_confirmation', 'confirmed'])->sum('amount'),
             ],

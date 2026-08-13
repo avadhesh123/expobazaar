@@ -4,12 +4,15 @@ namespace App\Services;
 
 use App\Models\{VendorPayout, Vendor, Order, OrderItem, LiveSheet, Chargeback, ActivityLog};
 use Illuminate\Support\Facades\DB;
+use Carbon\Carbon;
 
 class VendorPayoutService
 {
+    private $wspRevisions = null;
+    private $commissionRevisions = null;
+
     /**
      * Calculate and save vendor payout for a given period
-     * Uses shipped_qty, FIFO WSP, and FIFO commission
      */
     public function calculateAndSave(int $vendorId, string $companyCode, int $month, int $year): array
     {
@@ -32,12 +35,12 @@ class VendorPayoutService
                 'total_shipped_qty'        => $data['summary']['total_qty'],
                 'status'                   => 'calculated',
                 'calculation_snapshot'      => [
-                    'line_items'       => $data['line_items'],
+                    'line_items'        => $data['line_items'],
                     'warehouse_charges' => $data['warehouse_charges_raw'],
-                    'chargebacks'      => $data['chargebacks_raw'],
-                    'summary'          => $data['summary'],
-                    'calculated_at'    => now()->toISOString(),
-                    'calculated_by'    => auth()->id(),
+                    'chargebacks'       => $data['chargebacks_raw'],
+                    'summary'           => $data['summary'],
+                    'calculated_at'     => now()->toISOString(),
+                    'calculated_by'     => auth()->id(),
                 ],
             ]
         );
@@ -54,14 +57,11 @@ class VendorPayoutService
 
     /**
      * Build complete payout data (used by both calculate and show)
-     * All calculations based on shipped_qty from order_items
      */
     public function buildPayoutData(int $vendorId, string $companyCode, int $month, int $year): array
     {
-        $logFile = storage_path('logs/vendor_payout_'.now()->format('Y-m-d').'.log');
-
-        $periodStart = \Carbon\Carbon::create($year, $month, 1)->startOfMonth();
-        $periodEnd   = \Carbon\Carbon::create($year, $month, 1)->endOfMonth();
+        $periodStart = Carbon::create($year, $month, 1)->startOfMonth();
+        $periodEnd   = Carbon::create($year, $month, 1)->endOfMonth();
 
         // ── 1. Get shipped orders for this vendor in this period ──
         $orders = Order::withoutGlobalScopes()
@@ -79,10 +79,7 @@ class VendorPayoutService
             ->get();
 
         // ── 2. Build FIFO queue from live sheets ──
-        // $fifoQueue = $this->buildFifoQueue($vendorId, $companyCode);
-        // In buildPayoutData(), change:
         $fifoQueue = $this->buildFifoQueue($vendorId, $companyCode, $periodEnd->toDateString());
-       //  file_put_contents($logFile, "V {$vendorId}  : periodStart {$periodStart} fifoQueue " . json_encode($fifoQueue) . "\n", FILE_APPEND);
 
         // ── 3. Deduct prior months' shipped qty from FIFO queue ──
         $priorShipped = OrderItem::withoutGlobalScopes()
@@ -90,21 +87,11 @@ class VendorPayoutService
             ->where('shipped_qty', '>', 0)
             ->whereHas('order', fn ($q) => $q->withoutGlobalScopes()
                 ->where('company_code', $companyCode)
-                //->where('order_date', '<', $periodStart)
-                 ->whereBetween('order_date', [$periodStart, $periodEnd])
+                ->where('order_date', '<', $periodStart)
                 ->whereIn('status', ['shipped', 'delivered']))
             ->select('product_id', DB::raw('SUM(shipped_qty) as shipped'))
             ->groupBy('product_id')
             ->pluck('shipped', 'product_id');
-
-
-        // Print SQL
-        // dd($query->toSql(), $query->getBindings());
-
-        // // Execute
-        // $priorShipped = $query->pluck('shipped', 'product_id');
-
-         file_put_contents($logFile, "ORDERS PID periodStart:{$periodStart} periodEnd:{$periodEnd} " . json_encode($priorShipped) . "  \n", FILE_APPEND);
 
         foreach ($priorShipped as $pid => $shippedQty) {
             if (!isset($fifoQueue[$pid])) {
@@ -130,6 +117,8 @@ class VendorPayoutService
         $totalQty = 0;
 
         foreach ($orders as $order) {
+            $orderDate = $order->order_date?->format('Y-m-d') ?? now()->toDateString();
+
             foreach ($order->items as $item) {
                 $product = $item->product;
                 if (!$product) {
@@ -137,9 +126,6 @@ class VendorPayoutService
                 }
 
                 $pid = $product->id;
-                
-                file_put_contents($logFile, "PID {$pid}  \n", FILE_APPEND);
-
                 $shippedQty = intval($item->shipped_qty);
                 if ($shippedQty <= 0) {
                     continue;
@@ -151,12 +137,8 @@ class VendorPayoutService
                 $itemPayout = 0;
                 $details = [];
 
-
                 // FIFO allocation
                 if (isset($fifoQueue[$pid])) {
-
-                    file_put_contents($logFile, "PID {$pid}  \n", FILE_APPEND);
-
                     foreach ($fifoQueue[$pid] as &$batch) {
                         if ($qtyToAllocate <= 0) {
                             break;
@@ -165,16 +147,30 @@ class VendorPayoutService
                             continue;
                         }
 
+                        // WSP for this order's date
+                        $batchWsp = $this->getWspForDate(
+                            $batch['live_sheet_id'],
+                            $pid,
+                            $orderDate,
+                            $batch['vendor_wsp']
+                        );
+
+                        // Commission for this order's date
+                        $batchCommPercent = $this->getCommissionForDate(
+                            $orderDate,
+                            $batch['base_commission']
+                        );
+
                         $allocate = min($qtyToAllocate, $batch['remaining_qty']);
-                        $batchSale = round($batch['vendor_wsp'] * $allocate, 2);
-                        $batchComm = round(($batch['commission'] / 100) * $batchSale, 2);
-                        $batchPayout = round($batchSale - $batchComm, 2);
+                        $batchSale = round($batchWsp * $allocate, 2);
+                        $batchCommAmt = round(($batchCommPercent / 100) * $batchSale, 2);
+                        $batchPayout = round($batchSale - $batchCommAmt, 2);
 
                         $itemSaleAmount += $batchSale;
-                        $itemCommission += $batchComm;
+                        $itemCommission += $batchCommAmt;
                         $itemPayout += $batchPayout;
 
-                        $details[] = "{$allocate}u × {$batch['vendor_wsp']} @ {$batch['commission']}%";
+                        $details[] = "{$allocate}u × {$batchWsp} @ {$batchCommPercent}%";
 
                         $batch['remaining_qty'] -= $allocate;
                         $qtyToAllocate -= $allocate;
@@ -196,6 +192,7 @@ class VendorPayoutService
                 $lineItems[] = [
                     'order_id'      => $order->id,
                     'order_number'  => $order->order_number,
+                    'order_date'    => $orderDate,
                     'sku'           => $item->sku ?? $product->sku ?? '—',
                     'channel'       => $order->salesChannel->name ?? '—',
                     'vendor_wsp'    => $avgWsp,
@@ -219,11 +216,10 @@ class VendorPayoutService
             ->where('company_code', $companyCode)
             ->where('charge_month', $month)
             ->where('charge_year', $year)
+            ->where('status', 'approved')
             ->with('warehouse')
             ->get();
-
-        $totalWarehouseCharges = $warehouseCharges->sum(fn ($c) => floatval($c->total_charge ?? $c->calculated_amount ?? 0));
-
+        $totalWarehouseCharges = $warehouseCharges->sum(fn ($c) => floatval($c->total_charges ?? $c->calculated_amount ?? 0));
         // ── 6. Chargebacks ──
         $chargebacks = Chargeback::withoutGlobalScopes()
             ->where('vendor_id', $vendorId)
@@ -264,45 +260,47 @@ class VendorPayoutService
             ],
         ];
     }
+
+    /**
+     * Build FIFO queue from live sheets
+     * WSP and Commission are resolved per order date, not here
+     */
     private function buildFifoQueue(int $vendorId, string $companyCode, ?string $asOfDate = null): array
     {
-       // $logFile = storage_path('logs/vendor_payout_'.now()->format('Y-m-d').'.log');
-
         $asOfDate = $asOfDate ?? now()->toDateString();
 
         $liveSheets = LiveSheet::withoutGlobalScopes()
             ->where('vendor_id', $vendorId)
             ->where('company_code', $companyCode)
-          //  ->where('status', 'locked')
             ->orderBy('approved_at', 'asc')
             ->with(['items' => fn ($q) => $q->select('id', 'live_sheet_id', 'product_id', 'quantity', 'unit_price', 'product_details')])
             ->get();
 
         $lsIds = $liveSheets->pluck('id');
 
-        // Get commission active AS OF the payout period, not today
-        $activeRevisions = \App\Models\CommissionRevision::whereIn('live_sheet_id', $lsIds)
-            ->where('effective_from', '<=', $asOfDate)
-            ->where(fn ($q) => $q->whereNull('effective_to')->orWhere('effective_to', '>=', $asOfDate))
+        // Preload ALL WSP revisions (not filtered by date — matched per order date later)
+        $this->wspRevisions = \App\Models\WspRevision::whereIn('live_sheet_id', $lsIds)
             ->orderByDesc('effective_from')
-            ->get()
-            ->unique('live_sheet_id')
-            ->keyBy('live_sheet_id');
+            ->get();
+
+        // Preload ALL commission revisions for this vendor (date-based, no live sheet dependency)
+        $this->commissionRevisions = \App\Models\CommissionRevision::where('vendor_id', $vendorId)
+            ->where('company_code', $companyCode)
+            ->orderByDesc('effective_from')
+            ->get();
+
+        \Log::channel('daily')->info("[Payout] FIFO: Loaded {$this->wspRevisions->count()} WSP revisions, {$this->commissionRevisions->count()} commission revisions for vendor {$vendorId}");
 
         $fifoQueue = [];
 
         foreach ($liveSheets as $ls) {
-            $commPercent = isset($activeRevisions[$ls->id])
-                ? floatval($activeRevisions[$ls->id]->commission_percentage)
-                : floatval($ls->commission_percentage ?? 0);
+            // Base commission from live sheet (fallback if no revision matches)
+            $baseCommission = floatval($ls->commission_percentage ?? 0);
 
-            \Log::channel('daily')->info("FIFO: LS {$ls->live_sheet_number} commission={$commPercent}% (as of {$asOfDate})");
-            //file_put_contents($logFile, "FIFO: LS {$ls->live_sheet_number} commission={$commPercent}% (as of {$asOfDate})   "  . "\n", FILE_APPEND);
             foreach ($ls->items as $lsItem) {
                 $pid = $lsItem->product_id;
                 $d = $lsItem->product_details ?? [];
-                $batchWsp = floatval($d['wsp'] ?? $d['vendor_wsp'] ?? $lsItem->unit_price ?? 0);
-                //file_put_contents($logFile, "FIFO LS: PID {$pid}   "  . "\n", FILE_APPEND);
+                $baseWsp = floatval($d['wsp'] ?? $d['vendor_wsp'] ?? $lsItem->unit_price ?? 0);
 
                 if (!isset($fifoQueue[$pid])) {
                     $fifoQueue[$pid] = [];
@@ -310,8 +308,8 @@ class VendorPayoutService
                 $fifoQueue[$pid][] = [
                     'live_sheet_id'     => $ls->id,
                     'live_sheet_number' => $ls->live_sheet_number ?? '',
-                    'vendor_wsp'        => $batchWsp,
-                    'commission'        => $commPercent,
+                    'vendor_wsp'        => $baseWsp,        // fallback WSP
+                    'base_commission'   => $baseCommission,  // fallback commission
                     'remaining_qty'     => intval($lsItem->quantity),
                 ];
             }
@@ -319,60 +317,150 @@ class VendorPayoutService
 
         return $fifoQueue;
     }
+
     /**
-     * Build FIFO queue from approved/locked live sheets
+     * Get WSP for a specific live sheet + product on a specific order date
+     * Matches revision where: effective_from <= orderDate AND (effective_to >= orderDate OR effective_to IS NULL)
      */
-    private function buildFifoQueueBAK(int $vendorId, string $companyCode): array
+    private function getWspForDate(int $liveSheetId, int $productId, string $orderDate, float $fallbackWsp): float
     {
-        $logFile = storage_path('logs/vendor_payout_'.now()->format('Y-m-d').'.log');
+        if (!$this->wspRevisions || $this->wspRevisions->isEmpty()) {
+            return $fallbackWsp;
+        }
 
-        $liveSheets = LiveSheet::withoutGlobalScopes()
-            ->where('vendor_id', $vendorId)
-            ->where('company_code', $companyCode)
-            ->where('status', 'locked')
-            ->orderBy('approved_at', 'asc')
-            ->with(['items' => fn ($q) => $q->select('id', 'live_sheet_id', 'product_id', 'quantity', 'unit_price', 'product_details')])
-            ->get();
+        $orderDateCarbon = Carbon::parse($orderDate);
+        $match = null;
 
-        $fifoQueue = [];
+        // Priority 1: Product-specific on THIS live sheet
+        foreach ($this->wspRevisions as $r) {
+            if ($r->live_sheet_id != $liveSheetId) {
+                continue;
+            }
+            if ($r->product_id != $productId) {
+                continue;
+            }
 
-        $lsIds = $liveSheets->pluck('id');
-        $activeRevisions = \App\Models\CommissionRevision::whereIn('live_sheet_id', $lsIds)
-            ->where('effective_from', '<=', now())
-            ->where(fn ($q) => $q->whereNull('effective_to')->orWhere('effective_to', '>=', now()))
-            ->orderByDesc('effective_from')
-            ->get()
-            ->unique('live_sheet_id')  // one per live sheet (latest active)
-            ->keyBy('live_sheet_id');
+            $from = Carbon::parse($r->effective_from);
+            if ($from->gt($orderDateCarbon)) {
+                continue;
+            }
 
-
-        foreach ($liveSheets as $ls) {
-            //  $commPercent = floatval($ls->commission_percentage ?? 0);
-            $commPercent = isset($activeRevisions[$ls->id])
-                    ? floatval($activeRevisions[$ls->id]->commission_percentage)
-                    : floatval($ls->commission_percentage ?? 0);
-
-
-            file_put_contents($logFile, "LS {$ls->live_sheet_number}  {$ls->id}:  commission_percentage {$commPercent}\n", FILE_APPEND);
-
-            foreach ($ls->items as $lsItem) {
-                $pid = $lsItem->product_id;
-                $d = $lsItem->product_details ?? [];
-                $batchWsp = floatval($d['wsp'] ?? $d['vendor_wsp'] ?? $lsItem->unit_price ?? 0);
-
-                if (!isset($fifoQueue[$pid])) {
-                    $fifoQueue[$pid] = [];
+            if ($r->effective_to) {
+                $to = Carbon::parse($r->effective_to);
+                if ($orderDateCarbon->gt($to)) {
+                    continue;
                 }
-                $fifoQueue[$pid][] = [
-                    'live_sheet_id' => $ls->id,
-                    'live_sheet_number' => $ls->live_sheet_number ?? '',
-                    'vendor_wsp'    => $batchWsp,
-                    'commission'    => $commPercent,
-                    'remaining_qty' => intval($lsItem->quantity),
-                ];
+            }
+
+            if (!$match || Carbon::parse($r->effective_from)->gt(Carbon::parse($match->effective_from))) {
+                $match = $r;
             }
         }
 
-        return $fifoQueue;
+        if ($match) {
+            \Log::channel('daily')->info("[Payout] WSP: pid={$productId} date={$orderDate} → {$match->vendor_wsp} [product revision #{$match->id}]");
+            return floatval($match->vendor_wsp);
+        }
+
+        // Priority 2: Product-specific on ANY live sheet
+        foreach ($this->wspRevisions as $r) {
+            if ($r->product_id != $productId) {
+                continue;
+            }
+
+            $from = Carbon::parse($r->effective_from);
+            if ($from->gt($orderDateCarbon)) {
+                continue;
+            }
+
+            if ($r->effective_to) {
+                $to = Carbon::parse($r->effective_to);
+                if ($orderDateCarbon->gt($to)) {
+                    continue;
+                }
+            }
+
+            if (!$match || Carbon::parse($r->effective_from)->gt(Carbon::parse($match->effective_from))) {
+                $match = $r;
+            }
+        }
+
+        if ($match) {
+            \Log::channel('daily')->info("[Payout] WSP: pid={$productId} date={$orderDate} → {$match->vendor_wsp} [any-ls revision #{$match->id}]");
+            return floatval($match->vendor_wsp);
+        }
+
+        // Priority 3: Sheet-level on THIS live sheet
+        foreach ($this->wspRevisions as $r) {
+            if ($r->live_sheet_id != $liveSheetId) {
+                continue;
+            }
+            if ($r->product_id !== null) {
+                continue;
+            }
+
+            $from = Carbon::parse($r->effective_from);
+            if ($from->gt($orderDateCarbon)) {
+                continue;
+            }
+
+            if ($r->effective_to) {
+                $to = Carbon::parse($r->effective_to);
+                if ($orderDateCarbon->gt($to)) {
+                    continue;
+                }
+            }
+
+            if (!$match || Carbon::parse($r->effective_from)->gt(Carbon::parse($match->effective_from))) {
+                $match = $r;
+            }
+        }
+
+        if ($match) {
+            \Log::channel('daily')->info("[Payout] WSP: pid={$productId} date={$orderDate} → {$match->vendor_wsp} [sheet revision #{$match->id}]");
+            return floatval($match->vendor_wsp);
+        }
+
+        return $fallbackWsp;
+    }
+
+    /**
+     * Get commission for a vendor on a specific order date
+     * Pure date-range match — no live sheet or product dependency
+     * Matches revision where: effective_from <= orderDate AND (effective_to >= orderDate OR effective_to IS NULL)
+     */
+    private function getCommissionForDate(string $orderDate, float $fallbackCommission): float
+    {
+        if (!$this->commissionRevisions || $this->commissionRevisions->isEmpty()) {
+            return $fallbackCommission;
+        }
+
+        $orderDateCarbon = Carbon::parse($orderDate);
+        $match = null;
+
+        foreach ($this->commissionRevisions as $r) {
+            $from = Carbon::parse($r->effective_from);
+            if ($from->gt($orderDateCarbon)) {
+                continue;
+            }
+
+            if ($r->effective_to) {
+                $to = Carbon::parse($r->effective_to);
+                if ($orderDateCarbon->gt($to)) {
+                    continue;
+                }
+            }
+
+            if (!$match || Carbon::parse($r->effective_from)->gt(Carbon::parse($match->effective_from))) {
+                $match = $r;
+            }
+        }
+
+        if ($match) {
+            \Log::channel('daily')->info("[Payout] Commission: date={$orderDate} → {$match->commission_percentage}% [revision #{$match->id}]");
+            return floatval($match->commission_percentage);
+        }
+
+        return $fallbackCommission;
     }
 }

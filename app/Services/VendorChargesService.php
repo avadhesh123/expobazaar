@@ -25,6 +25,8 @@ class VendorChargesService
         $periodStart = \Carbon\Carbon::create($year, $month, 1)->startOfMonth()->toDateString();
         $periodEnd = \Carbon\Carbon::create($year, $month, 1)->endOfMonth()->toDateString();
 
+
+
         foreach ($vendors as $vendor) {
             $rateCard = VendorRateCard::where('company_code', $activeCompany)->getActive($vendor->id, $periodEnd);
 
@@ -64,6 +66,41 @@ class VendorChargesService
                 ])
                 ->get();
 
+            //             print_r($vendorProductIds);
+
+            // // === PRINT SQL QUERY ===
+            // $sql = $allGrns->toSql();
+            // $bindings = $allGrns->getBindings();
+
+            // dd([
+            //     'sql'      => $sql,
+            //     'bindings' => $bindings,
+            //     'full_query' => vsprintf(str_replace('?', '%s', $sql), array_map(fn ($b) => "'$b'", $bindings))
+            // ]);
+
+            //           //  print_r($allGrns->toArray());
+            //             exit;
+
+            // Get GRNs received THIS month that haven't been inward-charged (for inward calculation)
+            //             $newGrns = $allGrns->filter(function ($grn) use ($month, $year) {
+            //                 if ($grn->inward_charged) return false;
+            //                 if (!$grn->receipt_date) return false;
+            //                 return $grn->receipt_date->month === $month && $grn->receipt_date->year === $year;
+            //             });
+
+
+
+            //  print_r($newGrns->toArray());
+            //             exit;
+
+            // $this->log("Vendor: {$vendor->company_name} | All GRNs: {$allGrns->count()} | New GRNs (inward): {$newGrns->count()}");
+
+            // if ($allGrns->isEmpty()) {
+            //     $results['skipped']++;
+            //     $results['errors'][] = "No GRNs with vendor's products for {$vendor->company_name}";
+            //     continue;
+            // }
+
             foreach ($allGrns as $grn) {
                 // Check if already calculated for this GRN + month
                 $existing = VendorMonthlyCharge::where('vendor_id', $vendor->id)
@@ -71,18 +108,19 @@ class VendorChargesService
                     ->byMonth($month, $year)
                     ->first();
 
-                if ($existing) {
-                    $results['skipped']++;
-                    continue;
-                }
+                // if ($existing) {
+                //     $results['skipped']++;
+                //     continue;
+                // }
 
                 try {
+                    //  $isNewGrn = $newGrns->contains('id', $grn->id);
 
                     $isNewGrn = $grn->receipt_date
                         && $grn->receipt_date->month === $month
                         && $grn->receipt_date->year === $year;
 
-                    $charges = $this->calculateGrnCharges($vendor, $grn, $rateCard, $month, $year, $periodStart, $periodEnd, $vendorProductIds->toArray(), $isNewGrn, $activeCompany);
+                    $charges = $this->calculateGrnCharges($vendor, $grn, $rateCard, $month, $year, $periodStart, $periodEnd, $vendorProductIds->toArray(), $isNewGrn, $activeCompany ?: $vendor->company_code);
 
                     // Skip if zero charges
                     if ($charges['total_charges'] <= 0) {
@@ -169,10 +207,9 @@ class VendorChargesService
         string $periodEnd,
         array $vendorProductIds,
         bool $isNewGrn,
-        string $companyCode
+        string $companyCode = ''
     ): array {
         $grnItems = $grn->items->whereIn('product_id', $vendorProductIds);
-        $logFile = storage_path('logs/vendor_charges_'.now()->format('Y-m-d').'.log');
 
         // ── 1. INWARD HANDLING (only for GRNs received THIS month) ──
         $inwardCartons = 0;
@@ -204,35 +241,33 @@ class VendorChargesService
                 }
             }
 
-
             $inwardCharge = round($inwardCartons * floatval($rc->inward_rate_per_carton ?? 0), 2);
-
-            file_put_contents($logFile, "S3-Vendor {$vendor->vendor_code} GRN {$grn->id}:  inwardCartons {$inwardCartons} cartons x {$rc->inward_rate_per_carton} = {$inwardCharge}(inwardCharge)\n", FILE_APPEND);
-
             $this->log("INWARD GRN#{$grn->id}: {$inwardCartons} cartons x {$rc->inward_rate_per_carton} = {$inwardCharge}");
         }
 
-        // ── 2. STORAGE (remaining qty × CFT × rate) ──
+        // ── 2. STORAGE (CFT based on opening inventory per GRN date rules) ──
+        // Case 1: GRN before current month → remaining qty as of 1st of month
+        // Case 2: GRN during current month → full received qty (treated as opening)
         $storageQty = 0;
         $storageCft = 0;
-        // $prevMonthEnd = now()->create(null, $month, 1)->subDay()->toDateString();
-
         $monthStart = \Carbon\Carbon::create($year, $month, 1)->startOfMonth()->toDateString();
         $monthEnd = \Carbon\Carbon::create($year, $month, 1)->endOfMonth()->toDateString();
+        $activeCompany = session('active_company') ?? $vendor->company_code ?? $companyCode ?? '';
+
+        // Preload live sheet item details for dimensions
+        $liveSheetDetails = \App\Models\LiveSheetItem::whereIn('product_id', $vendorProductIds)
+            ->whereHas('liveSheet', fn($q) => $q->withoutGlobalScopes()->where('company_code', $activeCompany))
+            ->with(['product' => fn($q) => $q->withoutGlobalScopes()])
+            ->latest()
+            ->get()
+            ->keyBy('product_id');
+
+        $storageBreakdown = [];
 
         foreach ($grnItems as $grnItem) {
             $product = $grnItem->product;
-            if (!$product) {
-                continue;
-            }
+            if (!$product) continue;
 
-            // Get product details from live sheet items
-            $liveSheetItem = \App\Models\LiveSheetItem::where('product_id', $product->id)
-                ->whereHas('liveSheet', fn ($q) => $q->where('company_code', $companyCode))
-                ->latest()
-                ->first();
-
-            $d = $liveSheetItem->product_details ?? [];
             $grnQty = floatval($grnItem->received_quantity);
             $grnDate = $grn->receipt_date ? $grn->receipt_date->format('Y-m-d') : null;
 
@@ -243,52 +278,57 @@ class VendorChargesService
                 $soldBeforeMonth = OrderItem::withoutGlobalScopes()
                     ->where('product_id', $product->id)
                     ->where('shipped_qty', '>', 0)
-                    ->whereHas('order', fn ($q) => $q->withoutGlobalScopes()
-                        ->where('company_code', $companyCode)
+                    ->whereHas('order', fn($q) => $q->withoutGlobalScopes()
+                        ->where('company_code', $activeCompany)
                         ->where('order_date', '<', $monthStart)
                         ->whereIn('status', ['shipped', 'delivered']))
                     ->sum('shipped_qty');
 
                 $openingQty = max(0, $grnQty - $soldBeforeMonth);
+                $storageCase = 'before_month';
 
             } elseif ($grnDate >= $monthStart && $grnDate <= $monthEnd) {
                 // CASE 2: GRN completed DURING current month
-                // CFT on GRN date = opening CFT (full received qty, no prior deductions)
+                // Full received qty treated as opening CFT
                 $openingQty = $grnQty;
+                $storageCase = 'during_month';
 
             } else {
                 // GRN is in a future month — no storage charge
                 continue;
             }
 
-            if ($openingQty <= 0) {
-                continue;
-            }
+            if ($openingQty <= 0) continue;
 
-
-            // $soldQty = OrderItem::where('product_id', $product->id)
-            //     ->whereHas('order', fn ($q) => $q->where('order_date', '<=', $prevMonthEnd)
-            //         ->whereNotIn('status', ['cancelled']))
-            //     ->sum('quantity');
-
-            // $remaining = max(0, $grnQty - $soldQty);
-
-            // Calculate CFT per unit from live sheet dimensions
-            $l = floatval($d['length'] ?? $product->length ?? 0);
-            $w = floatval($d['width'] ?? $product->width ?? 0);
-            $h = floatval($d['height'] ?? $product->height ?? 0);
-            $cftPerUnit = ($l > 0 && $w > 0 && $h > 0) ? (($l * $w * $h) / 61024) * 35.3147 : 0;
+            // Get CFT from live sheet item's cbm_per_unit
+            $lsItem = $liveSheetDetails[$product->id] ?? null;
+            $cbmPerUnit = floatval($lsItem->cbm_per_unit ?? 0);
+            $cftPerUnit = $cbmPerUnit * 35.3147;
 
             $itemCft = round($openingQty * $cftPerUnit, 4);
-
-            file_put_contents($logFile, "\nS01-Vendor {$vendor->vendor_code} CFT  product {$product->sku}: L:{$l}, W:{$w}, H:{$h} cftPerUnit:{$cftPerUnit} openingQty:{$openingQty} itemCft:{$itemCft}  \n", FILE_APPEND);
-
             $storageQty += $openingQty;
             $storageCft += $itemCft;
 
+            $storageBreakdown[] = [
+                'sku'         => $product->sku,
+                'grn_date'    => $grnDate,
+                'case'        => $storageCase,
+                'grn_qty'     => intval($grnQty),
+                'opening_qty' => intval($openingQty),
+                'cft_per_unit'=> round($cftPerUnit, 6),
+                'total_cft'   => $itemCft,
+                 
+            ];
+
+            $this->log("Storage: SKU {$product->sku} | GRN: {$grnDate} | " .
+                ($storageCase === 'before_month' ? 'Case 1 (before month)' : 'Case 2 (during month)') .
+                " | GRN qty: {$grnQty} | Opening: {$openingQty} | CFT/unit: {$cftPerUnit} | Total CFT: {$itemCft}");
         }
 
         $storageCharge = round($storageCft * floatval($rc->storage_rate_per_cft ?? 0), 2);
+
+        $this->log("Storage total: {$storageQty} units, {$storageCft} CFT × {$rc->storage_rate_per_cft} = {$storageCharge}");
+
 
         // ── 3. FULFILLMENT (threshold-based per order) ──
         $threshold = max(1, intval($rc->fulfillment_qty_threshold ?? 10));
@@ -298,7 +338,6 @@ class VendorChargesService
             ->whereHas('items', fn ($q) => $q->whereIn('product_id', $vendorProductIds))
             ->with(['items' => fn ($q) => $q->whereIn('product_id', $vendorProductIds)])
             ->get();
-        file_put_contents($logFile, "\nS1-Vendor {$vendor->vendor_code}   GRN {$grn->id}: periodStart:{$periodStart}, periodEnd:{$periodEnd} - Found {$vendorOrders->count()} orders for fulfillment calculation\n", FILE_APPEND);
         $fulfillSmall = 0;
         $fulfillLarge = 0;
         foreach ($vendorOrders as $order) {
@@ -316,6 +355,7 @@ class VendorChargesService
             2
         );
 
+
         // ── 4. PICK & PACK (per unit shipped) ──
         $pickPackUnits = $vendorOrders->sum(fn ($o) => $o->items->sum('shipped_qty') ?: $o->items->sum('quantity'));
         $pickPackCharge = round($pickPackUnits * floatval($rc->pick_pack_rate_per_unit ?? 0), 2);
@@ -323,10 +363,11 @@ class VendorChargesService
         // ── 5. MATERIAL COST ──
         $materialCost = round($vendorOrders->sum(fn ($o) => $o->items->sum('material_cost')), 2);
 
+
         // ── TOTAL ──
         $total = round($inwardCharge + $storageCharge + $fulfillCharge + $pickPackCharge + $materialCost, 2);
 
-        file_put_contents($logFile, "S2-Vendor {$vendor->vendor_code}  GRN {$grn->id}: Inward={$inwardCharge}, Storage={$storageCharge} ({$storageCft} CFT), Fulfill={$fulfillCharge}, P&P={$pickPackCharge}, Material={$materialCost}, Total={$total},pickPackCharge {$pickPackCharge} (materialCost:{$materialCost} )\n", FILE_APPEND);
+
 
         $this->log("GRN#{$grn->id}: Inward={$inwardCharge}, Storage={$storageCharge} ({$storageCft} CFT), Fulfill={$fulfillCharge}, P&P={$pickPackCharge}, Material={$materialCost}, Total={$total}");
 
@@ -336,6 +377,7 @@ class VendorChargesService
             'storage_remaining_qty'    => $storageQty,
             'storage_cft'              => round($storageCft, 4),
             'storage_charge'           => $storageCharge,
+            'storage_breakdown'        => $storageBreakdown ?? [],
             'fulfillment_orders_small' => $fulfillSmall,
             'fulfillment_orders_large' => $fulfillLarge,
             'fulfillment_charge'       => $fulfillCharge,
@@ -369,6 +411,7 @@ class VendorChargesService
             ->byMonth($month, $year)
             ->with('grn', 'warehouse', 'rateCard')
             ->when($companyCode, fn ($q) => $q->where('company_code', $companyCode))
+            ->where('status','approved')
             ->get();
 
         $grossPayout = \App\Models\VendorPayout::where('vendor_id', $vendorId)
