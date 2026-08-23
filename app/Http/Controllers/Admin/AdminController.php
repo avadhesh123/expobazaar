@@ -141,7 +141,7 @@ class AdminController extends Controller
             'user_type'       => 'required|in:internal,admin,external',
             'department'      => 'nullable|required_if:user_type,internal|in:sourcing,logistics,cataloguing,sales,finance,hod',
             'company_codes'   => 'required|array|min:1',
-            'company_codes.*' => 'in:2000,2100,2200',
+            'company_codes.*' => 'in:2000,2100,2200,2400',
             'roles'           => 'nullable|array',
             'roles.*'         => 'exists:roles,id',
             'status'          => 'required|in:active,inactive,suspended',
