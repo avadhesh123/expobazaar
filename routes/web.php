@@ -39,6 +39,8 @@ Route::redirect('/login', '/auth/login')->name('login');
 
 Route::middleware(['auth'])->group(function () {
 
+    Route::get('api/sku-search', [AdminController::class, 'skuSearch'])->name('api.sku-search');
+
     // Change password (any logged-in user)
     Route::get('change-password', [AuthController::class, 'showChangePassword'])->name('auth.change-password');
     Route::post('change-password', [AuthController::class, 'changePassword'])->name('auth.change-password.update');
