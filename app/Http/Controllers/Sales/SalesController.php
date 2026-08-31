@@ -12,8 +12,18 @@ class SalesController extends Controller
     public function __construct(
         private SalesService $salesService,
         private DashboardService $dashboardService
-    ) {}
+    ) {
+    }
 
+    private function cleanNumeric($value)
+    {
+        if ($value === null || $value === '') {
+            return null;
+        }
+        // Remove line breaks, spaces, tabs
+        $clean = preg_replace('/[\r\n\t\s]+/', '', trim($value));
+        return is_numeric($clean) ? floatval($clean) : null;
+    }
     // ═══ DASHBOARD ═══
     public function dashboard(Request $request)
     {
@@ -31,10 +41,10 @@ class SalesController extends Controller
     {
         $activeCompany = session('active_company');
 
-        $baseQuery = Order::when($activeCompany, fn($q, $v) => $q->where('company_code', $v))
-            ->when($request->status, fn($q, $v) => $q->where('status', $v))
-            ->when($request->sales_channel_id, fn($q, $v) => $q->where('sales_channel_id', $v))
-            ->when($request->search, fn($q, $v) => $q->where(function ($q2) use ($v) {
+        $baseQuery = Order::when($activeCompany, fn ($q, $v) => $q->where('company_code', $v))
+            ->when($request->status, fn ($q, $v) => $q->where('status', $v))
+            ->when($request->sales_channel_id, fn ($q, $v) => $q->where('sales_channel_id', $v))
+            ->when($request->search, fn ($q, $v) => $q->where(function ($q2) use ($v) {
                 $q2->where('order_number', 'like', "%{$v}%")
                     ->orWhere('platform_order_id', 'like', "%{$v}%")
                     ->orWhere('customer_name', 'like', "%{$v}%");
@@ -68,10 +78,83 @@ class SalesController extends Controller
     {
         $activeCompany = session('active_company');
         $orders = Order::with('salesChannel', 'items.product.vendor', 'warehouse')
-            ->when($activeCompany, fn($q, $v) => $q->where('company_code', $v))
-            ->when($request->status, fn($q, $v) => $q->where('status', $v))
-            ->when($request->sales_channel_id, fn($q, $v) => $q->where('sales_channel_id', $v))
-            ->when($request->search, fn($q, $v) => $q->where(function ($q2) use ($v) {
+            ->when($activeCompany, fn ($q, $v) => $q->where('company_code', $v))
+            ->when($request->status, fn ($q, $v) => $q->where('status', $v))
+            ->when($request->sales_channel_id, fn ($q, $v) => $q->where('sales_channel_id', $v))
+            ->when($request->search, fn ($q, $v) => $q->where(function ($q2) use ($v) {
+                $q2->where('order_number', 'like', "%{$v}%")
+                    ->orWhere('platform_order_id', 'like', "%{$v}%")
+                    ->orWhere('customer_name', 'like', "%{$v}%");
+            }))
+            ->latest('order_date')
+            ->get();
+
+        $csv = "Order Number,PO Number,Invoice Number,Order Date,Sales Channel,SKU,SAP Code,Product Name,Vendor Name,Vendor Type,Warehouse id number,Qty,Unit Price,Order Amount,Vendor Payout Price,Payout Total,Warehouse,Shipping Method,Shipped Qty,Shipped Amount,Tracking ID,Carrier,Shipping Cost,Ship Date,Current Status,Delivery Date,Customer Type,Customer Name,Company Name,Email,Phone,Address,City,State,Zip,Country,Currency,Status\n";
+
+        foreach ($orders as $o) {
+            foreach ($o->items as $item) {
+                $product = $item->product;
+                $vendor = $product?->vendor;
+                $qty = $item->quantity ?? 0;
+                $payoutPrice = $product?->vendor_wsp ?? $product?->vendor_payout_price ?? 0;
+
+                $csv .= implode(',', [
+                    '"' . ($o->order_number ?? '') . '"',
+                    '"' . ($o->platform_order_id ?? '') . '"',
+                    '"' . ($o->invoice_number ?? '') . '"',
+                    $o->order_date?->format('Y-m-d') ?? '',
+                    '"' . ($o->salesChannel?->name ?? '') . '"',
+                    '"' . ($item->sku ?? $product?->sku ?? '') . '"',
+                    '"' . ($product?->sap_code ?? '') . '"',
+                    '"' . str_replace('"', '""', $product?->name ?? '') . '"',
+                    '"' . str_replace('"', '""', $vendor?->company_name ?? '') . '"',
+                    '"' . ($vendor?->vendor_type ?? '') . '"',
+                    '"' . ($o->warehouse_id_number ?? '') . '"',
+                    $qty,
+                    number_format(floatval($item->unit_price ?? 0), 2, '.', ''),
+                    number_format(floatval($item->total_price ?? ($item->unit_price * $qty)), 2, '.', ''),
+                    number_format(floatval($payoutPrice), 2, '.', ''),
+                    number_format($payoutPrice * $qty, 2, '.', ''),
+                    '"' . ($o->warehouse?->name ?? '') . '"',
+                    '"' . (strtoupper($o->shipping_method ?? '')) . '"',
+                    $item->shipped_qty ?? '',
+                    number_format(floatval(($item->unit_price ?? 0) * ($item->shipped_qty ?? 0)), 2, '.', ''),
+                    '"' . ($o->tracking_id ?? '') . '"',
+                    '"' . ($o->carrier ?? '') . '"',
+                    number_format(floatval($o->shipping_cost ?? 0), 2, '.', ''),
+                    $o->ship_date?->format('Y-m-d') ?? '',
+                    '"' . ($o->current_status ?? '') . '"',
+                    $o->delivery_date?->format('Y-m-d') ?? '',
+                    '"' . ($o->customer_type ?? '') . '"',
+                    '"' . str_replace('"', '""', $o->customer_name ?? '') . '"',
+                    '"' . str_replace('"', '""', $o->company_name ?? '') . '"',
+                    '"' . ($o->customer_email ?? '') . '"',
+                    '"' . ($o->customer_phone ?? '') . '"',
+                    '"' . str_replace('"', '""', $o->shipping_address ?? '') . '"',
+                    '"' . ($o->shipping_city ?? '') . '"',
+                    '"' . ($o->shipping_state ?? '') . '"',
+                    '"' . ($o->shipping_pincode ?? '') . '"',
+                    '"' . ($o->shipping_country ?? '') . '"',
+                    $o->currency ?? 'NA',
+                    '"' . ($o->status ?? '') . '"',
+                ]) . "\n";
+            }
+        }
+
+        $filename = 'Sales-Orders-' . now()->format('Y-m-d') . '.csv';
+        return response($csv, 200, [
+            'Content-Type' => 'text/csv',
+            'Content-Disposition' => "attachment; filename=\"{$filename}\"",
+        ]);
+    }
+    public function downloadOrdersBAK(Request $request)
+    {
+        $activeCompany = session('active_company');
+        $orders = Order::with('salesChannel', 'items.product.vendor', 'warehouse')
+            ->when($activeCompany, fn ($q, $v) => $q->where('company_code', $v))
+            ->when($request->status, fn ($q, $v) => $q->where('status', $v))
+            ->when($request->sales_channel_id, fn ($q, $v) => $q->where('sales_channel_id', $v))
+            ->when($request->search, fn ($q, $v) => $q->where(function ($q2) use ($v) {
                 $q2->where('order_number', 'like', "%{$v}%")
                     ->orWhere('platform_order_id', 'like', "%{$v}%")
                     ->orWhere('customer_name', 'like', "%{$v}%");
@@ -163,10 +246,10 @@ class SalesController extends Controller
         $activeCode = session('active_company');
 
         $warehouses = Warehouse::active()
-            ->when($activeCode, fn($q, $v) => $q->where('company_code', $v))
-            ->withCount(['inventory' => fn($q) => $q->where('quantity', '>', 0)])
-            ->withSum(['inventory' => fn($q) => $q->where('quantity', '>', 0)], 'quantity')
-            ->withSum(['inventory' => fn($q) => $q->where('quantity', '>', 0)], 'available_quantity')
+            ->when($activeCode, fn ($q, $v) => $q->where('company_code', $v))
+            ->withCount(['inventory' => fn ($q) => $q->where('quantity', '>', 0)])
+            ->withSum(['inventory' => fn ($q) => $q->where('quantity', '>', 0)], 'quantity')
+            ->withSum(['inventory' => fn ($q) => $q->where('quantity', '>', 0)], 'available_quantity')
             ->with(['subWarehouses', 'subLocations'])
             ->get();
 
@@ -291,11 +374,23 @@ class SalesController extends Controller
                 'errors' => count($result['errors']),
             ], "Sales data uploaded: {$result['created']} orders created");
 
-            return back()->with('upload_result', $result)->with(
-                $result['created'] > 0 ? 'success' : 'error',
-                "{$result['created']} order(s) created from {$result['total_rows']} rows." .
-                    (count($result['errors']) > 0 ? ' ' . implode(", ", $result['errors'])   : '')
-            );
+            // return back()->with('upload_result', $result)->with(
+            //     $result['created'] > 0 ? 'success' : 'error',
+            //     "{$result['created']} order(s) created from {$result['total_rows']} rows." .
+            //         (count($result['errors']) > 0 ? ' ' . implode(", ", $result['errors']) : '')
+            // );
+
+            return back()
+                ->with(
+                    $result['created'] > 0 ? 'success' : 'error',
+                    "{$result['created']} order(s) created from {$result['total_rows']} rows." .
+                    (count($result['errors']) > 0 ? ' ' . count($result['errors']) . ' error(s).' : '')
+                )
+                ->with('upload_errors', array_slice($result['errors'] ?? [], 0, 10))
+                ->with('created_count', $result['created'] ?? 0)
+                ->with('skipped_count', $result['skipped'] ?? 0);
+
+
         } catch (\Exception $e) {
             \Log::error('Sales upload failed: ' . $e->getMessage());
             return back()->with('error', 'Upload failed: ' . $e->getMessage());
@@ -398,7 +493,7 @@ class SalesController extends Controller
                 $q->whereNull('tracking_id')->orWhere('tracking_id', '');
             })
             ->where('company_code', $activeCompany)
-            ->when($request->channel_id, fn($q, $v) => $q->where('sales_channel_id', $v))
+            ->when($request->channel_id, fn ($q, $v) => $q->where('sales_channel_id', $v))
             ->latest('order_date')
             ->paginate(30)->withQueryString();
 
@@ -428,7 +523,7 @@ class SalesController extends Controller
             'carrier'                => 'required|in:Fedex,UPS,USPS,LTL,Other',
         ]);
 
-        $itemQtys = collect($request->items)->mapWithKeys(fn($data, $itemId) => [$itemId => $data['shipped_qty']])->toArray();
+        $itemQtys = collect($request->items)->mapWithKeys(fn ($data, $itemId) => [$itemId => $data['shipped_qty']])->toArray();
 
         $this->salesService->shipOrder(
             $order,
@@ -470,9 +565,9 @@ class SalesController extends Controller
                 $q->whereNotNull('tracking_id')->where('tracking_id', '!=', '');
             })
             ->where('company_code', $activeCompany)
-            ->when($request->channel_id, fn($q, $v) => $q->where('sales_channel_id', $v))
-            ->when($request->status, fn($q, $v) => $q->where('current_status', $v))
-            ->when($request->search, fn($q, $v) => $q->where(function ($q2) use ($v) {
+            ->when($request->channel_id, fn ($q, $v) => $q->where('sales_channel_id', $v))
+            ->when($request->status, fn ($q, $v) => $q->where('current_status', $v))
+            ->when($request->search, fn ($q, $v) => $q->where(function ($q2) use ($v) {
                 $q2->where('platform_order_id', 'like', "%{$v}%")
                     ->orWhere('tracking_id', 'like', "%{$v}%")
                     ->orWhere('invoice_number', 'like', "%{$v}%");
@@ -512,14 +607,14 @@ class SalesController extends Controller
         $channels = SalesChannel::active()->get();
         $stats = [
             'total_shipped'  => $orders->getCollection()->whereNotNull('tracking_id')->where('tracking_id', '!=', '')->count(),
-            'critical'     => $orders->getCollection()->filter(fn($o) => $o->ageing_label === 'CRITICAL')->count(),
+            'critical'     => $orders->getCollection()->filter(fn ($o) => $o->ageing_label === 'CRITICAL')->count(),
             'total'      => $orders->total(),
             'in_transit'  => Order::where('company_code', $activeCompany)->whereNotNull('tracking_id')->where('tracking_id', '!=', '')
                 ->where(function ($q) {
                     $q->whereIn('current_status', ['in_transit', 'shipped'])->orWhereNull('current_status');
                 })->count(),
             'delivered'   => Order::where('company_code', $activeCompany)->where('current_status', 'delivered')->count(),
-            'overdue'     => $orders->getCollection()->filter(fn($o) => in_array($o->ageing_label, ['OVERDUE', 'CRITICAL']))->count(),
+            'overdue'     => $orders->getCollection()->filter(fn ($o) => in_array($o->ageing_label, ['OVERDUE', 'CRITICAL']))->count(),
         ];
 
         return view('sales.order-management', compact('orders', 'channels', 'stats'));
@@ -626,7 +721,7 @@ class SalesController extends Controller
                     \App\Models\Product::where('id', $item->product_id)->increment('stock_quantity', $qty);
                 }
 
-                // $item->update(['restock' => true, 'restocked_qty' => $qty]);                
+                // $item->update(['restock' => true, 'restocked_qty' => $qty]);
             }
 
             // $order->update([
@@ -701,21 +796,21 @@ class SalesController extends Controller
         $activeCode = session('active_company');
 
         $returns = \App\Models\OrderReturn::with('order.salesChannel', 'vendor', 'items.product', 'creator')
-            ->when($activeCode, fn($q) => $q->where('company_code', $activeCode))
-            ->when($request->status, fn($q, $v) => $q->where('status', $v))
-            ->when($request->reason, fn($q, $v) => $q->where('reason', $v))
-            ->when($request->search, fn($q, $v) => $q->where(function ($q2) use ($v) {
+            ->when($activeCode, fn ($q) => $q->where('company_code', $activeCode))
+            ->when($request->status, fn ($q, $v) => $q->where('status', $v))
+            ->when($request->reason, fn ($q, $v) => $q->where('reason', $v))
+            ->when($request->search, fn ($q, $v) => $q->where(function ($q2) use ($v) {
                 $q2->where('return_number', 'LIKE', "%{$v}%")
-                    ->orWhereHas('order', fn($oq) => $oq->where('order_number', 'LIKE', "%{$v}%")->orWhere('platform_order_id', 'LIKE', "%{$v}%"));
+                    ->orWhereHas('order', fn ($oq) => $oq->where('order_number', 'LIKE', "%{$v}%")->orWhere('platform_order_id', 'LIKE', "%{$v}%"));
             }))
             ->latest('return_date')
             ->paginate(30)->withQueryString();
 
         $stats = [
-            'total'     => \App\Models\OrderReturn::when($activeCode, fn($q) => $q->where('company_code', $activeCode))->count(),
-            'initiated' => \App\Models\OrderReturn::when($activeCode, fn($q) => $q->where('company_code', $activeCode))->where('status', 'initiated')->count(),
-            'received'  => \App\Models\OrderReturn::when($activeCode, fn($q) => $q->where('company_code', $activeCode))->where('status', 'received')->count(),
-            'refunded'  => \App\Models\OrderReturn::when($activeCode, fn($q) => $q->where('company_code', $activeCode))->where('status', 'refunded')->sum('refund_amount'),
+            'total'     => \App\Models\OrderReturn::when($activeCode, fn ($q) => $q->where('company_code', $activeCode))->count(),
+            'initiated' => \App\Models\OrderReturn::when($activeCode, fn ($q) => $q->where('company_code', $activeCode))->where('status', 'initiated')->count(),
+            'received'  => \App\Models\OrderReturn::when($activeCode, fn ($q) => $q->where('company_code', $activeCode))->where('status', 'received')->count(),
+            'refunded'  => \App\Models\OrderReturn::when($activeCode, fn ($q) => $q->where('company_code', $activeCode))->where('status', 'refunded')->sum('refund_amount'),
         ];
 
         return view('sales.returns.index', compact('returns', 'stats'));
@@ -731,7 +826,9 @@ class SalesController extends Controller
                 ->with(['items.product', 'salesChannel'])
                 ->first();
 
-            if (!$order) return response()->json(['found' => false]);
+            if (!$order) {
+                return response()->json(['found' => false]);
+            }
 
             return response()->json([
                 'found'        => true,
@@ -742,7 +839,7 @@ class SalesController extends Controller
                 'total'        => floatval($order->total_amount),
                 'customer'     => $order->customer_name ?? '—',
                 'status'       => $order->status,
-                'items'        => $order->items->map(fn($i) => [
+                'items'        => $order->items->map(fn ($i) => [
                     'id'         => $i->id,
                     'product_id' => $i->product_id,
                     'sku'        => $i->sku ?? $i->product->sku ?? '—',
@@ -754,7 +851,7 @@ class SalesController extends Controller
             ]);
         }
 
-        $warehouses = \App\Models\Warehouse::when(session('active_company'), fn($q) => $q->where('company_code', session('active_company')))
+        $warehouses = \App\Models\Warehouse::when(session('active_company'), fn ($q) => $q->where('company_code', session('active_company')))
             ->orderBy('name')->get();
 
         return view('sales.returns.create', compact('warehouses'));
@@ -787,12 +884,16 @@ class SalesController extends Controller
             // Validate quantities
             foreach ($request->items as $itemData) {
                 $orderItem = $order->items->firstWhere('product_id', $itemData['product_id']);
-                if (!$orderItem) continue;
+                if (!$orderItem) {
+                    continue;
+                }
                 $maxReturn = $orderItem->shipped_qty ?? $orderItem->quantity;
                 if ($itemData['return_qty'] > $maxReturn) {
                     return back()->with('error', "Return qty for SKU {$orderItem->sku} exceeds shipped qty ({$maxReturn}).")->withInput();
                 }
-                if (!$vendorId) $vendorId = $orderItem->vendor_id;
+                if (!$vendorId) {
+                    $vendorId = $orderItem->vendor_id;
+                }
             }
 
             $orderReturn = \App\Models\OrderReturn::create([
@@ -812,7 +913,9 @@ class SalesController extends Controller
 
             foreach ($request->items as $itemData) {
                 $orderItem = $order->items->firstWhere('product_id', $itemData['product_id']);
-                if (!$orderItem) continue;
+                if (!$orderItem) {
+                    continue;
+                }
 
                 $returnQty = intval($itemData['return_qty']);
                 $unitPrice = floatval($orderItem->unit_price);
@@ -916,8 +1019,12 @@ class SalesController extends Controller
         \DB::beginTransaction();
         try {
             foreach ($orderReturn->items as $returnItem) {
-                if ($returnItem->restock || $returnItem->condition_status === 'unsellable') continue;
-                if ($returnItem->condition_status !== 'good') continue;
+                if ($returnItem->restock || $returnItem->condition_status === 'unsellable') {
+                    continue;
+                }
+                if ($returnItem->condition_status !== 'good') {
+                    continue;
+                }
 
                 $qty = $returnItem->return_qty;
                 $inventory = \App\Models\Inventory::where('product_id', $returnItem->product_id)

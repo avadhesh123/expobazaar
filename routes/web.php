@@ -388,6 +388,8 @@ Route::middleware(['auth'])->group(function () {
         Route::post('live-sheets/{liveSheet}/wsp', [FinanceController::class, 'storeWspRevision'])->name('live-sheets.wsp.store');
         Route::delete('wsp-revision/{revision}', [FinanceController::class, 'deleteWspRevision'])->name('wsp-revision.delete');
 
+        Route::get('payouts/{payout}/download', [FinanceController::class, 'downloadPayout'])->name('payouts.download');
+
 
     });
 

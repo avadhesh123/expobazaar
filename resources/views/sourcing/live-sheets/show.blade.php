@@ -304,8 +304,8 @@ $disabled = $liveSheet->is_locked ? 'disabled' : '';
                             <input type="hidden" name="items[{{ $idx }}][item_id]" value="{{ $item->id }}">
                             {{ $item->product->sku ?? '—' }}
                         </td>
-                        <td>{{ $d['sap_code'] ?? '—' }}</td>
-                        <td>{{ $d['barcode'] ?? '—' }}</td>
+                        <td>{{ $item->product->sap_code ?? $d['sap_code'] ?? '—' }}</td>
+                        <td>{{ $item->product->barcode ?? $d['barcode'] ?? '—' }}</td>
                         <td style="font-weight:500;max-width:160px;">
                             <span class="cell-text">{{ $item->product->name ?? '—' }}</span>
                             @if(!$liveSheet->is_locked)

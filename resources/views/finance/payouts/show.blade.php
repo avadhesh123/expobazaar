@@ -14,20 +14,23 @@ $monthName = \Carbon\Carbon::create($payout->payout_year, $payout->payout_month)
         <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:1rem;font-size:.82rem;">
             <div>
                 <div style="font-size:.65rem;color:#64748b;font-weight:600;text-transform:uppercase;">Vendor</div>
-                <div style="font-weight:700;">{{ $payout->vendor->company_name ?? '—' }}</div>
+                <div style="font-weight:700;">{{ $payout->vendor->company_name ?? '—' }} ({{ $payout->company_code }})</div>
             </div>
             <div>
                 <div style="font-size:.65rem;color:#64748b;font-weight:600;text-transform:uppercase;">Period</div>
                 <div style="font-weight:600;">{{ $monthName }}</div>
             </div>
-            <div>
-                <div style="font-size:.65rem;color:#64748b;font-weight:600;text-transform:uppercase;">Company</div>
-                <div style="font-weight:600;">{{ $payout->company_code }}</div>
-            </div>
+             
             <div>
                 <div style="font-size:.65rem;color:#64748b;font-weight:600;text-transform:uppercase;">Status</div>
                 <div>@php $sc = ['draft'=>'badge-gray','calculated'=>'badge-warning','approved'=>'badge-success','paid'=>'badge-info']; @endphp<span class="badge {{ $sc[$payout->status] ?? 'badge-gray' }}">{{ ucfirst($payout->status) }}</span></div>
             </div>
+            <div>
+                <a href="{{ route('finance.payouts.download', $payout) }}" class="btn btn-outline btn-sm">
+                    <i class="fas fa-download" style="margin-right:.2rem;"></i> Download Payout
+                </a>
+            </div>
+
             <div>
 
                 <a href="{{ route('finance.payouts.show', $payout) }}?recalculate=1" class="btn btn-outline btn-sm" onclick="return confirm('Recalculate with latest shipped data?')">

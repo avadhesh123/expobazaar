@@ -1614,7 +1614,7 @@ class VendorController extends Controller
                 $d['master_height'] ??  $d['master_carton_height'] ?? '', // Master Carton Height
                 $d['master_weight'] ??  $d['master_carton_weight'] ?? $d['master_weight_kg'] ?? '', // Master Carton Weight
                 $d['no_of_master_carton'] ?? '', // No of Master Cartons
-                $d['qty_offered'] ?? '', // Qty Offered
+                $item->quantity, // $d['qty_offered'] ?? '', // Qty Offered
                 '"' . str_replace('"', '""', $p->vendor_price ?? '') . '"',
             ];
 

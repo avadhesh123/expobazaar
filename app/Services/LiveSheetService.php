@@ -23,7 +23,9 @@ class LiveSheetService
         try {
             foreach ($items as $row) {
                 $item = $this->findItem($liveSheet, $row, $source);
-                if (!$item) continue;
+                if (!$item) {
+                    continue;
+                }
 
                 $details = $item->product_details ?? [];
 
@@ -68,7 +70,7 @@ class LiveSheetService
                 'total_cbm' => $liveSheet->items()->sum('total_cbm'),
             ]);
 
-            ActivityLog::log('updated', 'live_sheet', $liveSheet, null, [
+            ActivityLog::log('updated-live-sheet-' . $liveSheet->id, 'live_sheet', $liveSheet, null, [
                 'source'         => $source,
                 'items_updated'  => $updated,
                 'fields_changed' => $totalChanges,
@@ -121,6 +123,7 @@ class LiveSheetService
     {
         if ($source === 'vendor') {
             return [
+                 'sap_code' => $details['sap_code'] ?? $item->sap_code,
                 'vendor_fob' => $row['unit_price'] ?? $details['vendor_fob'] ?? $item->unit_price,
                 'final_qty'  => $row['quantity'] ?? $details['final_qty'] ?? $item->quantity,
                 'final_fob'  => $row['unit_price'] ?? $details['final_fob'] ?? $item->unit_price,
@@ -136,13 +139,14 @@ class LiveSheetService
                 'color'          => $row['color'] ?? $details['color'] ?? null,
                 'finish'         => $row['finish'] ?? $details['finish'] ?? null,
                 'qty_inner_pack' => $row['qty_inner_pack'] ?? $details['qty_inner_pack'] ?? null,
-                'qty_master_pack'=> $row['qty_master_pack'] ?? $details['qty_master_pack'] ?? null,
+                'qty_master_pack' => $row['qty_master_pack'] ?? $details['qty_master_pack'] ?? null,
                 'product_name'   => $row['product_name'] ?? $details['product_name'] ?? null,
             ];
         }
 
         // Sourcing fields
         return [
+            'sap_code'       => $details['sap_code'] ?? $item->sap_code,
             'target_fob'     => $row['target_fob'] ?? $details['target_fob'] ?? null,
             'final_qty'      => $row['final_qty'] ?? $details['final_qty'] ?? $item->quantity,
             'final_fob'      => $row['final_fob'] ?? $details['final_fob'] ?? $item->unit_price,
@@ -219,7 +223,11 @@ class LiveSheetService
     {
         try {
             return \App\Models\LiveSheetItemChange::trackChanges(
-                $item, $fields, auth()->user(), $source, $reason
+                $item,
+                $fields,
+                auth()->user(),
+                $source,
+                $reason
             ) ?: 0;
         } catch (\Exception $e) {
             \Log::warning("Change tracking failed: {$e->getMessage()}");

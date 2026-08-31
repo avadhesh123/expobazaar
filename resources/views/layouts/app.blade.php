@@ -39,6 +39,78 @@
             <!-- <p style="color:#4a5e6f;font-size:.65rem;margin-top:.15rem;">Supply Chain Management</p> -->
         </div>
         @auth
+            {{-- Sidebar Search --}}
+        <div style="padding:0 .75rem .5rem; margin-top:.5rem;">
+            <div style="position:relative;">
+                <i class="fas fa-search" style="position:absolute;left:8px;top:50%;transform:translateY(-50%);font-size:.65rem;color:#4a5e6f;"></i>
+                <input type="text" id="sidebarSearch" placeholder="Search menu..." autocomplete="off"
+                    style="width:100%;padding:.35rem .5rem .35rem 26px;border:1px solid #1e3a5f;border-radius:6px;font-size:.72rem;font-family:inherit;background:rgba(255,255,255,.05);color:#c8d6e0;outline:none;"
+                    onfocus="this.style.borderColor='#3b82f6';this.style.background='rgba(255,255,255,.1)'"
+                    onblur="this.style.borderColor='#1e3a5f';this.style.background='rgba(255,255,255,.05)'"
+                    oninput="filterSidebar(this.value)">
+            </div>
+        </div>
+
+        <script>
+        function filterSidebar(query) {
+            var q = query.toLowerCase().trim();
+            var sections = document.querySelectorAll('.section-title');
+            var links = document.querySelectorAll('.sidebar a[href]');
+
+            if (q === '') {
+                // Show everything
+                sections.forEach(function(s) { s.style.display = ''; });
+                links.forEach(function(a) { if (!a.closest('.user-info-box')) a.style.display = ''; });
+                return;
+            }
+
+            // Hide all first
+            sections.forEach(function(s) { s.style.display = 'none'; });
+            links.forEach(function(a) {
+                if (a.closest('.user-info-box')) return;
+                a.style.display = 'none';
+            });
+
+            // Show matching links and their section headers
+            links.forEach(function(a) {
+                if (a.closest('.user-info-box')) return;
+                var text = a.textContent.toLowerCase().trim();
+                if (text.indexOf(q) > -1) {
+                    a.style.display = '';
+                    // Show parent section title
+                    var prev = a.previousElementSibling;
+                    var el = a;
+                    while (el.previousElementSibling) {
+                        el = el.previousElementSibling;
+                        if (el.classList && el.classList.contains('section-title')) {
+                            el.style.display = '';
+                            break;
+                        }
+                    }
+                    // Also check parent traversal
+                    var parent = a.parentElement;
+                    if (parent) {
+                        var sectionTitle = null;
+                        var sibling = a;
+                        while (sibling = sibling.previousElementSibling) {
+                            if (sibling.classList.contains('section-title')) {
+                                sibling.style.display = '';
+                                break;
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        // Keyboard shortcut: / to focus search
+        document.addEventListener('keydown', function(e) {
+            if (e.key === '/' && !['INPUT','TEXTAREA','SELECT'].includes(document.activeElement.tagName)) {
+                e.preventDefault();
+                document.getElementById('sidebarSearch').focus();
+            }
+        });
+        </script>
         @php
         $u = auth()->user();
         $modules = config('modules');

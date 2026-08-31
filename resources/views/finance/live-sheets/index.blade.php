@@ -10,8 +10,23 @@
 <div class="card" style="margin-bottom:1.25rem;">
     <div class="card-body" style="padding:.85rem 1.4rem;">
         <form method="GET" action="{{ route('finance.live-sheets') }}" style="display:flex;gap:.75rem;align-items:flex-end;">
-           
-            <input type="hidden" name="company_code" value="{{ request('company_code') ?? $activeCompany }}"  >
+
+            <input type="hidden" name="company_code" value="{{ request('company_code') ?? $activeCompany }}">
+            <div style="min-width:120px;">
+                <label style="font-size:.7rem;font-weight:600;color:#64748b;display:block;margin-bottom:.25rem;">Search</label>
+                <input type="text" name="search" value="{{ request('search') }}" placeholder="Search LS number..."
+                    style="padding:.3rem .6rem;border:1px solid #d1d5db;border-radius:6px;font-size:.78rem;width:160px;">
+            </div>
+            <div style="min-width:120px;">
+                <label style="font-size:.7rem;font-weight:600;color:#64748b;display:block;margin-bottom:.25rem;">Vendor</label>
+                <select name="vendor_id" style="padding:.3rem .5rem;border:1px solid #d1d5db;border-radius:6px;font-size:.78rem;max-width:180px;"
+                    onchange="this.form.submit()">
+                    <option value="">All Vendors</option>
+                    @foreach($vendors as $v)
+                    <option value="{{ $v->id }}" {{ request('vendor_id') == $v->id ? 'selected' : '' }}>{{ $v->company_name }}</option>
+                    @endforeach
+                </select>
+            </div>
             <div style="min-width:120px;"><label style="font-size:.7rem;font-weight:600;color:#64748b;display:block;margin-bottom:.25rem;">Status</label><select name="status" style="width:100%;padding:.4rem .5rem;border:1px solid #d1d5db;border-radius:8px;font-size:.82rem;">
                     <option value="">All</option>@foreach(['draft','submitted','locked'] as $s)<option value="{{ $s }}" {{ request('status')===$s?'selected':'' }}>{{ ucfirst($s) }}</option>@endforeach
                 </select></div>

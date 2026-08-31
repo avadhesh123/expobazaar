@@ -7,6 +7,15 @@ use Illuminate\Support\Facades\DB;
 
 class SalesService
 {
+    /**
+     * Clean numeric values from Excel (may contain line breaks, spaces, tabs)
+     */
+    private function cleanNum($value)
+    {
+        if ($value === null || $value === '') return null;
+        $clean = preg_replace('/[\r\n\t\s]+/', '', trim($value));
+        return is_numeric($clean) ? $clean : $value;
+    }
     // ═══════════════════════════════════════════════════════
     //  SHARED HELPERS
     // ═══════════════════════════════════════════════════════
@@ -192,6 +201,7 @@ class SalesService
     {
         $header = array_map(fn($h) => strtolower(trim($h ?? '')), $rows[0]);
         $colMap = [];
+     
         $colAliases = [
             'order_date'    => ['order date', 'date', 'order_date'],
             'po_number'     => ['po number / order id', 'po number', 'order id', 'po_number', 'order_id'],
@@ -231,7 +241,7 @@ class SalesService
         }
 
         $get = function ($row, $key) use ($colMap) {
-            return isset($colMap[$key]) ? trim($row[$colMap[$key]] ?? '') : '';
+            $val = isset($colMap[$key]) ? trim($row[$colMap[$key]] ?? '') : ''; return preg_replace('/[\r\n]+/', ' ', $val);
         };
 
         $parseDate = function ($val) {
@@ -262,8 +272,8 @@ class SalesService
             $channel = $get($row, 'channel');
             $warehouseCode = $get($row, 'warehouse_id_number');
             $orderDate = $parseDate($get($row, 'order_date'));
-            $unitPrice = $get($row, 'unit_price');
-            $qty = $get($row, 'qty');
+            $unitPrice = $this->cleanNum($get($row, 'unit_price'));
+            $qty = $this->cleanNum($get($row, 'qty'));
 
             // Skip rows belonging to already-failed POs
             if (in_array($poNumber, $skippedPOs)) continue;
@@ -455,7 +465,7 @@ class SalesService
         }
 
         $get = function ($row, $key) use ($colMap) {
-            return isset($colMap[$key]) ? trim($row[$colMap[$key]] ?? '') : '';
+            $val = isset($colMap[$key]) ? trim($row[$colMap[$key]] ?? '') : ''; return preg_replace('/[\r\n]+/', ' ', $val);
         };
 
         $parseDate = function ($val) {
@@ -490,8 +500,8 @@ class SalesService
             $poNumber = $get($row, 'po_number');
             $warehouseIdNumber = $get($row, 'warehouse_id_number');
             $orderDate = $parseDate($get($row, 'order_date'));
-            $unitPrice = $get($row, 'unit_price');
-            $qty = $get($row, 'qty');
+            $unitPrice = $this->cleanNum($get($row, 'unit_price'));
+            $qty = $this->cleanNum($get($row, 'qty'));
 
             if (empty($orderDate)) {
                 $errors[] = "Row {$rowNum}: Order Date is empty.";

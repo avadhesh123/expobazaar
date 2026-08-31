@@ -1,4 +1,5 @@
 <?php
+
 // app/Http/Middleware/CheckPermission.php
 
 namespace App\Http\Middleware;
@@ -15,16 +16,20 @@ class CheckPermission
      */
     public function handle($request, Closure $next, string ...$permissions)
     {
-       // if (!auth()->check()) return redirect()->route('auth.login');
+        // if (!auth()->check()) return redirect()->route('auth.login');
 
-if (!auth()->check()) {
-    return $next($request);
-}
+        \Log::channel('daily')->info('[PERM] ' . $request->method() . ' ' . $request->path() . ' | User: ' . (auth()->user()->email ?? 'GUEST') . ' | Type: ' . (auth()->user()->user_type ?? 'N/A'));
+
+        if (!auth()->check()) {
+            return $next($request);
+        }
 
         $user = auth()->user();
 
         // Admin bypass
-        if ($user->isAdmin()) return $next($request);
+        if ($user->isAdmin()) {
+            return $next($request);
+        }
 
         // Check if user has any of the required permissions
         foreach ($permissions as $perm) {
@@ -53,11 +58,18 @@ class CheckModule
      */
     public function handle($request, Closure $next, string ...$modules)
     {
-        if (!auth()->check()) return redirect()->route('auth.login');
+
+        \Log::channel('daily')->info('[PERM:MODULE] ' . $request->method() . ' ' . $request->path() . ' | User: ' . (auth()->user()->email ?? 'GUEST') . ' | Type: ' . (auth()->user()->user_type ?? 'N/A'));
+
+        if (!auth()->check()) {
+            return redirect()->route('auth.login');
+        }
 
         $user = auth()->user();
 
-        if ($user->isAdmin()) return $next($request);
+        if ($user->isAdmin()) {
+            return $next($request);
+        }
 
         foreach ($modules as $module) {
             if (PermissionService::canAccessModule($user, $module)) {

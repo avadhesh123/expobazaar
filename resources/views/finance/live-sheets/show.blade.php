@@ -298,10 +298,37 @@
                             <th style="min-width:30px;">Qty</th>
                             <th style="min-width:100px;">Barcode</th>
                             <th style="min-width:130px;background:#eff6ff;">SAP Code *</th>
-                            <th style="min-width:110px;background:#e0ded5;">Vendor WSP</th>
-                            <th style="background:#e0ded5;">Eeffective From</th>
-                            <th style="background:#e0ded5;">Eeffective To</th>
-                            <th style="background:#e0ded5;width:60px;"></th>
+                            <th style="min-width:110px;background:#e0ded5;">Vendor WSP
+                                
+         <input type="number" step="0.01" id="bulkWsp" placeholder="0.00"
+            style="width:80px;padding:.3rem .4rem;border:1px solid #fde68a;border-radius:5px;font-size:.78rem;font-family:monospace;text-align:center;"
+            onchange="fillAllFields('vendor_wsp', this.value)" onkeyup="fillAllFields('vendor_wsp', this.value)">
+                             </th>
+                            <th style="background:#e0ded5;">Eeffective From
+<input type="date" id="bulkFrom"
+            style="padding:.3rem .4rem;border:1px solid #fde68a;border-radius:5px;font-size:.78rem;"
+            onchange="fillAllFields('wsp_from', this.value)">
+  
+
+                            </th>
+                            <th style="background:#e0ded5;">Eeffective To 
+                                <input type="date" id="bulkTo"
+            style="padding:.3rem .4rem;border:1px solid #fde68a;border-radius:5px;font-size:.78rem;"
+            onchange="fillAllFields('wsp_to', this.value)">
+                            </th>
+                            <th style="background:#e0ded5;width:60px;">
+                                <!-- <button type="button" onclick="clearBulkFill()" 
+                                class="btn btn-primary btn-sm"
+                             title="Clear bulk fill">
+                                    <i class="fas fa-times"></i> Clear
+                                </button> -->
+                            <button type="button" onclick="saveBulkWsp()" class="btn btn-primary btn-sm" style="padding:.35rem .7rem;">
+                                    <i class="fas fa-save" style="margin-right:.2rem;"></i> Apply to All
+                                </button>
+                                <span id="bulkWspStatus" style="font-size:.72rem;color:#16a34a;display:none;align-self:center;"></span>
+
+                            </th>
+
                             <th style="width:60px;">Status</th>
                         </tr>
                     </thead>
@@ -366,11 +393,11 @@
                                     style="width:100%;padding:.35rem .5rem;border:1px solid {{ !empty($vendorWsp) ? '#86efac' : '#93c5fd' }};border-radius:6px;font-size:.82rem;font-family:monospace;background:#fff;">
                             </td>                            
                             <td style="background:#e0ded5;">
-                                <input type="date" id="wsp-from-{{ $item->id }}" value="{{ $effectiveFrom ?? date('Y-m-d') }}"
+                                <input type="date" name="sap_codes[{{ $idx }}][wsp_from]" id="wsp-from-{{ $item->id }}" value="{{ $effectiveFrom ?? date('Y-m-d') }}"
                                     style="width:110px;padding:.2rem .3rem;border:1px solid #fde68a;border-radius:4px;font-size:.7rem;">
                             </td>
                             <td style="background:#e0ded5;"> 
-                                <input type="date" id="wsp-to-{{ $item->id }}" value="{{ $effectiveTo ?? '' }}"
+                                <input type="date" name="sap_codes[{{ $idx }}][wsp_to]" id="wsp-to-{{ $item->id }}" value="{{ $effectiveTo ?? '' }}"
                                     style="width:110px;padding:.2rem .3rem;border:1px solid #fde68a;border-radius:4px;font-size:.7rem;">
                             </td>
                             <td style="background:#e0ded5;text-align:center;">
@@ -599,4 +626,65 @@ document.getElementById('wspHistoryModal').addEventListener('click', function(e)
             }
         });
     </script>
+    <script>
+function fillAllFields(fieldName, value) {
+    document.querySelectorAll('input[name$="[' + fieldName + ']"]').forEach(function(input) {
+        input.value = value;
+        input.style.background = value ? '#fefce8' : '';
+    });
+}
+
+function clearBulkFill() {
+    document.getElementById('bulkWsp').value = '';
+    document.getElementById('bulkFrom').value = '';
+    document.getElementById('bulkTo').value = '';
+    ['vendor_wsp', 'wsp_from', 'wsp_to'].forEach(function(f) {
+        fillAllFields(f, '');
+    });
+}
+
+function saveBulkWsp() {
+    var wsp = document.getElementById('bulkWsp').value;
+    var from = document.getElementById('bulkFrom').value;
+    var to = document.getElementById('bulkTo').value;
+
+    if (!wsp || !from) {
+        alert('Vendor WSP and Effective From are required.');
+        return;
+    }
+
+    if (!confirm('Apply WSP ' + wsp + ' to all items from ' + from + '?')) return;
+
+    fetch('{{ route("finance.live-sheets.wsp.store", $liveSheet) }}?bulk=true', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRF-TOKEN': '{{ csrf_token() }}',
+            'Accept': 'application/json',
+        },
+        body: JSON.stringify({
+            vendor_wsp: wsp,
+            effective_from: from,
+            effective_to: to || null,
+            product_id: null,
+            remarks: 'Bulk WSP update',
+        })
+    })
+    .then(function(r) {
+        if (r.redirected) { location.reload(); return; }
+        return r.json();
+    })
+    .then(function(data) {
+        if (data && data.success) {
+            var el = document.getElementById('bulkWspStatus');
+            el.textContent = '✓ WSP applied to all items';
+            el.style.display = 'inline';
+            setTimeout(function() { location.reload(); }, 1000);
+        } else {
+            alert(data.error || 'Save failed.');
+        }
+    })
+    .catch(function(err) { alert('Error: ' + err.message); });
+}
+</script>
     @endsection
