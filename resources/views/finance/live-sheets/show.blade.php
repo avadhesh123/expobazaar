@@ -300,10 +300,10 @@
                             <th style="min-width:130px;background:#eff6ff;">SAP Code *</th>
                             <th style="min-width:110px;background:#e0ded5;">Vendor WSP
                                 
-         <input type="number" step="0.01" id="bulkWsp" placeholder="0.00"
+         <!-- <input type="number" step="0.01" id="bulkWsp" placeholder="0.00"
             style="width:80px;padding:.3rem .4rem;border:1px solid #fde68a;border-radius:5px;font-size:.78rem;font-family:monospace;text-align:center;"
             onchange="fillAllFields('vendor_wsp', this.value)" onkeyup="fillAllFields('vendor_wsp', this.value)">
-                             </th>
+                            --> </th> 
                             <th style="background:#e0ded5;">Eeffective From
 <input type="date" id="bulkFrom"
             style="padding:.3rem .4rem;border:1px solid #fde68a;border-radius:5px;font-size:.78rem;"
@@ -635,7 +635,7 @@ function fillAllFields(fieldName, value) {
 }
 
 function clearBulkFill() {
-    document.getElementById('bulkWsp').value = '';
+   // document.getElementById('bulkWsp').value = '';
     document.getElementById('bulkFrom').value = '';
     document.getElementById('bulkTo').value = '';
     ['vendor_wsp', 'wsp_from', 'wsp_to'].forEach(function(f) {
@@ -644,16 +644,16 @@ function clearBulkFill() {
 }
 
 function saveBulkWsp() {
-    var wsp = document.getElementById('bulkWsp').value;
+    // var wsp = document.getElementById('bulkWsp').value;
     var from = document.getElementById('bulkFrom').value;
     var to = document.getElementById('bulkTo').value;
 
-    if (!wsp || !from) {
-        alert('Vendor WSP and Effective From are required.');
+    if (!from) {
+        alert('Effective From are required.');
         return;
     }
 
-    if (!confirm('Apply WSP ' + wsp + ' to all items from ' + from + '?')) return;
+    if (!confirm('Apply Date to all items from ' + from + '?')) return;
 
     fetch('{{ route("finance.live-sheets.wsp.store", $liveSheet) }}?bulk=true', {
         method: 'POST',
@@ -663,11 +663,10 @@ function saveBulkWsp() {
             'Accept': 'application/json',
         },
         body: JSON.stringify({
-            vendor_wsp: wsp,
             effective_from: from,
             effective_to: to || null,
             product_id: null,
-            remarks: 'Bulk WSP update',
+            remarks: 'Bulk Effective Date update',
         })
     })
     .then(function(r) {

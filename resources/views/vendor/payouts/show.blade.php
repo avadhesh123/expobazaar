@@ -4,7 +4,10 @@
 
 @section('content')
 <a href="{{ route('vendor.payouts') }}" class="btn btn-outline btn-sm" style="margin-bottom:1rem;"><i class="fas fa-arrow-left"></i> Back to Payouts</a>
-
+{{-- In vendor/payouts/show.blade.php --}}
+<a href="{{ route('vendor.payouts.download', $payout) }}" class="btn btn-outline btn-sm">
+    <i class="fas fa-download" style="margin-right:.2rem;"></i> Download Payout
+</a>
 {{-- Payout Header --}}
 <div class="card" style="margin-bottom:1.25rem;">
     <div class="card-body" style="padding:1rem 1.4rem;">
@@ -20,7 +23,7 @@
 
 {{-- KPIs --}}
 <div style="display:flex;gap:.75rem;margin-bottom:1.25rem;">
-    <div class="kpi-card" style="flex:1;border-left:3px solid #16a34a;"><div class="kpi-label">Sales (WSP × Qty)</div><div class="kpi-value" style="color:#16a34a;">{{ $activeCurrencySymbol }}{{ number_format($payoutSummary['total_sales'] ?? 0, 2) }}</div></div>
+    <div class="kpi-card" style="flex:1;border-left:3px solid #16a34a;"><div class="kpi-label">Sales (WSP x Qty)</div><div class="kpi-value" style="color:#16a34a;">{{ $activeCurrencySymbol }}{{ number_format($payoutSummary['total_sales'] ?? 0, 2) }}</div></div>
     <div class="kpi-card" style="flex:1;border-left:3px solid #e8a838;"><div class="kpi-label">Commission</div><div class="kpi-value" style="color:#e8a838;">{{ $activeCurrencySymbol }}{{ number_format($payoutSummary['total_commission'] ?? 0, 2) }}</div></div>
     <div class="kpi-card" style="flex:1;border-left:3px solid #7c3aed;"><div class="kpi-label">Gross Payout</div><div class="kpi-value" style="color:{{ ($payoutSummary['net_payout'] ?? 0) >= 0 ? '#7c3aed' : '#dc2626' }};">{{ $activeCurrencySymbol }}{{ number_format($payoutSummary['net_payout'] ?? 0, 2) }}</div></div>
 </div>
@@ -133,7 +136,7 @@
     <div class="card-header"><h3><i class="fas fa-calculator" style="margin-right:.5rem;color:#7c3aed;"></i> Final Payout Summary</h3></div>
     <div class="card-body" style="padding:1rem 1.4rem;">
         <table style="width:100%;max-width:500px;font-size:.85rem;">
-            <tr><td style="padding:.4rem 0;">Total Sales (Vendor WSP × Shipped Qty)</td><td style="text-align:right;font-family:monospace;font-weight:600;">{{ $activeCurrencySymbol }}{{ number_format($payoutSummary['total_sales'] ?? 0, 2) }}</td></tr>
+            <tr><td style="padding:.4rem 0;">Total Sales (Vendor WSP x Shipped Qty)</td><td style="text-align:right;font-family:monospace;font-weight:600;">{{ $activeCurrencySymbol }}{{ number_format($payoutSummary['total_sales'] ?? 0, 2) }}</td></tr>
             <tr><td style="padding:.4rem 0;color:#e8a838;">— EB Commission</td><td style="text-align:right;font-family:monospace;color:#e8a838;">-{{ $activeCurrencySymbol }}{{ number_format($payoutSummary['total_commission'] ?? 0, 2) }}</td></tr>
             <tr style="border-top:1px solid #e2e8f0;"><td style="padding:.4rem 0;font-weight:600;">Gross Payout</td><td style="text-align:right;font-family:monospace;font-weight:600;">{{ $activeCurrencySymbol }}{{ number_format($grossPayout, 2) }}</td></tr>
             <tr><td style="padding:.4rem 0;color:#dc2626;">— Warehouse Charges</td><td style="text-align:right;font-family:monospace;color:#dc2626;">-{{ $activeCurrencySymbol }}{{ number_format($totalWhCharges, 2) }}</td></tr>

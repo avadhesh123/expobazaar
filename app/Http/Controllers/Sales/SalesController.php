@@ -757,7 +757,7 @@ class SalesController extends Controller
     public function updateOrderStatus(Request $request, Order $order)
     {
         $request->validate([
-            'status'  => 'required|in:open,pending,label_created,processing,confirmed,shipped,returned,exception,lost_in_transit',
+            'status'  => 'required|in:open,pending,label_created,processing,confirmed,shipped,cancelled,returned,exception,lost_in_transit',
             'reason' => 'nullable|string|max:500',
         ]);
         //'open','pending','label_created','processing','shipped','delivered','cancelled','returned','exception','lost_in_transit'

@@ -159,6 +159,7 @@ Route::middleware(['auth'])->group(function () {
             Route::post('payouts/{payout}/invoice', [VendorController::class, 'uploadInvoice'])->name('payouts.invoice');
 
             Route::post('offer-sheets/{offerSheet}/update-items', [VendorController::class, 'updateOfferSheetItems'])->name('offer-sheets.update-items');
+            Route::get('payouts/{payout}/download', [VendorController::class, 'downloadPayout'])->name('payouts.download');
 
         });
     });

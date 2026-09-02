@@ -1070,6 +1070,7 @@ class SourcingController extends Controller
         $request->validate([
             'items'               => 'required|array',
             'items.*.id'          => 'required|exists:live_sheet_items,id',
+            'items.*.product_name' => 'nullable|string|max:500',  // ← added validation for product_name
             'items.*.quantity'    => 'nullable|integer|min:0',
             'items.*.unit_price'  => 'nullable|numeric|min:0',
             'items.*.vendor_wsp'  => 'nullable|numeric|min:0',
@@ -1095,6 +1096,11 @@ class SourcingController extends Controller
             }
 
             $details = $item->product_details ?? [];
+
+            // Update product name in products table
+            if (!empty($data['product_name']) && $item->product) {
+                $item->product->update(['name' => $data['product_name']]);
+            }
 
             // Update product_details JSON fields
             $detailFields = [

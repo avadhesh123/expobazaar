@@ -197,12 +197,12 @@ $weightUnit = $isUS ? 'LBS' : 'KG';
                         {{-- Editable fields --}}
                         <td style="background:#eff6ff;"><input type="number" name="items[{{ $idx }}][quantity]" value="{{ $item->quantity ?? 0 }}" min="1" required onchange="calcRow({{ $idx }})" style="width:70px;padding:.2rem .3rem;border:1px solid #93c5fd;border-radius:4px;font-size:.78rem;text-align:center;background:#fff;" {{ $dis }}></td>
                         <td style="background:#eff6ff;"><input type="number" step="0.01" name="items[{{ $idx }}][vendor_fob]" value="{{ $d['vendor_fob'] ?? $item->unit_price ?? 0 }}" min="0" required onchange="calcRow({{ $idx }})" style="width:70px;padding:.2rem .3rem;border:1px solid #93c5fd;border-radius:4px;font-size:.78rem;font-family:monospace;text-align:right;background:#fff;" {{ $dis }}></td>
-                        <td style="font-family:monospace;color:#64748b;">{{$d['target_fob'] ? $activeCurrencySymbol . number_format(floatval($d['target_fob']), 2) : '—' }}</td>
+                        <td style="font-family:monospace;color:#64748b;">{{ isset($d['target_fob']) ? $activeCurrencySymbol . number_format(floatval($d['target_fob']), 2) : '—' }}</td>
                         <td style="font-family:monospace;font-weight:600;">{{ $item->quantity }} </td>
                         <td style="text-align:center;">{{ $d['no_of_master_carton'] ?? '—' }}</td>
                         <td style="font-family:monospace;">{{ isset($d['master_cbm']) ? number_format(floatval($d['master_cbm']), 4) : '—' }}</td>
                         <td style="font-family:monospace;font-weight:600;color:#1e40af;">{{ isset($d['cbm_shipment']) ? number_format(floatval($d['cbm_shipment']), 4) : number_format(floatval($item->total_cbm ?? 0), 4) }}</td>
-                        <td style="font-family:monospace;">{{$activeCurrencySymbol}}{{ $d['final_fob'] ?? '—' }}</td>
+                        <td style="font-family:monospace;"> {{ isset($d['final_fob']) ? $activeCurrencySymbol . number_format(floatval($d['final_fob']), 2) : '—' }} </td>
                         <td style="font-family:monospace;">{{ $dutyAmt > 0 ? $activeCurrencySymbol.number_format($dutyAmt, 2) : '—' }}</td>
                         <td>{{ $d['freight_factor'] ?? '' }}</td>
                         <td style="font-family:monospace;">{{ $freightAmt > 0 ? $activeCurrencySymbol.number_format($freightAmt, 2) : '—' }}</td>

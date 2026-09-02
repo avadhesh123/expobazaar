@@ -528,7 +528,7 @@ class FinanceController extends Controller
             ->when($request->vendor_id, fn ($q, $v) => $q->where('vendor_id', $v))
             ->when($request->search, fn ($q, $v) => $q->where(function ($q2) use ($v) {
                 $q2->where('live_sheet_number', 'LIKE', "%{$v}%")
-                   ->orWhereHas('vendor', fn ($vq) => $vq->where('company_name', 'LIKE', "%{$v}%"));
+                    ->orWhereHas('vendor', fn ($vq) => $vq->where('company_name', 'LIKE', "%{$v}%"));
             }))
             ->latest()
             ->paginate(20)
@@ -843,7 +843,7 @@ class FinanceController extends Controller
                 $updated++;
             }
 
-            \App\Models\ActivityLog::log('uploaded-live-sheet-'.$liveSheet->id, 'sap_codes', $liveSheet, null, [
+            \App\Models\ActivityLog::log('uploaded-live-sheet-' . $liveSheet->id, 'sap_codes', $liveSheet, null, [
                 'updated' => $updated,
                 'errors' => count($errors),
             ], "SAP/WSP uploaded: {$updated} updated");
@@ -962,7 +962,7 @@ class FinanceController extends Controller
             ->where('company_code', $activeCode)
             ->get();
         $baseQ = \App\Models\VendorMonthlyCharge::where('company_code', $activeCode)
-        ->byMonth($month, $year);
+            ->byMonth($month, $year);
 
         $stats = [
             'total_charges' => (float)(clone $baseQ)->where('status', 'approved')->sum('total_charges'),
@@ -1153,7 +1153,7 @@ class FinanceController extends Controller
     public function storeWspRevision(Request $request, \App\Models\LiveSheet $liveSheet)
     {
         $request->validate([
-            'vendor_wsp'     => 'required|numeric|min:0',
+            'vendor_wsp'     => $request->boolean('bulk') ? 'nullable|numeric|min:0' : 'required|numeric|min:0',
             'effective_from' => 'required|date',
             'effective_to'   => 'nullable|date|after_or_equal:effective_from',
             'product_id'     => 'nullable|exists:products,id',
@@ -1164,7 +1164,6 @@ class FinanceController extends Controller
 
         if ($isBulk) {
             // ── BULK: Apply to all items ──
-
             // Capture old WSP values before closing
             $oldRevisions = \App\Models\WspRevision::where('live_sheet_id', $liveSheet->id)
                 ->whereNull('effective_to')
@@ -1178,9 +1177,11 @@ class FinanceController extends Controller
                 ->update(['effective_to' => \Carbon\Carbon::parse($request->effective_from)->subDay()->toDateString()]);
 
             // Create one revision per product
+
             $changes = [];
             foreach ($liveSheet->items as $item) {
-                $oldWsp = $oldRevisions[$item->product_id]->vendor_wsp ?? ($item->product_details['vendor_wsp'] ?? $item->product_details['wsp'] ?? 0);
+                $existingWsp = $oldRevisions[$item->product_id]->vendor_wsp
+                    ?? floatval($item->product_details['vendor_wsp'] ?? $item->product_details['wsp'] ?? $request->vendor_wsp ?? 0);
 
                 \App\Models\WspRevision::create([
                     'live_sheet_id'      => $liveSheet->id,
@@ -1188,37 +1189,31 @@ class FinanceController extends Controller
                     'product_id'         => $item->product_id,
                     'vendor_id'          => $liveSheet->vendor_id,
                     'company_code'       => $liveSheet->company_code,
-                    'vendor_wsp'         => $request->vendor_wsp,
+                    'vendor_wsp'         => $existingWsp,  // keep existing WSP
                     'effective_from'     => $request->effective_from,
                     'effective_to'       => $request->effective_to,
-                    'remarks'            => $request->remarks ?? 'Bulk WSP update',
+                    'remarks'            => $request->remarks ?? 'Bulk date update',
                     'created_by'         => auth()->id(),
                 ]);
-
-                $details = $item->product_details ?? [];
-                $details['vendor_wsp'] = floatval($request->vendor_wsp);
-                $details['wsp'] = floatval($request->vendor_wsp);
-                $item->update(['product_details' => $details]);
 
                 $changes[] = [
                     'product_id' => $item->product_id,
                     'sku'        => $item->product->sku ?? '—',
-                    'old_wsp'    => floatval($oldWsp),
-                    'new_wsp'    => floatval($request->vendor_wsp),
+                    'wsp'        => floatval($existingWsp),
                 ];
             }
 
-            $msg = "WSP {$request->vendor_wsp} applied to all {$liveSheet->items->count()} items";
+            $msg = "Dates updated for all {$liveSheet->items->count()} items: {$request->effective_from}" .
+                    ($request->effective_to ? " to {$request->effective_to}" : ' (open-ended)');
 
             \App\Models\ActivityLog::log('created', 'wsp_revision', $liveSheet, null, [
-                'bulk'        => true,
-                'live_sheet'  => $liveSheet->live_sheet_number,
-                'new_wsp'     => floatval($request->vendor_wsp),
-                'from'        => $request->effective_from,
-                'to'          => $request->effective_to,
-                'items_count' => count($changes),
-                'changes'     => array_slice($changes, 0, 20),
-            ], "Bulk WSP: {$request->vendor_wsp} applied to {$liveSheet->items->count()} items on {$liveSheet->live_sheet_number}");
+                 'bulk'        => true,
+                 'live_sheet'  => $liveSheet->live_sheet_number,
+                 'from'        => $request->effective_from,
+                 'to'          => $request->effective_to,
+                 'items_count' => count($changes),
+                 'changes'     => array_slice($changes, 0, 20),
+             ], "Bulk dates: {$request->effective_from} → " . ($request->effective_to ?? 'open') . " for {$liveSheet->items->count()} items on {$liveSheet->live_sheet_number}");
 
         } else {
             // ── SINGLE: Apply to one product or sheet-level ──
@@ -1348,17 +1343,17 @@ class FinanceController extends Controller
             // Create one revision per product
             foreach ($liveSheet->items as $item) {
                 $revision =  \App\Models\WspRevision::create([
-                      'live_sheet_id'  => $liveSheet->id,
-                      'live_sheet_item_id' => $item->id,
-                      'product_id'     => $item->product_id,
-                      'vendor_id'      => $liveSheet->vendor_id,
-                      'company_code'   => $liveSheet->company_code,
-                      'vendor_wsp'     => $request->vendor_wsp,
-                      'effective_from' => $request->effective_from,
-                      'effective_to'   => $request->effective_to,
-                      'remarks'        => $request->remarks ?? 'Bulk WSP update',
-                      'created_by'     => auth()->id(),
-                  ]);
+                    'live_sheet_id'  => $liveSheet->id,
+                    'live_sheet_item_id' => $item->id,
+                    'product_id'     => $item->product_id,
+                    'vendor_id'      => $liveSheet->vendor_id,
+                    'company_code'   => $liveSheet->company_code,
+                    'vendor_wsp'     => $request->vendor_wsp,
+                    'effective_from' => $request->effective_from,
+                    'effective_to'   => $request->effective_to,
+                    'remarks'        => $request->remarks ?? 'Bulk WSP update',
+                    'created_by'     => auth()->id(),
+                ]);
 
                 // Update product_details
                 $details = $item->product_details ?? [];
@@ -1368,14 +1363,13 @@ class FinanceController extends Controller
 
 
                 \App\Models\ActivityLog::log('created', 'wsp_revision', $revision, null, [
-                  'live_sheet'  => $liveSheet->live_sheet_number,
-                  'product_id'  => $request->product_id,
-                  'old_wsp'     => $previousOpen?->vendor_wsp,
-                  'new_wsp'     => $request->vendor_wsp,
-                  'from'        => $request->effective_from,
-                  'to'          => $request->effective_to,
-      ], "WSP revised: {$request->vendor_wsp} from {$request->effective_from} on {$liveSheet->live_sheet_number}");
-
+                    'live_sheet'  => $liveSheet->live_sheet_number,
+                    'product_id'  => $request->product_id,
+                    'old_wsp'     => $previousOpen?->vendor_wsp,
+                    'new_wsp'     => $request->vendor_wsp,
+                    'from'        => $request->effective_from,
+                    'to'          => $request->effective_to,
+                ], "WSP revised: {$request->vendor_wsp} from {$request->effective_from} on {$liveSheet->live_sheet_number}");
             }
 
 
@@ -1426,15 +1420,13 @@ class FinanceController extends Controller
 
 
             \App\Models\ActivityLog::log('created', 'wsp_revision', $revision, null, [
-              'live_sheet'  => $liveSheet->live_sheet_number,
-              'product_id'  => $request->product_id,
-              'old_wsp'     => $previousOpen?->vendor_wsp,
-              'new_wsp'     => $request->vendor_wsp,
-              'from'        => $request->effective_from,
-              'to'          => $request->effective_to,
-      ], "WSP revised: {$request->vendor_wsp} from {$request->effective_from} on {$liveSheet->live_sheet_number}");
-
-
+                'live_sheet'  => $liveSheet->live_sheet_number,
+                'product_id'  => $request->product_id,
+                'old_wsp'     => $previousOpen?->vendor_wsp,
+                'new_wsp'     => $request->vendor_wsp,
+                'from'        => $request->effective_from,
+                'to'          => $request->effective_to,
+            ], "WSP revised: {$request->vendor_wsp} from {$request->effective_from} on {$liveSheet->live_sheet_number}");
         }
 
 
@@ -1446,7 +1438,6 @@ class FinanceController extends Controller
             // ... existing logic ...
             // return response()->json(['success' => true, 'message' => "WSP saved"]);
             return response()->json(['success' => true, 'message' => $msg]);
-
         }
 
         return back()->with('success', $msg);
@@ -1469,7 +1460,9 @@ class FinanceController extends Controller
         $vendor = $payout->vendor;
         $period = date('M-Y', mktime(0, 0, 0, $payout->payout_month, 1, $payout->payout_year));
         $cs = match ($payout->company_code) {
-            '2200' => '€', '2400' => '£', default => '$'
+            '2200' => '€',
+            '2400' => '£',
+            default => '$'
         };
 
         $spreadsheet = new \PhpOffice\PhpSpreadsheet\Spreadsheet();

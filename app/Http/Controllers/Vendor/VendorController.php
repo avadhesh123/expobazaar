@@ -19,7 +19,8 @@ class VendorController extends Controller
         protected DashboardService $dashboardService,
         protected VendorService $vendorService,
         protected SourcingService $sourcingService
-    ) {}
+    ) {
+    }
 
     public function dashboard()
     {
@@ -36,7 +37,7 @@ class VendorController extends Controller
         $totalSales = OrderItem::withoutGlobalScopes()
             ->where('vendor_id', $vendor->id)
             ->where('shipped_qty', '>', 0)
-            ->whereHas('order', fn($q) => $q->withoutGlobalScopes()
+            ->whereHas('order', fn ($q) => $q->withoutGlobalScopes()
                 ->where('company_code', $activeCompany)
                 ->whereIn('status', ['shipped', 'delivered']))
             ->get()
@@ -48,7 +49,7 @@ class VendorController extends Controller
         $totalShippedQty = OrderItem::withoutGlobalScopes()
             ->where('vendor_id', $vendor->id)
             ->where('shipped_qty', '>', 0)
-            ->whereHas('order', fn($q) => $q->withoutGlobalScopes()
+            ->whereHas('order', fn ($q) => $q->withoutGlobalScopes()
                 ->where('company_code', $activeCompany)
                 ->whereIn('status', ['shipped', 'delivered']))
             ->sum('shipped_qty');
@@ -65,7 +66,7 @@ class VendorController extends Controller
             $snapshot = $payout->calculation_snapshot;
 
             // ── Read from saved snapshot ──
-            $lineItems = collect($snapshot['line_items'] ?? [])->map(fn($i) => (object) $i);
+            $lineItems = collect($snapshot['line_items'] ?? [])->map(fn ($i) => (object) $i);
 
             $payoutSummary = $snapshot['summary'] ?? [
                 'total_qty' => $lineItems->sum('qty'),
@@ -89,16 +90,16 @@ class VendorController extends Controller
 
             $chargebacks = Chargeback::withoutGlobalScopes()
                 ->where('vendor_id', $payout->vendor_id)
-                ->whereHas('order', fn($q) => $q->withoutGlobalScopes()->where('company_code', $payout->company_code))
+                ->whereHas('order', fn ($q) => $q->withoutGlobalScopes()->where('company_code', $payout->company_code))
                 ->where('status', 'confirmed')
                 ->whereMonth('confirmed_at', $payout->payout_month)
                 ->whereYear('confirmed_at', $payout->payout_year)
-                ->with(['order' => fn($q) => $q->withoutGlobalScopes()])
+                ->with(['order' => fn ($q) => $q->withoutGlobalScopes()])
                 ->get();
 
 
             $totalPayout = $payoutSummary['total_payout'] ?? 0;
-            $totalWhCharges = $warehouseCharges->sum(fn($c) => floatval($c->total_charges ?? $c->amount ?? 0));
+            $totalWhCharges = $warehouseCharges->sum(fn ($c) => floatval($c->total_charges ?? $c->amount ?? 0));
 
             $totalChargebacks = $chargebacks->sum('amount');
 
@@ -119,8 +120,8 @@ class VendorController extends Controller
         $data['recent_orders'] = Order::withoutGlobalScopes()
             ->where('company_code', $activeCompany)
             ->whereIn('status', ['shipped', 'delivered'])
-            ->whereHas('items', fn($q) => $q->where('vendor_id', $vendor->id)->where('shipped_qty', '>', 0))
-            ->with(['salesChannel', 'items' => fn($q) => $q->where('vendor_id', $vendor->id)])
+            ->whereHas('items', fn ($q) => $q->where('vendor_id', $vendor->id)->where('shipped_qty', '>', 0))
+            ->with(['salesChannel', 'items' => fn ($q) => $q->where('vendor_id', $vendor->id)])
             ->latest('order_date')->take(5)->get();
 
         $data['active_consignments'] = Consignment::where('vendor_id', $vendor->id)
@@ -133,7 +134,7 @@ class VendorController extends Controller
         $priorSold = \App\Models\OrderItem::withoutGlobalScopes()
             ->where('vendor_id', $vendor->id)
             ->where('shipped_qty', '>', 0)
-            ->whereHas('order', fn($q) => $q->withoutGlobalScopes()
+            ->whereHas('order', fn ($q) => $q->withoutGlobalScopes()
                 ->where('company_code', $activeCompany)
                 ->whereIn('status', ['shipped', 'delivered']))
             ->select('product_id', \DB::raw('SUM(shipped_qty) as shipped'))
@@ -224,12 +225,12 @@ class VendorController extends Controller
         $data['stats'] = [
             'offer_sheets'  => OfferSheet::where('vendor_id', $vendor->id)->where('company_code', $activeCompany)->count(),
             'consignments'  => Consignment::where('vendor_id', $vendor->id)->where('company_code', $activeCompany)->count(),
-            'total_sales'   => Order::whereHas('items', fn($q) => $q->where('vendor_id', $vendor->id))->where('company_code', $activeCompany)->sum('total_amount'),
+            'total_sales'   => Order::whereHas('items', fn ($q) => $q->where('vendor_id', $vendor->id))->where('company_code', $activeCompany)->sum('total_amount'),
             'chargebacks'   => Chargeback::where('vendor_id', $vendor->id)->where('company_code', $activeCompany)->where('status', 'confirmed')->sum('amount'),
             'pending_payout' => VendorPayout::where('vendor_id', $vendor->id)->where('company_code', $activeCompany)->whereIn('status', ['calculated', 'approved'])->sum('net_payout'),
         ];
 
-        $data['recent_orders'] = Order::whereHas('items', fn($q) => $q->where('vendor_id', $vendor->id))
+        $data['recent_orders'] = Order::whereHas('items', fn ($q) => $q->where('vendor_id', $vendor->id))
             ->where('company_code', $activeCompany)
             ->with('salesChannel')->latest('order_date')->take(5)->get();
 
@@ -469,7 +470,7 @@ class VendorController extends Controller
             $barcode = trim($p['barcode'] ?? '');
             if (!empty($barcode)) {
                 $dupBarcode = Product::withoutGlobalScopes()->where('barcode', $barcode)
-                    ->when($existingProduct, fn($q) => $q->where('id', '!=', $existingProduct->id))
+                    ->when($existingProduct, fn ($q) => $q->where('id', '!=', $existingProduct->id))
                     ->first();
                 if ($dupBarcode) {
                     $errors[] = "Row " . ($idx + 1) . ": Barcode '{$barcode}' already assigned to SKU '{$dupBarcode->sku}'.";
@@ -932,7 +933,7 @@ class VendorController extends Controller
                 }
 
                 // Sort by filename so image1, image2... are in order
-                usort($mediaFiles, fn($a, $b) => strnatcmp($a['name'], $b['name']));
+                usort($mediaFiles, fn ($a, $b) => strnatcmp($a['name'], $b['name']));
 
                 $dataRow = 2;
                 foreach ($mediaFiles as $media) {
@@ -1716,7 +1717,7 @@ class VendorController extends Controller
             }
 
             // Find matching live sheet item by SKU
-            $item = $liveSheet->items()->whereHas('product', fn($q) => $q->where('sku', $sku))->first();
+            $item = $liveSheet->items()->whereHas('product', fn ($q) => $q->where('sku', $sku))->first();
 
             if (!$item) {
                 $errors[] = "Row " . ($idx + 1) . ": SKU '{$sku}' not found in this live sheet.";
@@ -1844,7 +1845,7 @@ class VendorController extends Controller
             }
 
             // Remove null values before update
-            $updateData = array_filter($updateData, fn($val) => $val !== null);
+            $updateData = array_filter($updateData, fn ($val) => $val !== null);
             $item->product->update($updateData);
             $updated++;
         }
@@ -2032,7 +2033,7 @@ class VendorController extends Controller
                     continue;
                 }
 
-                $getVal = fn($key, $default = null) => isset($colMap[$key]) ? $sheet->getCell($colMap[$key] . $r)->getValue() : $default;
+                $getVal = fn ($key, $default = null) => isset($colMap[$key]) ? $sheet->getCell($colMap[$key] . $r)->getValue() : $default;
 
                 // file_put_contents(storage_path('logs/live_sheet_parse_v.log'), "Live sheet col map: {$sku} = {$getVal('weight')}\n", FILE_APPEND);
 
@@ -2137,15 +2138,15 @@ class VendorController extends Controller
         $orders = Order::withoutGlobalScopes()
             ->whereIn('status', ['shipped', 'delivered'])
             ->where('company_code', $activeCompany)
-            ->whereHas('items', fn($q) => $q->where('vendor_id', $vendor->id)->where('shipped_qty', '>', 0))
+            ->whereHas('items', fn ($q) => $q->where('vendor_id', $vendor->id)->where('shipped_qty', '>', 0))
             ->with([
                 'salesChannel',
-                'items' => fn($q) => $q->where('vendor_id', $vendor->id)
+                'items' => fn ($q) => $q->where('vendor_id', $vendor->id)
                     ->where('shipped_qty', '>', 0)
-                    ->with(['product' => fn($pq) => $pq->withoutGlobalScopes()])
+                    ->with(['product' => fn ($pq) => $pq->withoutGlobalScopes()])
             ])
-            ->when($request->month, fn($q, $v) => $q->whereMonth('order_date', $v))
-            ->when($request->year, fn($q, $v) => $q->whereYear('order_date', $v))
+            ->when($request->month, fn ($q, $v) => $q->whereMonth('order_date', $v))
+            ->when($request->year, fn ($q, $v) => $q->whereYear('order_date', $v))
             ->latest('order_date')
             ->paginate(25);
 
@@ -2155,7 +2156,7 @@ class VendorController extends Controller
             ->where('company_code', $activeCompany)
             ->where('status', 'locked')
             ->orderBy('approved_at', 'asc')
-            ->with(['items' => fn($q) => $q->select('id', 'live_sheet_id', 'product_id', 'quantity', 'unit_price', 'product_details')])
+            ->with(['items' => fn ($q) => $q->select('id', 'live_sheet_id', 'product_id', 'quantity', 'unit_price', 'product_details')])
             ->get();
 
         $fifoQueue = [];
@@ -2182,7 +2183,7 @@ class VendorController extends Controller
         $priorSold = \App\Models\OrderItem::withoutGlobalScopes()
             ->where('vendor_id', $vendor->id)
             ->where('shipped_qty', '>', 0)
-            ->whereHas('order', fn($q) => $q->withoutGlobalScopes()
+            ->whereHas('order', fn ($q) => $q->withoutGlobalScopes()
                 ->where('company_code', $activeCompany)
                 ->whereIn('status', ['shipped', 'delivered']))
             ->select('product_id', \DB::raw('SUM(shipped_qty) as shipped'))
@@ -2270,9 +2271,9 @@ class VendorController extends Controller
         $activeCompany = session('active_company');
 
         $orders = Order::where('status', 'shipped')
-            ->whereHas('items', fn($q) => $q->where('vendor_id', $vendor->id))
-            ->with(['salesChannel', 'receivable', 'items' => fn($q) => $q->where('vendor_id', $vendor->id)->with('product')])
-            ->when($activeCompany, fn($q) => $q->whereHas('salesChannel', fn($sq) => $sq->where('company_code', $activeCompany)))
+            ->whereHas('items', fn ($q) => $q->where('vendor_id', $vendor->id))
+            ->with(['salesChannel', 'receivable', 'items' => fn ($q) => $q->where('vendor_id', $vendor->id)->with('product')])
+            ->when($activeCompany, fn ($q) => $q->whereHas('salesChannel', fn ($sq) => $sq->where('company_code', $activeCompany)))
             ->get();
 
 
@@ -2281,7 +2282,7 @@ class VendorController extends Controller
             ->where('status', 'locked') // Only consider locked sheets for commission (approved but not yet paid out)
             //  ->when($activeCompany, fn($q) => $q->whereHas('salesChannel', fn($sq) => $sq->where('company_code', $activeCompany)))
             ->orderBy('approved_at', 'asc') // FIFO — oldest first
-            ->with(['items' => fn($q) => $q->select('id', 'live_sheet_id', 'product_id', 'quantity', 'product_details')])
+            ->with(['items' => fn ($q) => $q->select('id', 'live_sheet_id', 'product_id', 'quantity', 'product_details')])
             ->get();
 
         // Build FIFO queue with BOTH vendor_wsp and commission per batch
@@ -2402,17 +2403,17 @@ class VendorController extends Controller
         // exit;
         //print_r($lineItems->toArray());exit;
 
-        $orders = Order::whereHas('items', fn($q) => $q->where('vendor_id', $vendor->id))
+        $orders = Order::whereHas('items', fn ($q) => $q->where('vendor_id', $vendor->id))
             ->with('salesChannel', 'items')
-            ->when($activeCompany, fn($q) => $q->whereHas('salesChannel', fn($sq) => $sq->where('company_code', $activeCompany)))
-            ->when($request->month, fn($q, $v) => $q->whereMonth('order_date', $v))
-            ->when($request->year, fn($q, $v) => $q->whereYear('order_date', $v))
+            ->when($activeCompany, fn ($q) => $q->whereHas('salesChannel', fn ($sq) => $sq->where('company_code', $activeCompany)))
+            ->when($request->month, fn ($q, $v) => $q->whereMonth('order_date', $v))
+            ->when($request->year, fn ($q, $v) => $q->whereYear('order_date', $v))
             ->latest('order_date')->paginate(25);
 
-        $totalSales = Order::whereHas('items', fn($q) => $q->where('vendor_id', $vendor->id))
-            ->when($activeCompany, fn($q) => $q->whereHas('salesChannel', fn($sq) => $sq->where('company_code', $activeCompany)))
-            ->when($request->month, fn($q, $v) => $q->whereMonth('order_date', $v))
-            ->when($request->year, fn($q, $v) => $q->whereYear('order_date', $v))
+        $totalSales = Order::whereHas('items', fn ($q) => $q->where('vendor_id', $vendor->id))
+            ->when($activeCompany, fn ($q) => $q->whereHas('salesChannel', fn ($sq) => $sq->where('company_code', $activeCompany)))
+            ->when($request->month, fn ($q, $v) => $q->whereMonth('order_date', $v))
+            ->when($request->year, fn ($q, $v) => $q->whereYear('order_date', $v))
             ->sum('total_amount');
 
         return view('vendor.sales.index', compact('orders', 'vendor', 'totalSales', 'lineItems'));
@@ -2425,12 +2426,12 @@ class VendorController extends Controller
 
         $vendor = $user->vendor;
         $vendorProductIds = $vendor->products()
-            ->when($activeCompany, fn($q) => $q->where('company_code', $activeCompany))
+            ->when($activeCompany, fn ($q) => $q->where('company_code', $activeCompany))
             ->pluck('id')->toArray();
 
         // Get consignment IDs for this vendor
         $consignmentIds = Consignment::where('vendor_id', $vendor->id)
-            ->when($activeCompany, fn($q) => $q->where('company_code', $activeCompany))
+            ->when($activeCompany, fn ($q) => $q->where('company_code', $activeCompany))
             ->pluck('id');
 
         // Get shipment IDs linked to those consignments
@@ -2454,7 +2455,7 @@ class VendorController extends Controller
         $totalExcess = 0;
 
         $grns->getCollection()->transform(function ($grn) use ($vendorProductIds, &$totalExpected, &$totalReceived, &$totalDamaged, &$totalMissing, &$totalExcess) {
-            $myItems = $grn->items->filter(fn($i) => in_array($i->product_id, $vendorProductIds));
+            $myItems = $grn->items->filter(fn ($i) => in_array($i->product_id, $vendorProductIds));
             $grn->vendor_expected = $myItems->sum('expected_quantity');
             $grn->vendor_received = $myItems->sum('received_quantity');
             $grn->vendor_damaged  = $myItems->sum('damaged_quantity');
@@ -2487,7 +2488,7 @@ class VendorController extends Controller
 
         // Verify this GRN belongs to this vendor's consignments
         $consignmentIds = Consignment::where('vendor_id', $vendor->id)
-            ->when($activeCompany, fn($q) => $q->where('company_code', $activeCompany))
+            ->when($activeCompany, fn ($q) => $q->where('company_code', $activeCompany))
             ->pluck('id');
         $shipmentIds = \DB::table('shipment_consignments')
             ->whereIn('consignment_id', $consignmentIds)
@@ -2501,9 +2502,9 @@ class VendorController extends Controller
 
         // Filter items to show only this vendor's products
         $vendorProductIds = $vendor->products()
-            ->when($activeCompany, fn($q) => $q->where('company_code', $activeCompany))
+            ->when($activeCompany, fn ($q) => $q->where('company_code', $activeCompany))
             ->pluck('id')->toArray();
-        $vendorItems = $grn->items->filter(fn($item) => in_array($item->product_id, $vendorProductIds));
+        $vendorItems = $grn->items->filter(fn ($item) => in_array($item->product_id, $vendorProductIds));
 
         $itemStats = [
             'total_expected' => $vendorItems->sum('expected_quantity'),
@@ -2563,8 +2564,8 @@ class VendorController extends Controller
         $vendor = $user->vendor;
 
         $inventory = \App\Models\Inventory::with('product', 'warehouse', 'grn')
-            ->whereHas('product', fn($q) => $q->where('vendor_id', $vendor->id))
-            ->when($request->warehouse_id, fn($q, $v) => $q->where('warehouse_id', $v))
+            ->whereHas('product', fn ($q) => $q->where('vendor_id', $vendor->id))
+            ->when($request->warehouse_id, fn ($q, $v) => $q->where('warehouse_id', $v))
             ->when(!$user->isAdmin() && !empty($activeCompany), function ($query) use ($activeCompany) {
                 $query->where('company_code', $activeCompany);
             })
@@ -2575,10 +2576,10 @@ class VendorController extends Controller
 
         // Stats
         $stats = [
-            'total_skus'     => \App\Models\Inventory::whereHas('product', fn($q) => $q->where('vendor_id', $vendor->id))->distinct('product_id')->count('product_id'),
-            'total_qty'      => (int) \App\Models\Inventory::whereHas('product', fn($q) => $q->where('vendor_id', $vendor->id))->sum('quantity'),
-            'available_qty'  => (int) \App\Models\Inventory::whereHas('product', fn($q) => $q->where('vendor_id', $vendor->id))->sum('available_quantity'),
-            'reserved_qty'   => (int) \App\Models\Inventory::whereHas('product', fn($q) => $q->where('vendor_id', $vendor->id))->sum('reserved_quantity'),
+            'total_skus'     => \App\Models\Inventory::whereHas('product', fn ($q) => $q->where('vendor_id', $vendor->id))->distinct('product_id')->count('product_id'),
+            'total_qty'      => (int) \App\Models\Inventory::whereHas('product', fn ($q) => $q->where('vendor_id', $vendor->id))->sum('quantity'),
+            'available_qty'  => (int) \App\Models\Inventory::whereHas('product', fn ($q) => $q->where('vendor_id', $vendor->id))->sum('available_quantity'),
+            'reserved_qty'   => (int) \App\Models\Inventory::whereHas('product', fn ($q) => $q->where('vendor_id', $vendor->id))->sum('reserved_quantity'),
         ];
 
         return view('vendor.inventory.index', compact('inventory', 'vendor', 'warehouses', 'stats'));
@@ -2591,7 +2592,7 @@ class VendorController extends Controller
 
         $chargebacks = Chargeback::where('vendor_id', $vendor->id)->with('order.salesChannel')
             ->when(!$vendor->user->isAdmin() && !empty($activeCompany), function ($query) use ($activeCompany) {
-                $query->whereHas('order.salesChannel', fn($q) => $q->where('company_code', $activeCompany));
+                $query->whereHas('order.salesChannel', fn ($q) => $q->where('company_code', $activeCompany));
             })
             ->latest()->paginate(20);
         return view('vendor.chargebacks.index', compact('chargebacks', 'vendor'));
@@ -2658,13 +2659,13 @@ class VendorController extends Controller
         $snapshot = $payout->calculation_snapshot;
 
         if (!empty($snapshot)) {
-            $lineItems = collect($snapshot['line_items'] ?? [])->map(fn($i) => (object) $i);
+            $lineItems = collect($snapshot['line_items'] ?? [])->map(fn ($i) => (object) $i);
             $payoutSummary = $snapshot['summary'] ?? [];
         } else {
             // Fallback: recalculate live
             $service = new \App\Services\VendorPayoutService();
             $data = $service->buildPayoutData($vendor->id, $payout->company_code, $payout->payout_month, $payout->payout_year);
-            $lineItems = collect($data['line_items'])->map(fn($i) => (object) $i);
+            $lineItems = collect($data['line_items'])->map(fn ($i) => (object) $i);
             $payoutSummary = $data['summary'];
         }
 
@@ -2678,7 +2679,7 @@ class VendorController extends Controller
 
         // Chargebacks
         $chargebacks = \App\Models\Chargeback::where('vendor_id', $vendor->id)
-            ->whereHas('order', fn($q) => $q->where('company_code', $payout->company_code))
+            ->whereHas('order', fn ($q) => $q->where('company_code', $payout->company_code))
             ->where('status', 'confirmed')
             ->whereMonth('confirmed_at', $payout->payout_month)
             ->whereYear('confirmed_at', $payout->payout_year)
@@ -2800,12 +2801,12 @@ class VendorController extends Controller
 
         $activeCompany = session('active_company');
 
-        $reports = \App\Models\InspectionReport::whereHas('consignment', fn($q) => $q->where('vendor_id', $vendor->id))
+        $reports = \App\Models\InspectionReport::whereHas('consignment', fn ($q) => $q->where('vendor_id', $vendor->id))
             ->with('consignment', 'uploader')
-            ->when($activeCompany, fn($q) => $q->whereHas('consignment', fn($cq) => $cq->where('company_code', $activeCompany)))
-            ->when($request->type, fn($q, $v) => $q->where('inspection_type', $v))
-            ->when($request->result, fn($q, $v) => $q->where('result', $v))
-            ->when($request->consignment_id, fn($q, $v) => $q->where('consignment_id', $v))
+            ->when($activeCompany, fn ($q) => $q->whereHas('consignment', fn ($cq) => $cq->where('company_code', $activeCompany)))
+            ->when($request->type, fn ($q, $v) => $q->where('inspection_type', $v))
+            ->when($request->result, fn ($q, $v) => $q->where('result', $v))
+            ->when($request->consignment_id, fn ($q, $v) => $q->where('consignment_id', $v))
             ->latest()->paginate(20);
 
         $consignments = $vendor->consignments()
@@ -2815,19 +2816,19 @@ class VendorController extends Controller
             ->latest()->get();
 
         $stats = [
-            'total'    => \App\Models\InspectionReport::whereHas('consignment', fn($q) => $q->where('vendor_id', $vendor->id))
-                ->when($activeCompany, fn($q) => $q->whereHas('consignment', fn($cq) => $cq->where('company_code', $activeCompany)))
+            'total'    => \App\Models\InspectionReport::whereHas('consignment', fn ($q) => $q->where('vendor_id', $vendor->id))
+                ->when($activeCompany, fn ($q) => $q->whereHas('consignment', fn ($cq) => $cq->where('company_code', $activeCompany)))
                 ->count(),
-            'passed'   => \App\Models\InspectionReport::whereHas('consignment', fn($q) => $q->where('vendor_id', $vendor->id))->where('result', 'passed')
-                ->when($activeCompany, fn($q) => $q->whereHas('consignment', fn($cq) => $cq->where('company_code', $activeCompany)))
-                ->count(),
-
-            'failed'   => \App\Models\InspectionReport::whereHas('consignment', fn($q) => $q->where('vendor_id', $vendor->id))->where('result', 'failed')
-                ->when($activeCompany, fn($q) => $q->whereHas('consignment', fn($cq) => $cq->where('company_code', $activeCompany)))
+            'passed'   => \App\Models\InspectionReport::whereHas('consignment', fn ($q) => $q->where('vendor_id', $vendor->id))->where('result', 'passed')
+                ->when($activeCompany, fn ($q) => $q->whereHas('consignment', fn ($cq) => $cq->where('company_code', $activeCompany)))
                 ->count(),
 
-            'conditional' => \App\Models\InspectionReport::whereHas('consignment', fn($q) => $q->where('vendor_id', $vendor->id))->where('result', 'conditional')
-                ->when($activeCompany, fn($q) => $q->whereHas('consignment', fn($cq) => $cq->where('company_code', $activeCompany)))
+            'failed'   => \App\Models\InspectionReport::whereHas('consignment', fn ($q) => $q->where('vendor_id', $vendor->id))->where('result', 'failed')
+                ->when($activeCompany, fn ($q) => $q->whereHas('consignment', fn ($cq) => $cq->where('company_code', $activeCompany)))
+                ->count(),
+
+            'conditional' => \App\Models\InspectionReport::whereHas('consignment', fn ($q) => $q->where('vendor_id', $vendor->id))->where('result', 'conditional')
+                ->when($activeCompany, fn ($q) => $q->whereHas('consignment', fn ($cq) => $cq->where('company_code', $activeCompany)))
                 ->count(),
         ];
 
@@ -2883,5 +2884,13 @@ class VendorController extends Controller
         }
 
         return response()->json(['success' => true, 'message' => "{$updated} item(s) updated."]);
+    }
+    // VendorController — reuse finance method with vendor check:
+    public function downloadPayout(\App\Models\VendorPayout $payout)
+    {
+        if ($payout->vendor_id !== auth()->user()->vendor?->id) {
+            abort(403);
+        }
+        return app(\App\Http\Controllers\Finance\FinanceController::class)->downloadPayout($payout);
     }
 }

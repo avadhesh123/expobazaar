@@ -908,11 +908,12 @@ class AdminController extends Controller
                     ->orWhere('name', 'LIKE', "%{$q}%")
                     ->orWhere('barcode', 'LIKE', "%{$q}%");
             })
-            ->when($activeCompany, fn ($qr) => $qr->where('company_code', $activeCompany))
+         //   ->when($activeCompany, fn ($qr) => $qr->where('company_code', $activeCompany))
             ->with(['vendor:id,company_name'])
             ->limit(20)
             ->get();
 
+            
         $results = $products->map(function ($product) use ($companyLabels) {
             // Get live sheets containing this product
             $liveSheetItems = \App\Models\LiveSheetItem::where('product_id', $product->id)
@@ -921,7 +922,7 @@ class AdminController extends Controller
 
             $liveSheets = $liveSheetItems->map(function ($lsItem) {
                 $ls = $lsItem->liveSheet;
-                if (!$ls) {
+                if (!$ls || $ls->company_code != session('active_company')) {
                     return null;
                 }
 

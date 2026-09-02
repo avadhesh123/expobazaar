@@ -34,7 +34,7 @@ class VendorPayout extends Model
         return $query->where('payout_month', $month)->where('payout_year', $year);
     }
 
-    public function scopePending($query) { return $query->where('status', 'payment_pending'); }
+    public function scopePending($query) { return $query->where('status', 'calculated' ); }
 
     public function getPeriodAttribute(): string
     {
