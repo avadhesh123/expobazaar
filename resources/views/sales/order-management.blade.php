@@ -115,14 +115,14 @@
                         <td style="font-family:monospace;font-size:.68rem;">{{ $o->invoice_number ?? '—' }}</td>
                         <td style="font-size:.68rem;">{{ $o->salesChannel->name ?? '—' }}</td>
                         <td style="font-family:monospace;font-size:.72rem;">{{ $sku }}</td>
-                        <td style="text-align:right;font-family:monospace;">${{ number_format($unitPrice, 2) }}</td>
+                        <td style="text-align:right;font-family:monospace;">{{$activeCurrencySymbol}}{{ number_format($unitPrice, 2) }}</td>
                         <td style="text-align:center;font-weight:600;">{{ $orderQty }}</td>
-                        <td style="text-align:right;font-family:monospace;">${{ number_format(floatval($o->total_amount), 2) }}</td>
+                        <td style="text-align:right;font-family:monospace;">{{$activeCurrencySymbol}}{{ number_format(floatval($o->total_amount), 2) }}</td>
                         <td style="font-size:.72rem;"> {{ $o->warehouse->name ?? '—' }}</td>
                         <td style="font-size:.68rem;">{{ $shipMethods[$o->shipping_method] ?? $o->shipping_method ?? '—' }}</td>
                         {{-- Cols 11-14: From To Be Shipped (read-only) --}}
                         <td style="text-align:center;font-weight:600;">{{ $o->shipped_qty ?? '—' }}</td>
-                        <td style="text-align:right;font-family:monospace;">${{ number_format(floatval($o->shipped_amount), 2) }}</td>
+                        <td style="text-align:right;font-family:monospace;">{{$activeCurrencySymbol}}{{ number_format(floatval($o->shipped_amount), 2) }}</td>
                         <td style="font-family:monospace;font-size:.68rem;">{{ $o->tracking_id ?? '—' }}</td>
                         <td style="font-size:.72rem;">{{ $o->carrier ?? '—' }}</td>
 

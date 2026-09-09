@@ -212,6 +212,14 @@ Route::middleware(['auth'])->group(function () {
         Route::get('live-sheets/{liveSheet}/download', [SourcingController::class, 'downloadLiveSheet'])->name('live-sheets.download');
         Route::post('live-sheets/{liveSheet}/update-items', [SourcingController::class, 'updateLiveSheetItems'])->name('live-sheets.update-items');
 
+        // Delete offer sheet + items
+        Route::delete('offer-sheets/{offerSheet}', [SourcingController::class, 'deleteOfferSheet'])->name('offer-sheets.delete');
+        Route::delete('offer-sheets/{offerSheet}/item/{item}', [SourcingController::class, 'deleteOfferSheetItem'])->name('offer-sheets.item.delete');
+
+        // Delete live sheet + items
+        Route::delete('live-sheets/{liveSheet}', [SourcingController::class, 'deleteLiveSheet'])->name('live-sheets.delete');
+        Route::delete('live-sheets/{liveSheet}/item/{item}', [SourcingController::class, 'deleteLiveSheetItem'])->name('live-sheets.item.delete');
+
 
     });
     // LOGISTICS

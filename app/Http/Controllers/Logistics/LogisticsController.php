@@ -1738,7 +1738,7 @@ class LogisticsController extends Controller
                 floatval($item->total_price ?? 0),
                 floatval($item->total_cbm ?? 0),
                 floatval($item->total_weight ?? 0),
-                intval($d['no_of_master_cartons'] ?? 0),
+                intval($d['no_of_master_carton'] ?? 0),
                 floatval($netWeight ?? 0),
                 floatval($grossWeight ?? 0),
                 $d['factory_location'] ?? $liveSheet->factory_location ?? '',

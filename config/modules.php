@@ -28,12 +28,12 @@ return [
             'access'       => ['label' => 'Access Sourcing Module',  'actions' => ['view'], 'route' => 'sourcing.dashboard',     'icon' => 'fas fa-tachometer-alt', 'sidebar' => false],
             'dashboard'    => ['label' => 'Sourcing Dashboard',      'actions' => ['view'], 'route' => 'sourcing.dashboard',     'icon' => 'fas fa-tachometer-alt'],
             'vendor'       => ['label' => 'Manage Vendors',          'actions' => ['view', 'create'],  'route' => 'sourcing.vendors',       'icon' => 'fas fa-users'],
-            'offer-sheet'  => ['label' => 'Offer Sheets',            'actions' => ['view', 'review'],  'route' => 'sourcing.offer-sheets',  'icon' => 'fas fa-file-alt'],
-            'live-sheet'   => ['label' => 'Live Sheets',             'actions' => ['view', 'update', 'approve', 'history'], 'route' => 'sourcing.live-sheets', 'icon' => 'fas fa-clipboard-list'],
+            'offer-sheet'  => ['label' => 'Offer Sheets',            'actions' => ['view', 'review','delete'],  'route' => 'sourcing.offer-sheets',  'icon' => 'fas fa-file-alt'],
+            'live-sheet'   => ['label' => 'Live Sheets',             'actions' => ['view', 'update', 'approve', 'history', 'delete'], 'route' => 'sourcing.live-sheets', 'icon' => 'fas fa-clipboard-list'],
             'consignment'  => ['label' => 'Consignments',            'actions' => ['view', 'create'],  'route' => 'sourcing.consignments',  'icon' => 'fas fa-box'],
             'inspection'   => ['label' => 'Inspections',             'actions' => ['view', 'upload'],  'route' => 'sourcing.inspections',   'icon' => 'fas fa-search'],
             'chargeback'   => ['label' => 'Chargeback Confirmation', 'actions' => ['view'],            'route' => 'sourcing.chargebacks',   'icon' => 'fas fa-exclamation-triangle'],
-        ],
+            ],
     ],
 
     'logistics' => [

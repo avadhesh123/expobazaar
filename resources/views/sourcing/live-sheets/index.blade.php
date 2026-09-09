@@ -110,6 +110,17 @@
                             @if($ls->is_locked)
                             <span style="display:flex;align-items:center;gap:.2rem;font-size:.72rem;color:#166534;font-weight:600;"><i class="fas fa-check-circle"></i> Sent to Vendor</span>
                             @endif
+
+                            {{-- Add to actions column --}}
+                            @if(auth()->user()->isAdmin() || \App\Services\PermissionService::can(auth()->user(), 'sourcing.live-sheet.delete'))
+                            <form method="POST" action="{{ route('sourcing.live-sheets.delete', $ls) }}" style="display:inline;"
+                                onsubmit="return confirm('Delete {{ $ls->live_sheet_number }} and all its items, WSP & commission revisions? This cannot be undone.')">
+                                @csrf @method('DELETE')
+                                <button type="submit" class="btn btn-outline btn-sm" style="color:#dc2626;border-color:#fecaca;" title="Delete">
+                                    <i class="fas fa-trash"></i>
+                                </button>
+                            </form>
+                            @endif
                             
                         </div>
                     </td>

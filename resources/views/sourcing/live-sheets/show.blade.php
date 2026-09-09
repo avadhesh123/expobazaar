@@ -261,6 +261,9 @@ $disabled = $liveSheet->is_locked ? 'disabled' : '';
                         <th style="min-width:70px;background:#dbeafe;">WSP Factor *</th>
                         <th style="min-width:60px;">WSP ({{$activeCurrencySymbol}})</th>
                         <th style="min-width:120px;background:#dbeafe;">Comments</th>
+                        @if(auth()->user()->isAdmin() || \App\Services\PermissionService::can(auth()->user(), 'sourcing.live-sheet.delete'))
+                        <th style="width:30px;">Delete</th>
+                        @endif
                     </tr>
                 </thead>
                 <tbody>
@@ -392,6 +395,15 @@ $disabled = $liveSheet->is_locked ? 'disabled' : '';
                         <td class="td-font" id="wsp-val-{{ $idx }}">{{ $wsp > 0 ? $activeCurrencySymbol.number_format($wsp, 2) : '—' }}</td>
                         {{-- EDITABLE: Comments --}}
                         <td style="background:#eff6ff;"><input {{$disabled }} type="text" name="items[{{ $idx }}][comments]" value="{{ $d['comments'] ?? '' }}" placeholder="..." style="width:110px;" class="edit-input"></td>
+                         @if(auth()->user()->isAdmin() || \App\Services\PermissionService::can(auth()->user(), 'sourcing.live-sheet.delete'))
+                        <td style="text-align:center;">
+                            <button type="button" onclick="deleteItem({{ $liveSheet->id }}, {{ $item->id }}, '{{ $item->product->sku ?? '' }}')"
+                                style="background:none;border:none;color:#dc2626;cursor:pointer;font-size:.7rem;padding:2px;opacity:.5;"
+                                onmouseenter="this.style.opacity='1'" onmouseleave="this.style.opacity='.5'" title="Remove product">
+                                <i class="fas fa-trash"></i>
+                            </button>
+                        </td>
+                        @endif
                     </tr>
                     @endforeach
                     {{-- Totals --}}
@@ -699,4 +711,38 @@ function saveCell(itemId, field, input, textSpan, icon) {
     });
 }
 </script>
+
+@if(auth()->user()->isAdmin() || \App\Services\PermissionService::can(auth()->user(), 'sourcing.live-sheet.delete'))
+<script>
+function deleteItem(liveSheetId, itemId, sku) {
+    if (!confirm('Remove ' + (sku || 'this product') + ' from the live sheet? This cannot be undone.')) return;
+
+    fetch('/sourcing/live-sheets/' + liveSheetId + '/item/' + itemId, {
+        method: 'DELETE',
+        headers: {
+            'X-CSRF-TOKEN': '{{ csrf_token() }}',
+            'Accept': 'application/json',
+        }
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+        if (data.success) {
+            // Remove the row from table
+            var row = document.querySelector('tr[data-item-id="' + itemId + '"]');
+            if (row) {
+                row.style.background = '#fef2f2';
+                row.style.transition = 'opacity .3s';
+                row.style.opacity = '0';
+                setTimeout(function() { row.remove(); }, 300);
+            } else {
+                location.reload();
+            }
+        } else {
+            alert(data.error || 'Delete failed.');
+        }
+    })
+    .catch(function(err) { alert('Error: ' + err.message); });
+}
+</script>
+@endif
 @endsection

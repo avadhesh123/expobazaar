@@ -566,8 +566,107 @@ class FinanceController extends Controller
         $liveSheet->load('vendor', 'offerSheet', 'items.product');
         return view('finance.live-sheets.show', compact('liveSheet'));
     }
-
+    
     public function updateSapCodes(Request $request, \App\Models\LiveSheet $liveSheet)
+    {
+        $request->validate([
+            'sap_codes'              => 'required|array',
+            'sap_codes.*.item_id'    => 'required|exists:live_sheet_items,id',
+            'sap_codes.*.sap_code'   => 'nullable|string|max:50|regex:/^[A-Za-z0-9\-_]+$/',
+            'sap_codes.*.vendor_wsp' => 'nullable|numeric|min:0|decimal:0,2',
+        ], [
+            'sap_codes.*.sap_code.regex' => 'SAP code can only contain letters, numbers, hyphens and underscores.',
+            'sap_codes.*.vendor_wsp.decimal' => 'Vendor WSP must be a valid decimal number with up to 2 decimal places.',
+        ]);
+
+        $errors = [];
+        $seen = [];
+
+        foreach ($request->sap_codes as $idx => $row) {
+            $code = trim($row['sap_code'] ?? '');
+            if ($code === '') {
+                continue;
+            }
+
+            // Duplicate within current submission
+            if (isset($seen[$code])) {
+                $errors[] = "SAP code '{$code}' is used multiple times in this form.";
+                continue;
+            }
+            $seen[$code] = true;
+
+            $item = \App\Models\LiveSheetItem::find($row['item_id']);
+            if (!$item) {
+                continue;
+            }
+
+            // Check products table — use first() not count()
+            $dupProduct = \App\Models\Product::withoutGlobalScopes()
+                ->where('sap_code', $code)
+                ->where('id', '!=', $item->product_id)
+                ->first();
+
+            if ($dupProduct) {
+                $errors[] = "SAP code '{$code}' is already assigned to product '{$dupProduct->sku}' ({$dupProduct->name}).";
+                continue;
+            }
+
+            // Check live_sheet_items JSON — exclude same product
+            $dupItems = \App\Models\LiveSheetItem::whereJsonContains('product_details', ['sap_code' => $code])
+                ->where('product_id', '!=', $item->product_id)
+                ->with(['product' => fn ($q) => $q->withoutGlobalScopes()])
+                ->get();
+
+            foreach ($dupItems as $dup) {
+                $sku = $dup->product->sku ?? 'unknown';
+                $errors[] = "SAP code '{$code}' is already used on live sheet item (SKU: {$sku}).";
+            }
+        }
+
+        if (!empty($errors)) {
+            return back()
+                ->withErrors(['sap_codes' => $errors])
+                ->with('error', 'SAP code validation failed: ' . implode(' | ', array_slice($errors, 0, 5)));
+        }
+
+        // All codes unique — proceed
+        $updated = 0;
+        foreach ($request->sap_codes as $row) {
+            $item = \App\Models\LiveSheetItem::find($row['item_id']);
+            if (!$item || $item->live_sheet_id !== $liveSheet->id) {
+                continue;
+            }
+
+            $details = $item->product_details ?? [];
+            if (isset($row['sap_code'])) {
+                $details['sap_code'] = $row['sap_code'];
+            }
+            if (isset($row['vendor_wsp'])) {
+                $details['vendor_wsp'] = $row['vendor_wsp'];
+            }
+            $item->update(['product_details' => $details]);
+
+            if ($item->product) {
+                $productUpdate = [];
+                if (!empty($row['sap_code'])) {
+                    $productUpdate['sap_code'] = $row['sap_code'];
+                }
+                if (!empty($row['vendor_wsp'])) {
+                    $productUpdate['vendor_wsp'] = $row['vendor_wsp'];
+                }
+                if (!empty($productUpdate)) {
+                    $item->product->update($productUpdate);
+                }
+            }
+
+            $updated++;
+        }
+
+        \App\Models\ActivityLog::log('updated', 'live_sheet', $liveSheet, null, ['sap_codes_updated' => $updated], 'SAP codes and Vendor WSP updated by Finance');
+
+        return back()->with('success', "{$updated} SAP code and Vendor WSP(s) updated successfully.");
+    }
+    public function updateSapCodesBAK(Request $request, \App\Models\LiveSheet $liveSheet)
     {
         $request->validate([
             'sap_codes'              => 'required|array',
@@ -624,6 +723,7 @@ class FinanceController extends Controller
                     $errors[] = "SAP code '{$code}' is already used on live sheet item ID {$dup->id} with SKU '{$sku}'.";
                 }
             }
+
         }
 
         if (!empty($errors)) {

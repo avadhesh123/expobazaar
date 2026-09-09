@@ -78,8 +78,7 @@ class VendorController extends Controller
                 'net_payout' => $payout->net_payout ?? 0,
             ];
 
-
-
+ 
             $warehouseCharges = \App\Models\VendorMonthlyCharge::withoutGlobalScopes()
                 ->where('vendor_id', $payout->vendor_id)
                 ->where('company_code', $payout->company_code)
@@ -102,9 +101,10 @@ class VendorController extends Controller
             $totalWhCharges = $warehouseCharges->sum(fn ($c) => floatval($c->total_charges ?? $c->amount ?? 0));
 
             $totalChargebacks = $chargebacks->sum('amount');
-
             $netPayout += round($totalPayout - $totalWhCharges - $totalChargebacks, 2);
-            $finalPayout += $payoutSummary['total_payout'] - $totalWhCharges - $totalChargebacks;
+            $finalPayout += $payout->net_payout ;//- $totalWhCharges - $totalChargebacks;
+            //echo  "Total Payout: $totalPayout,finalPayout: $finalPayout, Warehouse Charges: $totalWhCharges, Chargebacks: $totalChargebacks\n";
+
         }
 
         $data['stats'] = [
@@ -446,6 +446,26 @@ class VendorController extends Controller
 
         if (empty($products)) {
             return back()->with('error', 'No valid products found. Please use the provided template.');
+        }
+
+        // ── Check for duplicate SKUs within the file ──
+        $skuCounts = [];
+        foreach ($products as $idx => $p) {
+            $sku = trim($p['vendor_sku'] ?? '');
+            if (empty($sku)) {
+                continue;
+            }
+            $skuCounts[$sku][] = $idx + 2; // +2 for header row + 0-index
+        }
+
+        $duplicates = array_filter($skuCounts, fn ($rows) => count($rows) > 1);
+        if (!empty($duplicates)) {
+            $errors = [];
+            foreach ($duplicates as $sku => $rows) {
+                $errors[] = "SKU '{$sku}' is duplicated in rows: " . implode(', ', $rows);
+            }
+            return back()->with('error', 'Duplicate Style Codes found. Please fix and re-upload.')
+                         ->with('upload_errors', $errors);
         }
 
         // ── Step 1: Validate ALL rows first before creating anything ──

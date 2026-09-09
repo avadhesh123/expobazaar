@@ -917,8 +917,162 @@ class SourcingController extends Controller
     // ═══════════════════════════════════════════════════════════
     // 2. DOWNLOAD LIVE SHEET WITH IMAGES (Sourcing/Finance)
     // ═══════════════════════════════════════════════════════════
-
     public function downloadLiveSheet(\App\Models\LiveSheet $liveSheet)
+    {
+        $items = $liveSheet->items()->with(['product' => fn ($q) => $q->withoutGlobalScopes()])->get();
+        $spreadsheet = new Spreadsheet();
+        $sheet = $spreadsheet->getActiveSheet();
+        $sheet->setTitle('Live Sheet');
+
+        $activeCompany = session('active_company') ?? '2100';
+        $isUS = ($activeCompany === '2100');
+        $currency = trim(config('app.active_currency_symbol', '$'));
+        $lwhUnit = $isUS ? 'Inches' : 'CM';
+        $weightUnit = $isUS ? 'LBS' : 'KG';
+
+        $headers = [
+            'S.No',                                    // 1
+            'SKU',                                     // 2
+            'SAP Code',                                // 3
+            'Barcode',                                 // 4
+            'Product Name',                            // 5
+            'Image URL',                               // 6
+            'Description',                             // 7
+            'Product Specification',                   // 8
+            'HSN/HTS',                                 // 9
+            'Duty %',                                  // 10
+            'Qty',                                     // 11
+            "Vendor FOB({$currency})",                 // 12
+            "Vendor WSP({$currency})",                 // 13
+            "Total Price({$currency})",                // 14
+            "Product Length ({$lwhUnit})",             // 15
+            "Product Width ({$lwhUnit})",             // 16
+            "Product Height ({$lwhUnit})",            // 17
+            "Product Weight ({$weightUnit})",         // 18
+            'Material Composition',                    // 19
+            'Other Material',                          // 20
+            'Color',                                   // 21
+            'Product Finish',                          // 22
+            'Category',                                // 23
+            'Sub Category',                            // 24
+            'Qty In Inner Pack',                       // 25
+            "Inner Carton Length({$lwhUnit})",         // 26
+            "Inner Carton Width({$lwhUnit})",         // 27
+            "Inner Carton Height({$lwhUnit})",        // 28
+            "Inner Carton Weight({$weightUnit})",     // 29
+            'Qty In Master Pack',                      // 30
+            "Master Carton Length ({$lwhUnit})",       // 31
+            "Master Carton Width ({$lwhUnit})",       // 32
+            "Master Carton Height ({$lwhUnit})",      // 33
+            "Master Carton Weight ({$weightUnit})",   // 34
+            'No Of Master Carton',                     // 35
+            'Qty Offered (Units/Sets)',                // 36
+            'CBM/Unit',                                // 37
+            'Total CBM',                               // 38
+            'Landed Cost'
+        ];
+
+        foreach ($headers as $col => $h) {
+            $sheet->setCellValue([$col + 1, 1], $h);
+        }
+
+        $headerStyle = [
+            'font' => ['bold' => true, 'color' => ['rgb' => 'FFFFFF'], 'name' => 'Arial', 'size' => 9],
+            'fill' => ['fillType' => \PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID, 'startColor' => ['rgb' => '1E3A5F']],
+        ];
+        $sheet->getStyle([1, 1, count($headers), 1])->applyFromArray($headerStyle);
+
+        // Preload offer thumbnails
+        $productIds = $items->pluck('product_id')->filter();
+        $offerThumbnails = \App\Models\OfferSheetItem::whereIn('product_id', $productIds)
+            ->whereNotNull('thumbnail')
+            ->pluck('thumbnail', 'product_id');
+
+        $row = 2;
+        foreach ($items as $idx => $item) {
+            $d = $item->product_details ?? [];
+            $product = $item->product;
+
+            $masterL = floatval($d['master_carton_length'] ?? $d['master_length'] ?? 0);
+            $masterW = floatval($d['master_carton_width'] ?? $d['master_width'] ?? 0);
+            $masterH = floatval($d['master_carton_height'] ?? $d['master_height'] ?? 0);
+            $qtyMaster = intval($d['qty_master_pack'] ?? 1);
+            $finalQty = intval($d['final_qty'] ?? $item->quantity);
+            $totalCartons = $d['total_master_cartons'] ?? $d['no_of_master_carton'] ?? ($qtyMaster > 0 ? ceil($finalQty / $qtyMaster) : 0);
+
+            // Image URL
+            $imgPath = $offerThumbnails[$item->product_id] ?? $product->thumbnail ?? null;
+            $imgUrl = '';
+            if ($imgPath) {
+                try {
+                    $imgUrl = \App\Helpers\FileStorage::url($imgPath);
+                } catch (\Exception $e) {
+                    $imgUrl = '';
+                }
+            }
+
+            $sheet->setCellValue([1, $row], $idx + 1);                                              // S.No
+            $sheet->setCellValue([2, $row], $product->sku ?? '');                                    // SKU
+            $sheet->setCellValue([3, $row], $d['sap_code'] ?? $product->sap_code ?? '');             // SAP Code
+            $sheet->setCellValue([4, $row], $d['barcode'] ?? $product->barcode ?? '');               // Barcode
+            $sheet->setCellValue([5, $row], $product->name ?? '');                                   // Product Name
+            $sheet->setCellValue([6, $row], $imgUrl);                                                // Image URL
+            $sheet->setCellValue([7, $row], $d['description'] ?? $product->description ?? '');       // Description
+            $sheet->setCellValue([8, $row], $d['specification'] ?? '');                      // Product Specification
+            $sheet->setCellValue([9, $row], $d['hsn_hts_code'] ?? $product->hsn_code ?? '');         // HSN/HTS
+            $sheet->setCellValue([10, $row], $d['duty_percent'] ?? '');                              // Duty %
+            $sheet->setCellValue([11, $row], $item->quantity ?? 0);                                  // Qty
+            $sheet->setCellValue([12, $row], $d['vendor_fob'] ?? $item->unit_price ?? '');           // Vendor FOB
+            $sheet->setCellValue([13, $row], $d['vendor_wsp'] ?? $d['wsp'] ?? '');                   // Vendor WSP
+            $sheet->setCellValue([14, $row], $item->total_price ?? 0);                               // Total Price
+            $sheet->setCellValue([15, $row], $d['length'] ?? $product->length ?? '');                 // Length
+            $sheet->setCellValue([16, $row], $d['width'] ?? $product->width ?? '');                   // Width
+            $sheet->setCellValue([17, $row], $d['height'] ?? $product->height ?? '');                 // Height
+            $sheet->setCellValue([18, $row], $d['weight'] ?? $product->weight ?? '');                 // Weight
+            $sheet->setCellValue([19, $row], $d['material'] ?? $product->material ?? '');             // Material
+            $sheet->setCellValue([20, $row], $d['other_material'] ?? '');                             // Other Material
+            $sheet->setCellValue([21, $row], $d['color'] ?? '');                                      // Color
+            $sheet->setCellValue([22, $row], $d['finish'] ?? '');                                     // Finish
+            $sheet->setCellValue([23, $row], $d['category'] ?? '');                                   // Category
+            $sheet->setCellValue([24, $row], $d['sub_category'] ?? '');                               // Sub Category
+            $sheet->setCellValue([25, $row], $d['qty_inner_pack'] ?? '');                             // Qty Inner
+            $sheet->setCellValue([26, $row], $d['inner_carton_length'] ?? $d['inner_length'] ?? ''); // Inner L
+            $sheet->setCellValue([27, $row], $d['inner_carton_width'] ?? $d['inner_width'] ?? '');   // Inner W
+            $sheet->setCellValue([28, $row], $d['inner_carton_height'] ?? $d['inner_height'] ?? ''); // Inner H
+            $sheet->setCellValue([29, $row], $d['inner_carton_weight'] ?? $d['inner_weight_kg'] ?? ''); // Inner Wt
+            $sheet->setCellValue([30, $row], $d['qty_master_pack'] ?? '');                            // Qty Master
+            $sheet->setCellValue([31, $row], $masterL ?: '');                                         // Master L
+            $sheet->setCellValue([32, $row], $masterW ?: '');                                         // Master W
+            $sheet->setCellValue([33, $row], $masterH ?: '');                                         // Master H
+            $sheet->setCellValue([34, $row], $d['master_carton_weight'] ?? $d['master_weight_kg'] ?? ''); // Master Wt
+            $sheet->setCellValue([35, $row], $d['no_of_master_carton'] ?? '');                                    // No Of Master Carton
+            $sheet->setCellValue([36, $row], $item->quantity ?? '');               // Qty Offered
+            $sheet->setCellValue([37, $row], $item->cbm_per_unit ?? '');                              // CBM/Unit
+            $sheet->setCellValue([38, $row], $item->total_cbm ?? '');                                // Total CBM
+            $sheet->setCellValue([39, $row], $d['landed_cost'] ?? '');                                 // Landed Cost
+
+            // Make image URL clickable
+            if ($imgUrl) {
+                $sheet->getCell([6, $row])->getHyperlink()->setUrl($imgUrl);
+                $sheet->getStyle([6, $row])->getFont()->setColor(new \PhpOffice\PhpSpreadsheet\Style\Color('1E40AF'))->setUnderline(true);
+            }
+
+            $row++;
+        }
+
+        // Auto-size columns
+        foreach (range(1, count($headers)) as $col) {
+            $sheet->getColumnDimensionByColumn($col)->setWidth($col === 6 ? 20 : ($col <= 5 ? 14 : 12));
+        }
+
+        $filename = "{$liveSheet->live_sheet_number}.xlsx";
+        $path = storage_path("app/temp/{$filename}");
+        @mkdir(dirname($path), 0775, true);
+
+        (new Xlsx($spreadsheet))->save($path);
+        return response()->download($path, $filename)->deleteFileAfterSend(true);
+    }
+    public function downloadLiveSheet020926(\App\Models\LiveSheet $liveSheet)
     {
         $items = $liveSheet->items()->with(['product' => fn ($q) => $q->withoutGlobalScopes()])->get();
         $spreadsheet = new Spreadsheet();
@@ -930,7 +1084,6 @@ class SourcingController extends Controller
         $currency = trim(config('app.active_currency_symbol')); // $, ₹, €
         $lwhUnit = $isUS ? 'Inches' : 'CM';
         $weightUnit = $isUS ? 'LBS' : 'KG';
-
         $headers = [
             'S.No',
             'SKU',
@@ -939,29 +1092,35 @@ class SourcingController extends Controller
             'Product Name',
             'Image',
             'Description',
+            'Product Specification',//added
             'HSN/HTS',
+            'Duty %',//added
             'Qty',
             "Vendor FOB({$currency})",
             "Vendor WSP({$currency})",
             "Total Price({$currency})",
-            "Length ({$lwhUnit})",
-            "Width ({$lwhUnit})",
-            "Height ({$lwhUnit})",
-            "Weight ({$weightUnit})",
-            'Material',
+            "Product Length ({$lwhUnit})",
+            "Product Width ({$lwhUnit})",
+            "Product Height ({$lwhUnit})",
+            "Product Weight ({$weightUnit})",
+            'Material Composition',
+            'Other Material',//added
             'Color',
-            'Finish',
+            'Product Finish',
             'Category',
-            'Qty/Inner Pack',
-            'Inner Carton Length',
-            'Inner Carton Width',
-            'Inner Carton Height',
-            'Inner Carton Weight',
-            'Qty/Master Pack',
-            'Master Carton Length',
-            'Master Carton Width',
-            'Master Carton Height',
-            'Master Carton Weight',
+            'Sub Category',//added
+            'Qty In Inner Pack',
+            "Inner Carton Length({$lwhUnit})",
+            "Inner Carton Width({$lwhUnit})",
+            "Inner Carton Height({$lwhUnit})",
+            "Inner Carton Weight({$weightUnit})",
+            'Qty In Master Pack',
+            "Master Carton Length ({$lwhUnit})",
+            "Master Carton Width ({$lwhUnit})",
+            "Master Carton Height ({$lwhUnit})",
+            "Master Carton Weight ({$weightUnit})",
+            'No Of Master Carton',//added
+            'Qty Offered (Units/Sets)',//added
             'CBM/Unit',
             'Total CBM'
         ];
@@ -1137,5 +1296,134 @@ class SourcingController extends Controller
         }
 
         return response()->json(['success' => true, 'message' => "{$updated} item(s) updated.", 'details' => $details]);
+    }
+
+    // ── DELETE OFFER SHEET ──
+    public function deleteOfferSheet(\App\Models\OfferSheet $offerSheet)
+    {
+        // Permission check
+        if (!auth()->user()->isAdmin() && !\App\Services\PermissionService::can(auth()->user(), 'sourcing.offer-sheet.delete')) {
+            abort(403, 'You do not have permission to delete offer sheets.');
+        }
+
+        $number = $offerSheet->offer_sheet_number;
+        $itemCount = $offerSheet->items()->count();
+
+        \DB::transaction(function () use ($offerSheet) {
+            $offerSheet->items()->delete();
+            $offerSheet->delete();
+        });
+
+        \App\Models\ActivityLog::log('deleted', 'offer_sheet', null, null, [
+            'offer_sheet_number' => $number,
+            'items_deleted'      => $itemCount,
+            'deleted_by'         => auth()->user()->name,
+        ], "Offer sheet {$number} deleted with {$itemCount} items by " . auth()->user()->name);
+
+        return redirect()->route('sourcing.offer-sheets')->with('success', "Offer sheet {$number} deleted ({$itemCount} items).");
+    }
+
+    // ── DELETE LIVE SHEET ──
+    public function deleteLiveSheet(\App\Models\LiveSheet $liveSheet)
+    {
+        if (!auth()->user()->isAdmin() && !\App\Services\PermissionService::can(auth()->user(), 'sourcing.live-sheet.delete')) {
+            abort(403, 'You do not have permission to delete live sheets.');
+        }
+
+        // Prevent deleting locked live sheets unless admin
+        if ($liveSheet->is_locked && !auth()->user()->isAdmin()) {
+            return back()->with('error', 'Cannot delete a locked live sheet. Contact admin.');
+        }
+
+        $number = $liveSheet->live_sheet_number;
+        $itemCount = $liveSheet->items()->count();
+
+        \DB::transaction(function () use ($liveSheet) {
+            // Delete related data
+            \DB::table('commission_revisions')->where('live_sheet_id', $liveSheet->id)->delete();
+            \DB::table('wsp_revisions')->where('live_sheet_id', $liveSheet->id)->delete();
+            $liveSheet->items()->delete();
+            $liveSheet->delete();
+        });
+
+        \App\Models\ActivityLog::log('deleted', 'live_sheet', null, null, [
+            'live_sheet_number' => $number,
+            'items_deleted'     => $itemCount,
+            'deleted_by'        => auth()->user()->name,
+        ], "Live sheet {$number} deleted with {$itemCount} items by " . auth()->user()->name);
+
+        return redirect()->route('sourcing.live-sheets')->with('success', "Live sheet {$number} deleted ({$itemCount} items).");
+    }
+
+    // ── DELETE ITEM FROM LIVE SHEET ──
+    public function deleteLiveSheetItem(\App\Models\LiveSheet $liveSheet, \App\Models\LiveSheetItem $item)
+    {
+        if (!auth()->user()->isAdmin() && !\App\Services\PermissionService::can(auth()->user(), 'sourcing.live-sheet.delete')) {
+            abort(403, 'You do not have permission to delete live sheet items.');
+        }
+
+        if ($item->live_sheet_id !== $liveSheet->id) {
+            abort(404);
+        }
+
+        if ($liveSheet->is_locked && !auth()->user()->isAdmin()) {
+            return response()->json(['error' => 'Cannot delete items from a locked live sheet.'], 422);
+        }
+
+        $sku = $item->product->sku ?? '—';
+        $productName = $item->product->name ?? '—';
+
+        // Delete WSP revisions for this product on this live sheet
+        \DB::table('wsp_revisions')
+            ->where('live_sheet_id', $liveSheet->id)
+            ->where('product_id', $item->product_id)
+            ->delete();
+
+        $item->delete();
+
+        // Recalculate totals
+        $liveSheet->update([
+            'total_cbm' => $liveSheet->items()->sum('total_cbm'),
+        ]);
+
+        \App\Models\ActivityLog::log('deleted', 'live_sheet_item', $liveSheet, null, [
+            'sku'           => $sku,
+            'product_name'  => $productName,
+            'product_id'    => $item->product_id,
+            'deleted_by'    => auth()->user()->name,
+        ], "Product {$sku} ({$productName}) removed from {$liveSheet->live_sheet_number} by " . auth()->user()->name);
+
+        if (request()->expectsJson()) {
+            return response()->json(['success' => true, 'message' => "Product {$sku} removed from live sheet."]);
+        }
+
+        return back()->with('success', "Product {$sku} ({$productName}) removed from live sheet.");
+    }
+
+    // ── DELETE ITEM FROM OFFER SHEET ──
+    public function deleteOfferSheetItem(\App\Models\OfferSheet $offerSheet, \App\Models\OfferSheetItem $item)
+    {
+        if (!auth()->user()->isAdmin() && !\App\Services\PermissionService::can(auth()->user(), 'sourcing.offer-sheet.delete')) {
+            abort(403);
+        }
+
+        if ($item->offer_sheet_id !== $offerSheet->id) {
+            abort(404);
+        }
+
+        $sku = $item->product_sku ?? '—';
+        $item->delete();
+
+        $offerSheet->update(['total_products' => $offerSheet->items()->count()]);
+
+        \App\Models\ActivityLog::log('deleted', 'offer_sheet_item', $offerSheet, null, [
+            'sku' => $sku, 'deleted_by' => auth()->user()->name,
+        ], "Product {$sku} removed from {$offerSheet->offer_sheet_number}");
+
+        if (request()->expectsJson()) {
+            return response()->json(['success' => true, 'message' => "Product {$sku} removed."]);
+        }
+
+        return back()->with('success', "Product {$sku} removed from offer sheet.");
     }
 }
