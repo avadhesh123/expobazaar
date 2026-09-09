@@ -1314,7 +1314,7 @@ class SourcingController extends Controller
             $offerSheet->delete();
         });
 
-        \App\Models\ActivityLog::log('deleted', 'offer_sheet', null, null, [
+        \App\Models\ActivityLog::log('deleted', 'offer_sheet', auth()->user(), null, [
             'offer_sheet_number' => $number,
             'items_deleted'      => $itemCount,
             'deleted_by'         => auth()->user()->name,
@@ -1346,7 +1346,7 @@ class SourcingController extends Controller
             $liveSheet->delete();
         });
 
-        \App\Models\ActivityLog::log('deleted', 'live_sheet', null, null, [
+        \App\Models\ActivityLog::log('deleted', 'live_sheet', auth()->user(), null, [
             'live_sheet_number' => $number,
             'items_deleted'     => $itemCount,
             'deleted_by'        => auth()->user()->name,
@@ -1386,7 +1386,7 @@ class SourcingController extends Controller
             'total_cbm' => $liveSheet->items()->sum('total_cbm'),
         ]);
 
-        \App\Models\ActivityLog::log('deleted', 'live_sheet_item', $liveSheet, null, [
+        \App\Models\ActivityLog::log('deleted', 'live_sheet_item', $liveSheet, auth()->user(), [
             'sku'           => $sku,
             'product_name'  => $productName,
             'product_id'    => $item->product_id,
@@ -1416,7 +1416,7 @@ class SourcingController extends Controller
 
         $offerSheet->update(['total_products' => $offerSheet->items()->count()]);
 
-        \App\Models\ActivityLog::log('deleted', 'offer_sheet_item', $offerSheet, null, [
+        \App\Models\ActivityLog::log('deleted', 'offer_sheet_item', $offerSheet, auth()->user(), [
             'sku' => $sku, 'deleted_by' => auth()->user()->name,
         ], "Product {$sku} removed from {$offerSheet->offer_sheet_number}");
 

@@ -367,60 +367,73 @@ document.addEventListener('DOMContentLoaded', function() {
         <div class="loader-spinner"></div>
         <div class="loader-text">Processing...</div>
         <div class="loader-sub">Please wait, do not refresh the page</div>
+        <button id="loaderCloseBtn" onclick="hideLoader()" style="display:none;margin-top:1rem;background:none;border:1px solid #d1d5db;border-radius:6px;padding:.3rem .8rem;font-size:.75rem;color:#64748b;cursor:pointer;font-family:inherit;">
+            <i class="fas fa-times" style="margin-right:.3rem;"></i> Close
+        </button>
     </div>
 </div>
 
 <script>
+var loaderTimer = null;
+
+function showLoaderCloseBtn() {
+    clearTimeout(loaderTimer);
+    loaderTimer = setTimeout(function() {
+        var btn = document.getElementById('loaderCloseBtn');
+        if (btn && document.getElementById('globalLoader').style.display === 'flex') {
+            btn.style.display = 'inline-block';
+        }
+    }, 1000);
+}
+
+function hideLoader() {
+    $('#globalLoader').fadeOut(300, function() { $(this).css('display', 'none'); });
+    var btn = document.getElementById('loaderCloseBtn');
+    if (btn) btn.style.display = 'none';
+    clearTimeout(loaderTimer);
+
+    // Restore all disabled submit buttons
+    $('button[type="submit"]:disabled').each(function() {
+        var original = $(this).data('original-html');
+        if (original) {
+            $(this).prop('disabled', false).html(original);
+        }
+    });
+}
+
 $(document).ready(function() {
 
-    // Global Loader for ALL Forms (except AJAX, downloads, and excluded forms)
     $(document).on('submit', 'form', function(e) {
         var $form = $(this);
 
-        // Skip loader for these cases
         if ($form.hasClass('no-loader')) return;
         if ($form.attr('target') === '_blank') return;
         if ($form.data('ajax')) return;
 
-        // Skip for file download forms (they don't navigate away)
         var action = ($form.attr('action') || '').toLowerCase();
         if (action.includes('download') || action.includes('export') || action.includes('template')) return;
 
-        // Show loader with flex display for centering
         $('#globalLoader').css('display', 'flex').hide().fadeIn(200);
+        showLoaderCloseBtn();
 
-        // Disable submit button to prevent double submit
         var $btn = $form.find('button[type="submit"]');
         if ($btn.length) {
-            $btn.data('original-html', $btn.html());
+            if (!$btn.data('original-html')) {
+                $btn.data('original-html', $btn.html());
+            }
             $btn.prop('disabled', true)
                 .html('<i class="fas fa-spinner fa-spin"></i> Processing...');
         }
     });
 
-    // Hide loader after AJAX requests
-    $(document).ajaxComplete(function() {
-        hideLoader();
-    });
-
-    // Hide loader on page load (handles browser back button)
+    $(document).ajaxComplete(function() { hideLoader(); });
     hideLoader();
 
-    // Hide loader if page becomes visible again (tab switch back)
     document.addEventListener('visibilitychange', function() {
         if (!document.hidden) hideLoader();
     });
 
-    function hideLoader() {
-        $('#globalLoader').fadeOut(300, function() {
-            $(this).css('display', 'none');
-        });
-        // Restore all disabled submit buttons
-        $('button[type="submit"]:disabled').each(function() {
-            var original = $(this).data('original-html');
-            if (original) $(this).prop('disabled', false).html(original);
-        });
-    }
+    $('#loaderCloseBtn').on('click', function() { hideLoader(); });
 });
 </script>
 
