@@ -566,7 +566,7 @@ class FinanceController extends Controller
         $liveSheet->load('vendor', 'offerSheet', 'items.product');
         return view('finance.live-sheets.show', compact('liveSheet'));
     }
-    
+
     public function updateSapCodes(Request $request, \App\Models\LiveSheet $liveSheet)
     {
         $request->validate([
@@ -1662,4 +1662,115 @@ class FinanceController extends Controller
         (new \PhpOffice\PhpSpreadsheet\Writer\Xlsx($spreadsheet))->save($path);
         return response()->download($path, $filename)->deleteFileAfterSend(true);
     }
+
+
+    public function recordPayoutPayment(Request $request, \App\Models\VendorPayout $payout)
+    {
+        $request->validate([
+            'amount'           => 'required|numeric|min:0.01',
+            'payment_date'     => 'required|date',
+            'payment_mode'     => 'nullable|string|in:bank_transfer,cheque,upi,cash,other',
+            'reference_number' => 'nullable|string|max:100',
+            'remarks'          => 'nullable|string|max:500',
+        ]);
+
+        // Calculate how much is already paid
+        $totalPaid = \App\Models\PayoutPayment::where('vendor_payout_id', $payout->id)->sum('amount');
+        $balanceDue = round(floatval($payout->net_payout) - $totalPaid, 2);
+        $newAmount = floatval($request->amount);
+
+        // Validate: amount must not exceed balance
+        if ($newAmount > $balanceDue + 0.01) { // +0.01 for floating point
+            $error = "Payment amount ({$newAmount}) exceeds balance due ({$balanceDue}). Net payout is {$payout->net_payout}, already paid {$totalPaid}.";
+            if ($request->expectsJson()) {
+                return response()->json(['error' => $error], 422);
+            }
+            return back()->with('error', $error);
+        }
+
+        // Record payment
+        $payment = \App\Models\PayoutPayment::create([
+            'vendor_payout_id' => $payout->id,
+            'vendor_id'        => $payout->vendor_id,
+            'company_code'     => $payout->company_code,
+            'amount'           => $newAmount,
+            'payment_date'     => $request->payment_date,
+            'payment_mode'     => $request->payment_mode,
+            'reference_number' => $request->reference_number,
+            'remarks'          => $request->remarks,
+            'created_by'       => auth()->id(),
+        ]);
+
+        // Update payout totals
+        $newTotalPaid = round($totalPaid + $newAmount, 2);
+        $newBalance = round(floatval($payout->net_payout) - $newTotalPaid, 2);
+
+        $status = 'calculated';
+        if ($newBalance <= 0.01) {
+            $status = 'paid';
+        } elseif ($newTotalPaid > 0) {
+            $status = 'partially_paid';
+        }
+
+        $payout->update([
+            'total_paid'   => $newTotalPaid,
+            'balance_due'  => max(0, $newBalance),
+            'paid_amount'  => $newTotalPaid,
+            'paid_date'    => $request->payment_date,
+            'status'       => $status,
+        ]);
+
+        \App\Models\ActivityLog::log('payment', 'vendor_payout', $payout, null, [
+            'payment_id'    => $payment->id,
+            'amount'        => $newAmount,
+            'total_paid'    => $newTotalPaid,
+            'balance_due'   => max(0, $newBalance),
+            'payment_mode'  => $request->payment_mode,
+            'reference'     => $request->reference_number,
+            'status'        => $status,
+        ], "Payment of {$newAmount} recorded for {$payout->vendor->company_name} {$payout->payout_month}/{$payout->payout_year} — {$status}");
+
+        $msg = "Payment of " . number_format($newAmount, 2) . " recorded. ";
+        $msg .= $newBalance <= 0.01 ? "Payout fully paid." : "Balance due: " . number_format(max(0, $newBalance), 2);
+
+        if ($request->expectsJson()) {
+            return response()->json(['success' => true, 'message' => $msg, 'status' => $status, 'total_paid' => $newTotalPaid, 'balance_due' => max(0, $newBalance)]);
+        }
+
+        return back()->with('success', $msg);
+    }
+
+    public function deletePayoutPayment(\App\Models\PayoutPayment $payment)
+    {
+        $payout = $payment->payout;
+        $amount = $payment->amount;
+        $payment->delete();
+
+        // Recalculate totals
+        $totalPaid = \App\Models\PayoutPayment::where('vendor_payout_id', $payout->id)->sum('amount');
+        $balance = round(floatval($payout->net_payout) - $totalPaid, 2);
+
+        $status = 'calculated';
+        if ($balance <= 0.01 && $totalPaid > 0) {
+            $status = 'paid';
+        } elseif ($totalPaid > 0) {
+            $status = 'partially_paid';
+        }
+
+        $payout->update([
+            'total_paid'  => $totalPaid,
+            'balance_due' => max(0, $balance),
+            'paid_amount' => $totalPaid,
+            'status'      => $status,
+        ]);
+
+        \App\Models\ActivityLog::log('deleted', 'payout_payment', $payout, null, [
+            'deleted_amount' => $amount,
+            'new_total_paid' => $totalPaid,
+            'new_balance'    => max(0, $balance),
+        ], "Payment of {$amount} deleted — balance: {$balance}");
+
+        return back()->with('success', "Payment of " . number_format($amount, 2) . " removed. Balance due: " . number_format(max(0, $balance), 2));
+    }
+
 }

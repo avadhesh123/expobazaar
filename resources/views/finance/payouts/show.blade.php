@@ -6,10 +6,17 @@
 @php
 //$currency = match($payout->company_code) { '2000' => '₹', '2200' => '€', default => '$' };
 $monthName = \Carbon\Carbon::create($payout->payout_year, $payout->payout_month)->format('F Y');
-@endphp
 
-{{-- Payout Header --}}
+$payments = \App\Models\PayoutPayment::where('vendor_payout_id', $payout->id)
+    ->orderByDesc('payment_date')
+    ->with('creator')
+    ->get();
+$totalPaid = $payments->sum('amount');
+$balanceDue = max(0, round(floatval($payout->net_payout) - $totalPaid, 2));
+$isFullyPaid = $balanceDue <= 0.01 && $totalPaid > 0;
+@endphp
 <div class="card" style="margin-bottom:1.25rem;">
+
     <div class="card-body" style="padding:1rem 1.4rem;">
         <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:1rem;font-size:.82rem;">
             <div>
@@ -63,7 +70,163 @@ $monthName = \Carbon\Carbon::create($payout->payout_year, $payout->payout_month)
         <div class="kpi-value" style="color:#7c3aed;">{{ $activeCurrencySymbol }}{{ number_format($payoutSummary['total_payout'], 2) }}</div>
     </div>
 </div>
+<div class="card" style="margin-bottom:1.25rem;">
 
+{{-- Payout Header --}}
+     <div class="card-header">
+        <h3><i class="fas fa-money-check-alt" style="margin-right:.5rem;color:#16a34a;"></i> Payment Tracking</h3>
+        <div style="display:flex;align-items:center;gap:.75rem;">
+            <span style="font-size:.78rem;">
+                Paid: <strong style="color:#16a34a;">{{ $activeCurrencySymbol }}{{ number_format($totalPaid, 2) }}</strong>
+                &middot;
+                Balance: <strong style="color:{{ $isFullyPaid ? '#16a34a' : '#dc2626' }};">{{ $activeCurrencySymbol }}{{ number_format($balanceDue, 2) }}</strong>
+            </span>
+            @if(!$isFullyPaid)
+            <button type="button" class="btn btn-primary btn-sm" onclick="togglePaymentForm()">
+    <i class="fas fa-plus" style="margin-right:.2rem;"></i> Record Payment
+        </button>
+            @else
+            <span class="badge badge-success" style="font-size:.72rem;">Fully Paid</span>
+            @endif
+        </div>
+    </div>
+    <script>
+        function togglePaymentForm() {
+            const form = document.getElementById('paymentForm');
+            form.style.display = form.style.display === 'none' ? 'block' : 'none';
+        }
+    </script>
+  {{-- Payment Form --}}
+    <div id="paymentForm" style="display:none;padding:1rem 1.4rem;background:#f0fdf4;border-bottom:1px solid #bbf7d0;">
+        <form method="POST" action="{{ route('finance.payouts.payment', $payout) }}">
+            @csrf
+            <div style="display:flex;gap:.6rem;align-items:flex-end;flex-wrap:wrap;">
+                <div>
+                    <label style="font-size:.65rem;font-weight:600;color:#166534;display:block;margin-bottom:.2rem;">Amount <span style="color:#dc2626;">*</span>(<span style="font-size:.55rem;color:#64748b;margin-top:.15rem;">Max: {{ $activeCurrencySymbol }}{{ number_format($balanceDue, 2) }}</span>)</label>
+                    <input type="number" name="amount" step="0.01" min="0.01" max="{{ $balanceDue }}" value="{{ $balanceDue }}" required
+                        placeholder="{{ number_format($balanceDue, 2) }}"
+                        style="width:110px;padding:.4rem .5rem;border:1.5px solid #bbf7d0;border-radius:6px;font-size:.85rem;font-family:monospace;text-align:center;">
+                </div>
+                <div>
+                    <label style="font-size:.65rem;font-weight:600;color:#166534;display:block;margin-bottom:.2rem;">Payment Date <span style="color:#dc2626;">*</span></label>
+                    <input type="date" name="payment_date" required value="{{ date('Y-m-d') }}"
+                        style="padding:.4rem .5rem;border:1.5px solid #bbf7d0;border-radius:6px;font-size:.82rem;">
+                </div>
+                <div>
+                    <label style="font-size:.65rem;font-weight:600;color:#166534;display:block;margin-bottom:.2rem;">Payment Mode</label>
+                    <select name="payment_mode" style="padding:.4rem .5rem;border:1.5px solid #bbf7d0;border-radius:6px;font-size:.82rem;">
+                        <option value="">Select...</option>
+                        <option value="bank_transfer">Bank Transfer</option>
+                        <option value="cheque">Cheque</option>
+                        <option value="upi">UPI</option>
+                        <option value="cash">Cash</option>
+                        <option value="other">Other</option>
+                    </select>
+                </div>
+                <div>
+                    <label style="font-size:.65rem;font-weight:600;color:#166534;display:block;margin-bottom:.2rem;">Reference #</label>
+                    <input type="text" name="reference_number" placeholder="Txn ID, Cheque #..."
+                        style="width:130px;padding:.4rem .5rem;border:1.5px solid #bbf7d0;border-radius:6px;font-size:.82rem;">
+                </div>
+                <div style="flex:1;min-width:100px;">
+                    <label style="font-size:.65rem;font-weight:600;color:#166534;display:block;margin-bottom:.2rem;">Remarks</label>
+                    <input type="text" name="remarks" placeholder="e.g. Tranche 1, partial payment..."
+                        style="width:100%;padding:.4rem .5rem;border:1.5px solid #bbf7d0;border-radius:6px;font-size:.82rem;">
+                </div>
+                <button type="submit" class="btn btn-primary btn-sm" style="padding:.45rem .8rem;"
+                    onclick="return confirm('Record this payment?')">
+                    <i class="fas fa-save" style="margin-right:.2rem;"></i> Save Payment
+                </button>
+                <button type="button" class="btn btn-outline btn-sm"
+                    onclick="document.getElementById('paymentForm').style.display='none'">Cancel</button>
+            </div>
+        </form>
+    </div>
+
+    {{-- Progress Bar --}}
+    @php $pctPaid = $payout->net_payout > 0 ? min(100, round(($totalPaid / $payout->net_payout) * 100, 1)) : 0; @endphp
+    <div style="padding:.5rem 1.4rem;background:#f8fafc;border-bottom:1px solid #e2e8f0;">
+        <div style="display:flex;justify-content:space-between;font-size:.68rem;color:#64748b;margin-bottom:.25rem;">
+            <span>{{ $pctPaid }}% paid</span>
+            <span>{{ $activeCurrencySymbol }}{{ number_format($totalPaid, 2) }} / {{ $activeCurrencySymbol }}{{ number_format($payout->net_payout, 2) }}</span>
+        </div>
+        <div style="height:6px;background:#e2e8f0;border-radius:3px;overflow:hidden;">
+            <div style="height:100%;width:{{ $pctPaid }}%;background:{{ $isFullyPaid ? '#16a34a' : '#e8a838' }};border-radius:3px;transition:width .3s;"></div>
+        </div>
+    </div>
+
+    {{-- Payment History --}}
+    <div class="card-body" style="padding:0;">
+        @if($payments->isNotEmpty())
+        <table class="data-table" style="font-size:.78rem;margin:0;">
+            <thead>
+                <tr style="background:#f0f4f8;">
+                    <th style="width:30px;">#</th>
+                    <th>Date</th>
+                    <th style="text-align:right;">Amount</th>
+                    <th>Mode</th>
+                    <th>Reference</th>
+                    <th>Remarks</th>
+                    <th>Recorded By</th>
+                    <th style="text-align:right;">Running Total</th>
+                    <th style="width:40px;"></th>
+                </tr>
+            </thead>
+            <tbody>
+                @php $runningTotal = 0; @endphp
+                @foreach($payments->sortBy('payment_date')->values() as $idx => $payment)
+                @php $runningTotal += floatval($payment->amount); @endphp
+                <tr>
+                    <td style="text-align:center;color:#94a3b8;">{{ $idx + 1 }}</td>
+                    <td style="font-family:monospace;font-size:.75rem;">{{ $payment->payment_date->format('d M Y') }}</td>
+                    <td style="text-align:right;font-family:monospace;font-weight:700;color:#16a34a;">{{ $activeCurrencySymbol }}{{ number_format($payment->amount, 2) }}</td>
+                    <td>
+                        @php
+                            $modeLabels = ['bank_transfer'=>'Bank Transfer','cheque'=>'Cheque','upi'=>'UPI','cash'=>'Cash','other'=>'Other'];
+                            $modeColors = ['bank_transfer'=>'#1e40af','cheque'=>'#7c3aed','upi'=>'#16a34a','cash'=>'#e8a838','other'=>'#64748b'];
+                        @endphp
+                        @if($payment->payment_mode)
+                        <span style="font-size:.65rem;padding:1px 6px;border-radius:4px;background:{{ $modeColors[$payment->payment_mode] ?? '#64748b' }}15;color:{{ $modeColors[$payment->payment_mode] ?? '#64748b' }};font-weight:600;">
+                            {{ $modeLabels[$payment->payment_mode] ?? $payment->payment_mode }}
+                        </span>
+                        @else
+                        <span style="color:#94a3b8;">—</span>
+                        @endif
+                    </td>
+                    <td style="font-family:monospace;font-size:.72rem;">{{ $payment->reference_number ?? '—' }}</td>
+                    <td style="font-size:.72rem;color:#64748b;">{{ $payment->remarks ?? '—' }}</td>
+                    <td style="font-size:.72rem;">{{ $payment->creator->name ?? '—' }}</td>
+                    <td style="text-align:right;font-family:monospace;font-size:.72rem;color:#64748b;">{{ $activeCurrencySymbol }}{{ number_format($runningTotal, 2) }}</td>
+                    <td>
+                        <form method="POST" action="{{ route('finance.payout-payment.delete', $payment) }}" onsubmit="return confirm('Delete this payment of {{ $activeCurrencySymbol }}{{ number_format($payment->amount, 2) }}?')" style="display:inline;">
+                            @csrf @method('DELETE')
+                            <button type="submit" style="background:none;border:none;color:#dc2626;cursor:pointer;font-size:.7rem;padding:2px;" title="Delete"><i class="fas fa-trash"></i></button>
+                        </form>
+                    </td>
+                </tr>
+                @endforeach
+            </tbody>
+            <tfoot>
+                <tr style="background:#f0fdf4;font-weight:700;">
+                    <td colspan="2">Total Paid</td>
+                    <td style="text-align:right;font-family:monospace;color:#16a34a;">{{ $activeCurrencySymbol }}{{ number_format($totalPaid, 2) }}</td>
+                    <td colspan="4"></td>
+                    <td style="text-align:right;font-family:monospace;color:{{ $isFullyPaid ? '#16a34a' : '#dc2626' }};">
+                        Balance: {{ $activeCurrencySymbol }}{{ number_format($balanceDue, 2) }}
+                    </td>
+                    <td></td>
+                </tr>
+            </tfoot>
+        </table>
+        @else
+        <div style="padding:1.5rem;text-align:center;color:#94a3b8;font-size:.82rem;">
+            <i class="fas fa-money-check-alt" style="font-size:1.5rem;display:block;margin-bottom:.3rem;"></i>
+            No payments recorded yet.
+            <div style="font-size:.72rem;margin-top:.3rem;">Click "+ Record Payment" to add the first tranche.</div>
+        </div>
+        @endif
+    </div>
+</div>
 {{-- SKU-Level Breakdown --}}
 <div class="card" style="margin-bottom:1.25rem;">
     <div class="card-header">
@@ -254,6 +417,8 @@ $finalPayout = $payoutSummary['total_payout'] - $totalWhCharges - $totalChargeba
             </tr>
         </table>
     </div>
+
+    
 </div>
 
 <div style="margin-top:1rem;display:flex;gap:.5rem;">

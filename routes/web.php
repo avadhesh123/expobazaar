@@ -399,6 +399,8 @@ Route::middleware(['auth'])->group(function () {
 
         Route::get('payouts/{payout}/download', [FinanceController::class, 'downloadPayout'])->name('payouts.download');
 
+        Route::post('payouts/{payout}/payment', [FinanceController::class, 'recordPayoutPayment'])->name('payouts.payment');
+        Route::delete('payout-payment/{payment}', [FinanceController::class, 'deletePayoutPayment'])->name('payout-payment.delete');
 
     });
 
