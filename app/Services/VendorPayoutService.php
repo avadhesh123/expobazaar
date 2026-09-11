@@ -211,14 +211,28 @@ class VendorPayoutService
         }
 
         // ── 5. Warehouse charges ──
+        // $warehouseCharges = \App\Models\VendorMonthlyCharge::withoutGlobalScopes()
+        //     ->where('vendor_id', $vendorId)
+        //     ->where('company_code', $companyCode)
+        //     ->where('charge_month', $month)
+        //     ->where('charge_year', $year)
+        //     ->where('status', 'approved')
+        //     ->with('warehouse')
+        //     ->get();
+
         $warehouseCharges = \App\Models\VendorMonthlyCharge::withoutGlobalScopes()
             ->where('vendor_id', $vendorId)
             ->where('company_code', $companyCode)
             ->where('charge_month', $month)
             ->where('charge_year', $year)
             ->where('status', 'approved')
+            ->where(function ($q) {
+                $q->where('charge_status', 'active')
+                  ->orWhereNull('charge_status');
+            })
             ->with('warehouse')
             ->get();
+
         $totalWarehouseCharges = $warehouseCharges->sum(fn ($c) => floatval($c->total_charges ?? $c->calculated_amount ?? 0));
         // ── 6. Chargebacks ──
         $chargebacks = Chargeback::withoutGlobalScopes()

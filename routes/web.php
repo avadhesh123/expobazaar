@@ -404,6 +404,9 @@ Route::middleware(['auth'])->group(function () {
         Route::post('payouts/{payout}/payment', [FinanceController::class, 'recordPayoutPayment'])->name('payouts.payment');
         Route::delete('payout-payment/{payment}', [FinanceController::class, 'deletePayoutPayment'])->name('payout-payment.delete');
 
+        Route::post('vendor-charges/{charge}/supersede', [FinanceController::class, 'supersedeCharge'])->name('vendor-charges.supersede');
+        Route::post('vendor-charges/{charge}/restore', [FinanceController::class, 'restoreCharge'])->name('vendor-charges.restore');
+
     });
 
 

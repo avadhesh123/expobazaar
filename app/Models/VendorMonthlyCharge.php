@@ -18,6 +18,7 @@ class VendorMonthlyCharge extends Model
         'material_cost', 'total_charges',
         'status', 'approved_by', 'approved_at', 'deducted_from_payout_id',
         'is_locked', 'calculation_snapshot', 'notes', 'created_by',
+        'charge_status', 'superseded_by', 'superseded_at', 'supersede_reason',
     ];
 
     protected $casts = [
@@ -27,6 +28,7 @@ class VendorMonthlyCharge extends Model
         'storage_cft'      => 'decimal:4',
         'approved_at'      => 'datetime', 'is_locked' => 'boolean',
         'calculation_snapshot' => 'array',
+        'superseded_at' => 'datetime',
     ];
 
     public function vendor()    { return $this->belongsTo(Vendor::class); }
@@ -44,4 +46,5 @@ class VendorMonthlyCharge extends Model
     }
 
     public function getCurrencySymbol(): string { return $this->currency === 'EUR' ? '€' : '$'; }
+    public function supersededBy() { return $this->belongsTo(\App\Models\User::class, 'superseded_by'); }
 }

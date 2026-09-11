@@ -22,10 +22,10 @@ $isFullyPaid = $balanceDue <= 0.01 && $totalPaid > 0;
             <div>
                 <div style="font-size:.65rem;color:#64748b;font-weight:600;text-transform:uppercase;">Vendor</div>
                 <div style="font-weight:700;">{{ $payout->vendor->company_name ?? '—' }} ({{ $payout->company_code }})</div>
-            </div>
+               </div>
             <div>
                 <div style="font-size:.65rem;color:#64748b;font-weight:600;text-transform:uppercase;">Period</div>
-                <div style="font-weight:600;">{{ $monthName }}</div>
+                <div style="font-weight:600;">{{ $monthName }} {{$totalPaid}} == {{$payout->net_payout}}</div>
             </div>
              
             <div>
@@ -243,7 +243,7 @@ $isFullyPaid = $balanceDue <= 0.01 && $totalPaid > 0;
                     <th style="text-align:center;">QTY</th>
                     <th style="text-align:right;">Sale Amount</th>
                     <th style="text-align:right;">EB Commission</th>
-                    <th style="text-align:right;background:#f5f3ff;">Net Payout</th>
+                    <th style="text-align:right;background:#f5f3ff;">Gross Payout</th>
                 </tr>
             </thead>
             <tbody>

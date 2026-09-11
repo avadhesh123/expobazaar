@@ -364,6 +364,10 @@ class FinanceController extends Controller
                 ->where('charge_month', $payout->payout_month)
                 ->where('charge_year', $payout->payout_year)
                 ->where('status', 'approved')
+                 ->where(function ($q) {
+                     $q->where('charge_status', 'active')
+                       ->orWhereNull('charge_status');
+                 })
                 ->with('warehouse')
                 ->get();
             // echo '<pre>';
@@ -1772,5 +1776,67 @@ class FinanceController extends Controller
 
         return back()->with('success', "Payment of " . number_format($amount, 2) . " removed. Balance due: " . number_format(max(0, $balance), 2));
     }
+
+    public function supersedeCharge(Request $request, \App\Models\VendorMonthlyCharge $charge)
+    {
+        $request->validate([
+            'supersede_reason' => 'required|string|max:500',
+        ]);
+
+        if ($charge->charge_status === 'superseded') {
+            return back()->with('error', 'This charge is already superseded.');
+        }
+
+        $charge->update([
+            'charge_status'    => 'superseded',
+            'superseded_by'    => auth()->id(),
+            'superseded_at'    => now(),
+            'supersede_reason' => $request->supersede_reason,
+        ]);
+
+        $vendor = $charge->vendor;
+        $period = date('M Y', mktime(0, 0, 0, $charge->charge_month, 1, $charge->charge_year));
+        $amount = floatval($charge->total_charge ?? $charge->calculated_amount ?? 0);
+
+        \App\Models\ActivityLog::log('superseded', 'vendor_monthly_charge', $charge, null, [
+            'vendor'  => $vendor->company_name ?? '—',
+            'period'  => $period,
+            'amount'  => $amount,
+            'reason'  => $request->supersede_reason,
+            'voided_by' => auth()->user()->name,
+        ], "Charge of {$amount} superseded for {$vendor->company_name} ({$period}) — {$request->supersede_reason}");
+
+        return back()->with('success', "Charge of " . number_format($amount, 2) . " for {$vendor->company_name} ({$period}) has been superseded.");
+    }
+
+    public function restoreCharge(Request $request, \App\Models\VendorMonthlyCharge $charge)
+    {
+        if ($charge->charge_status !== 'superseded') {
+            return back()->with('error', 'This charge is not superseded.');
+        }
+
+        $oldReason = $charge->supersede_reason;
+
+        $charge->update([
+            'charge_status'    => 'active',
+            'superseded_by'    => null,
+            'superseded_at'    => null,
+            'supersede_reason' => null,
+        ]);
+
+        $vendor = $charge->vendor;
+        $amount = floatval($charge->total_charge ?? $charge->calculated_amount ?? 0);
+
+        \App\Models\ActivityLog::log('restored', 'vendor_monthly_charge', $charge, null, [
+            'vendor'     => $vendor->company_name ?? '—',
+            'amount'     => $amount,
+            'old_reason' => $oldReason,
+            'restored_by' => auth()->user()->name,
+        ], "Charge of {$amount} restored for {$vendor->company_name} by " . auth()->user()->name);
+
+        return back()->with('success', "Charge restored to active.");
+    }
+
+
 
 }
