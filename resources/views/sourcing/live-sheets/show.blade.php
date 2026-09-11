@@ -355,17 +355,52 @@ $disabled = $liveSheet->is_locked ? 'disabled' : '';
                         @endif                        
                        </td>
                         <td style="text-align:center;">{{ $d['duty_percent'] ?? '—' }}</td>
-                        <td style="text-align:center;font-family:monospace;">{{ $d['length'] ?? $d['length_inches'] ?? '—' }}</td>
-                        <td style="text-align:center;font-family:monospace;">{{ $d['width'] ?? $d['width_inches'] ?? '—' }}</td>
-                        <td style="text-align:center;font-family:monospace;">{{ $d['height'] ?? $d['height_inches'] ?? '—' }}</td>
-                        <td style="text-align:center;font-family:monospace;">{{ $d['weight'] ?? $d['weight_grams'] ?? '—' }}</td>
+                        <td style="text-align:center;font-family:monospace;">
+                            <span class="cell-text">{{ $d['length'] ?? $d['length_inches'] ?? '—'  }}</span>
+                            @if(!$liveSheet->is_locked)
+                            <i class="fas fa-pen cell-edit-icon" onclick="editCell({{ $item->id }}, 'length', this)" title="Edit"></i>
+                            @endif
+                        </td>
+                        <td style="text-align:center;font-family:monospace;">
+                             <span class="cell-text">{{ $d['width'] ?? $d['width_inches'] ?? '—'  }}</span>
+                            @if(!$liveSheet->is_locked)
+                            <i class="fas fa-pen cell-edit-icon" onclick="editCell({{ $item->id }}, 'width', this)" title="Edit"></i>
+                            @endif
+                        </td>
+                        <td style="text-align:center;font-family:monospace;">
+                             <span class="cell-text">{{ $d['height'] ?? $d['height_inches'] ?? '—'  }}</span>
+                            @if(!$liveSheet->is_locked)
+                            <i class="fas fa-pen cell-edit-icon" onclick="editCell({{ $item->id }}, 'height', this)" title="Edit"></i>
+                            @endif
+                        </td>
+                        <td style="text-align:center;font-family:monospace;"> 
+                            <span class="cell-text">{{ $d['weight'] ?? $d['weight_grams'] ?? '—'  }}</span>
+                            @if(!$liveSheet->is_locked)
+                            <i class="fas fa-pen cell-edit-icon" onclick="editCell({{ $item->id }}, 'weight', this)" title="Edit"></i>
+                            @endif
+                        </td>
                         <td class="td-font"><input {{$disabled }} type="text" name="items[{{ $idx }}][material]" value="{{ $d['material'] ?? '' }}" style="width:70px;" class="edit-input"></td>
 
                         <td>{{ $d['other_material'] ?? '—' }}</td>
-                        <td>{{ $d['color'] ?? '—' }}</td>
+                        <td>
+                            <span class="cell-text">{{ $d['color'] ??   '—'  }}</span>
+                            @if(!$liveSheet->is_locked)
+                            <i class="fas fa-pen cell-edit-icon" onclick="editCell({{ $item->id }}, 'color', this)" title="Edit"></i>
+                            @endif
+                        </td>
                         <td>{{ $d['finish'] ?? '—' }}</td>
-                        <td>{{ $d['category'] ?? '—' }}</td>
-                        <td>{{ $d['sub_category'] ?? '—' }}</td>
+                        <td> 
+                              <span class="cell-text">{{ $d['category']  ?? '—'  }}</span>
+                            @if(!$liveSheet->is_locked)
+                            <i class="fas fa-pen cell-edit-icon" onclick="editCell({{ $item->id }}, 'category', this)" title="Edit"></i>
+                            @endif
+                        </td>
+                        <td> 
+                              <span class="cell-text">{{ $d['sub_category']  ?? '—'  }}</span>
+                            @if(!$liveSheet->is_locked)
+                            <i class="fas fa-pen cell-edit-icon" onclick="editCell({{ $item->id }}, 'sub_category', this)" title="Edit"></i>
+                            @endif
+                        </td>
                         <td style="text-align:center;">{{ $d['qty_inner_pack'] ?? '—' }}</td>                       
                         <td style="text-align:center;font-family:monospace;">{{ $d['inner_carton_length'] ?? $d['inner_length'] ?? '—' }}</td>
                         <td style="text-align:center;font-family:monospace;">{{ $d['inner_carton_width'] ?? $d['inner_width'] ?? '—' }}</td>
@@ -551,8 +586,15 @@ td:hover .cell-edit-icon { opacity:1; }
 }
 .cell-saving { opacity:.5; pointer-events:none; }
 </style>
+@php
+    $allCategories = \App\Models\Category::orderBy('name')->pluck('name')->toArray();
+@endphp
 
+ >
 <script>
+    
+const categoryList = @json($allCategories);
+
 var fieldConfig = {
     product_name: { type: 'textarea', width: '180px' },
     description:  { type: 'textarea', width: '180px' },
@@ -565,6 +607,8 @@ var fieldConfig = {
     material:     { type: 'text',     width: '90px' },
     color:        { type: 'text',     width: '70px' },
     finish:       { type: 'text',     width: '70px' },
+    category:     { type: 'suggest',  width: '120px' },   // ← new
+    sub_category: { type: 'suggest',  width: '120px' },
 };
 function editCell(itemId, field, icon) {
     var td = icon.closest('td');
@@ -584,6 +628,26 @@ function editCell(itemId, field, icon) {
         input.className = 'cell-textarea';
         input.rows = 2;
         input.style.width = config.width;
+    }else if (config.type === 'suggest') {
+        // Create input with datalist (autocomplete)
+        input = document.createElement('input');
+        input.className = 'cell-input';
+        input.type = 'text';
+        input.style.width = config.width;
+        input.setAttribute('list', 'category-suggestions');
+        input.setAttribute('autocomplete', 'off');
+
+        // Create datalist if not already present
+        if (!document.getElementById('category-suggestions')) {
+            var datalist = document.createElement('datalist');
+            datalist.id = 'category-suggestions';
+            categoryList.forEach(function(name) {
+                var option = document.createElement('option');
+                option.value = name;
+                datalist.appendChild(option);
+            });
+            document.body.appendChild(datalist);
+        }
     } else {
         input = document.createElement('input');
         input.className = 'cell-input';

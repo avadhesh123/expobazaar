@@ -479,7 +479,7 @@ $(document).ready(function() {
 <script>
 // Open with Ctrl+F
 document.addEventListener('keydown', function(e) {
-    if ((e.ctrlKey || e.metaKey) && e.key === 'f') {
+    if ((e.ctrlKey || e.metaKey) && e.shiftKey &&  e.key.toLowerCase() === 'f') {
         e.preventDefault();
         openSkuSearch();
     }

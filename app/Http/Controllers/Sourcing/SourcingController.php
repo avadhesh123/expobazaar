@@ -1244,9 +1244,13 @@ class SourcingController extends Controller
             'items.*.color'       => 'nullable|string|max:100',
             'items.*.qty_inner_pack'  => 'nullable|integer|min:0',
             'items.*.qty_master_pack' => 'nullable|integer|min:0',
+            'items.*.category' => 'nullable|string|max:100',
+            'items.*.sub_category' => 'nullable|string|max:100',
         ]);
 
         $updated = 0;
+        $details = [];
+        $errors = [];
         foreach ($request->items as $data) {
             $item = \App\Models\LiveSheetItem::where('id', $data['id'])
                 ->where('live_sheet_id', $liveSheet->id)->first();
@@ -1254,8 +1258,57 @@ class SourcingController extends Controller
                 continue;
             }
 
+            // ── Category Validation ────────────────────────────────
+            if (!empty($data['category'])) {
+                $categoryExists = \App\Models\Category::where('name', $data['category'])->exists();
+                if (!$categoryExists) {
+                    $errors[] = "Category '{$data['category']}' does not exist.";
+                    continue;
+                }
+            }
+
+            // ── Sub-Category Validation ────────────────────────────
+
             $details = $item->product_details ?? [];
 
+            // ========== SUB-CATEGORY VALIDATION ==========
+            if (isset($data['sub_category']) && $data['sub_category'] !== '') {
+
+                // 1. Get category of this item from existing data
+                $parentCategoryName = $details['category'] ?? null;
+
+                if (empty($parentCategoryName)) {
+                    return response()->json([
+                        'success' => false,
+                        'error'   => 'Please set Category first before setting Sub-Category.'
+                    ], 422);
+                }
+
+                // 2. Find parent category
+                $parentCategory = \App\Models\Category::where('name', $parentCategoryName)
+                    ->whereNull('parent_id')
+                    ->first();
+
+                if (!$parentCategory) {
+                    return response()->json([
+                        'success' => false,
+                        'error'   => "Parent Category '{$parentCategoryName}' not found."
+                    ], 422);
+                }
+
+                // 3. Check if sub-category belongs to this parent
+                $subCategoryExists = \App\Models\Category::where('name', $data['sub_category'])
+                    ->where('parent_id', $parentCategory->id)
+                    ->exists();
+
+                if (!$subCategoryExists) {
+                    return response()->json([
+                        'success' => false,
+                        'error'   => "Sub-Category '{$data['sub_category']}' does not belong to Category '{$parentCategoryName}'."
+                    ], 422);
+                }
+
+            }
             // Update product name in products table
             if (!empty($data['product_name']) && $item->product) {
                 $item->product->update(['name' => $data['product_name']]);
@@ -1295,7 +1348,20 @@ class SourcingController extends Controller
             $updated++;
         }
 
-        return response()->json(['success' => true, 'message' => "{$updated} item(s) updated.", 'details' => $details]);
+        if (!empty($errors)) {
+            return response()->json([
+                'success' => false,
+                'error'   => implode(' ', $errors)
+            ], 422);
+        }
+
+        return response()->json([
+            'success' => true,
+            'message' => "{$updated} item(s) updated.",
+            'details' => $details
+        ]);
+
+        //  return response()->json(['success' => true, 'message' => "{$updated} item(s) updated.", 'details' => $details]);
     }
 
     // ── DELETE OFFER SHEET ──
