@@ -7,7 +7,6 @@ use App\Models\{OrderItem, Shipment, Consignment, Vendor, Grn, GrnItem, Inventor
 use App\Services\{DashboardService, LogisticsService};
 use Illuminate\Http\Request;
 use App\Models\ActivityLog;
-
 use App\Helpers\FileStorage;
 
 class LogisticsController extends Controller
@@ -1982,4 +1981,137 @@ class LogisticsController extends Controller
 
         return back()->with('success', "Shipment {$shipment->shipment_code} status changed: {$oldStatus} → {$newStatus}.");
     }
+
+    /**
+      *
+     * Routes (logistics group):
+     *   Route::post('grn/{grn}/adjust', [LogisticsController::class, 'adjustGrnQty'])->name('grn.adjust');
+     */
+
+    public function adjustGrnQty(Request $request, \App\Models\Grn $grn)
+    {
+        // Permission check
+        if (!auth()->user()->isAdmin() && !\App\Services\PermissionService::can(auth()->user(), 'logistics.grn.adjust')) {
+            abort(403, 'You do not have permission to adjust GRN quantities.');
+        }
+
+        $request->validate([
+            'items'                     => 'required|array|min:1',
+            'items.*.grn_item_id'       => 'required|exists:grn_items,id',
+            'items.*.received_quantity' => 'required|integer|min:0',
+            'items.*.damaged_quantity'  => 'nullable|integer|min:0',
+            'items.*.excess_quantity'   => 'nullable|integer|min:0',
+            'adjustment_reason'         => 'required|string|max:500',
+        ]);
+
+        $updated = 0;
+        $logs = [];
+
+        \DB::beginTransaction();
+        try {
+            foreach ($request->items as $row) {
+                $item = \App\Models\GrnItem::where('id', $row['grn_item_id'])
+                    ->where('grn_id', $grn->id)
+                    ->first();
+                if (!$item) {
+                    continue;
+                }
+
+                $oldReceived = intval($item->received_quantity);
+                $oldDamaged = intval($item->damaged_quantity ?? 0);
+                $oldExcess = intval($item->excess_quantity ?? 0);
+
+                $newReceived = intval($row['received_quantity']);
+                $newDamaged = intval($row['damaged_quantity'] ?? 0);
+                $newExcess = intval($row['excess_quantity'] ?? 0);
+
+                // Skip if nothing changed
+                if ($oldReceived === $newReceived && $oldDamaged === $newDamaged && $oldExcess === $newExcess) {
+                    continue;
+                }
+
+                // Calculate inventory impact
+                // Old good qty = received - damaged
+                // New good qty = received - damaged
+                $oldGoodQty = $oldReceived - $oldDamaged;
+                $newGoodQty = $newReceived - $newDamaged;
+                $qtyDiff = $newGoodQty - $oldGoodQty;
+
+                // Update GRN item
+                $item->update([
+                    'received_quantity' => $newReceived,
+                    'damaged_quantity'  => $newDamaged,
+                    'excess_quantity'   => $newExcess,
+                ]);
+
+                // Update inventory
+                if ($qtyDiff !== 0 && $item->product_id) {
+                    $inventory = \App\Models\Inventory::where('product_id', $item->product_id)
+                        ->where('warehouse_id', $grn->warehouse_id)
+                        ->first();
+
+                    if ($inventory) {
+                        $inventory->update([
+                            'quantity'           => max(0, intval($inventory->quantity) + $qtyDiff),
+                            'available_quantity' => max(0, intval($inventory->available_quantity) + $qtyDiff),
+                        ]);
+                    }
+                }
+
+                $sku = $item->product->sku ?? '—';
+
+                // Log this change
+                $changeLog = [
+                    'grn_item_id' => $item->id,
+                    'product_id'  => $item->product_id,
+                    'sku'         => $sku,
+                    'old'         => ['received' => $oldReceived, 'damaged' => $oldDamaged, 'excess' => $oldExcess],
+                    'new'         => ['received' => $newReceived, 'damaged' => $newDamaged, 'excess' => $newExcess],
+                    'inventory_impact' => $qtyDiff,
+                ];
+
+                $logs[] = $changeLog;
+
+                // Log per item
+                \Log::channel('daily')->info("[GRN Adjust] {$grn->grn_number} SKU {$sku}: " .
+                    "Received {$oldReceived}→{$newReceived}, Damaged {$oldDamaged}→{$newDamaged}, Excess {$oldExcess}→{$newExcess}, " .
+                    "Inventory impact: {$qtyDiff}");
+
+                $updated++;
+            }
+
+            // Save adjustment log to GRN
+            $adjustmentHistory = $grn->adjustment_history ?? [];
+            $adjustmentHistory[] = [
+                'adjusted_at' => now()->toISOString(),
+                'adjusted_by' => auth()->user()->name,
+                'user_id'     => auth()->id(),
+                'reason'      => $request->adjustment_reason,
+                'items'       => $logs,
+            ];
+
+            $grn->update([
+                'adjustment_history' => $adjustmentHistory,
+            ]);
+
+            // Activity log
+            \App\Models\ActivityLog::log('adjusted', 'grn', $grn, null, [
+                'grn_number'  => $grn->grn_number,
+                'items_adjusted' => $updated,
+                'reason'      => $request->adjustment_reason,
+                'changes'     => array_slice($logs, 0, 20),
+                'adjusted_by' => auth()->user()->name,
+            ], "GRN {$grn->grn_number}: {$updated} item(s) adjusted by " . auth()->user()->name . " — {$request->adjustment_reason}");
+
+            \DB::commit();
+
+            return back()->with('success', "{$updated} item(s) adjusted in {$grn->grn_number}. Inventory updated.");
+
+        } catch (\Exception $e) {
+            \DB::rollBack();
+            \Log::error("[GRN Adjust] Failed: {$e->getMessage()}");
+            return back()->with('error', 'Adjustment failed: ' . $e->getMessage());
+        }
+    }
+
 }

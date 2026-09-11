@@ -1,7 +1,10 @@
 @extends('layouts.app')
 @section('title', 'GRN: ' . $grn->grn_number)
 @section('page-title', 'GRN Details')
-
+@php
+    $canAdjust = auth()->user()->isAdmin() || \App\Services\PermissionService::can(auth()->user(), 'logistics.grn.adjust');
+    $adjustHistory = $grn->adjustment_history ?? [];
+@endphp
 @section('content')
 <div style="display:flex;gap:.5rem;margin-bottom:1.25rem;">
     <a href="{{ route('logistics.grn') }}" class="btn btn-outline btn-sm"><i class="fas fa-arrow-left"></i> All GRNs</a>
@@ -113,4 +116,220 @@
         </table>
     </div>
 </div>
+
+@if($canAdjust)
+<div class="card" style="margin-bottom:1.25rem;">
+    <div class="card-header">
+        <h3><i class="fas fa-sliders-h" style="margin-right:.5rem;color:#e8a838;"></i> Adjust GRN Quantities</h3>
+        <div style="display:flex;gap:.4rem;">
+            <button type="button" class="btn btn-primary btn-sm" id="editGrnBtn"
+                onclick="toggleGrnEdit(true)">
+                <i class="fas fa-edit" style="margin-right:.2rem;"></i> Edit Quantities
+            </button>
+            @if(count($adjustHistory) > 0)
+            <button type="button" class="btn btn-outline btn-sm" onclick="document.getElementById('adjustHistoryModal').style.display='flex'">
+                <i class="fas fa-history" style="margin-right:.2rem;"></i> History ({{ count($adjustHistory) }})
+            </button>
+            @endif
+        </div>
+    </div>
+
+    <form method="POST" action="{{ route('logistics.grn.adjust', $grn) }}" id="grnAdjustForm" style="display:none;">
+        @csrf
+        {{-- Reason --}}
+        <div style="padding:.6rem 1.25rem;background:#fefce8;border-bottom:1px solid #fde68a;">
+            <div style="display:flex;gap:.6rem;align-items:flex-end;">
+                <div style="flex:1;">
+                    <label style="font-size:.65rem;font-weight:600;color:#854d0e;display:block;margin-bottom:.2rem;">Adjustment Reason <span style="color:#dc2626;">*</span></label>
+                    <input type="text" name="adjustment_reason" required placeholder="e.g. Physical verification count mismatch, damaged items found during inspection..."
+                        style="width:100%;padding:.4rem .6rem;border:1.5px solid #fde68a;border-radius:6px;font-size:.82rem;">
+                </div>
+                <button type="submit" class="btn btn-primary btn-sm" style="padding:.45rem .8rem;"
+                    onclick="return confirm('Save quantity adjustments? This will update inventory.')">
+                    <i class="fas fa-save" style="margin-right:.2rem;"></i> Save Adjustments
+                </button>
+                <button type="button" class="btn btn-outline btn-sm" onclick="toggleGrnEdit(false)">Cancel</button>
+            </div>
+        </div>
+
+        {{-- Editable Table --}}
+        <div class="card-body" style="padding:0;overflow-x:auto;">
+            <table class="data-table" style="font-size:.78rem;margin:0;">
+                <thead>
+                    <tr style="background:#f0f4f8;">
+                        <th style="width:30px;">#</th>
+                        <th>SKU</th>
+                        <th>Product Name</th>
+                        <th style="text-align:center;">Expected</th>
+                        <th style="text-align:center;background:#eff6ff;">Received</th>
+                        <th style="text-align:center;background:#fef2f2;">Damaged</th>
+                        <th style="text-align:center;background:#f0fdf4;">Excess</th>
+                        <th style="text-align:center;">Good Qty</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach($grn->items as $idx => $item)
+                    @php $product = $item->product; @endphp
+                    <tr>
+                        <td style="text-align:center;color:#94a3b8;">{{ $idx + 1 }}</td>
+                        <td style="font-family:monospace;font-weight:600;">{{ $product->sku ?? '—' }}</td>
+                        <td style="font-size:.72rem;">{{ $product->name ?? '—' }}</td>
+                        <td style="text-align:center;font-weight:600;">{{ $item->expected_quantity ?? '—' }}</td>
+                        <td style="text-align:center;background:#eff6ff;">
+                            <input type="hidden" name="items[{{ $idx }}][grn_item_id]" value="{{ $item->id }}">
+                            <input type="number" name="items[{{ $idx }}][received_quantity]" min="0"
+                                value="{{ $item->received_quantity }}"
+                                data-old="{{ $item->received_quantity }}"
+                                onchange="calcGoodQty(this); highlightChange(this)"
+                                style="width:60px;padding:.25rem .3rem;border:1.5px solid #bfdbfe;border-radius:4px;font-size:.8rem;font-family:monospace;text-align:center;">
+                        </td>
+                        <td style="text-align:center;background:#fef2f2;">
+                            <input type="number" name="items[{{ $idx }}][damaged_quantity]" min="0"
+                                value="{{ $item->damaged_quantity ?? 0 }}"
+                                data-old="{{ $item->damaged_quantity ?? 0 }}"
+                                onchange="calcGoodQty(this); highlightChange(this)"
+                                style="width:60px;padding:.25rem .3rem;border:1.5px solid #fecaca;border-radius:4px;font-size:.8rem;font-family:monospace;text-align:center;">
+                        </td>
+                        <td style="text-align:center;background:#f0fdf4;">
+                            <input type="number" name="items[{{ $idx }}][excess_quantity]" min="0"
+                                value="{{ $item->excess_quantity ?? 0 }}"
+                                data-old="{{ $item->excess_quantity ?? 0 }}"
+                                onchange="highlightChange(this)"
+                                style="width:60px;padding:.25rem .3rem;border:1.5px solid #bbf7d0;border-radius:4px;font-size:.8rem;font-family:monospace;text-align:center;">
+                        </td>
+                        <td style="text-align:center;">
+                            <span class="good-qty" style="font-weight:700;font-family:monospace;">{{ intval($item->received_quantity) - intval($item->damaged_quantity ?? 0) }}</span>
+                        </td>
+                    </tr>
+                    @endforeach
+                </tbody>
+            </table>
+        </div>
+    </form>
+
+    {{-- Read-only table (shown when not editing) --}}
+    <div class="card-body" style="padding:0;overflow-x:auto;" id="grnReadOnly">
+        <table class="data-table" style="font-size:.78rem;margin:0;">
+            <thead>
+                <tr style="background:#f0f4f8;">
+                    <th style="width:30px;">#</th>
+                    <th>SKU</th>
+                    <th>Product Name</th>
+                    <th style="text-align:center;">Expected</th>
+                    <th style="text-align:center;">Received</th>
+                    <th style="text-align:center;">Damaged</th>
+                    <th style="text-align:center;">Excess</th>
+                    <th style="text-align:center;">Good Qty</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach($grn->items as $idx => $item)
+                @php
+                    $goodQty = intval($item->received_quantity) - intval($item->damaged_quantity ?? 0);
+                @endphp
+                <tr>
+                    <td style="text-align:center;color:#94a3b8;">{{ $idx + 1 }}</td>
+                    <td style="font-family:monospace;font-weight:600;">{{ $item->product->sku ?? '—' }}</td>
+                    <td style="font-size:.72rem;">{{ $item->product->name ?? '—' }}</td>
+                    <td style="text-align:center;">{{ $item->expected_quantity ?? '—' }}</td>
+                    <td style="text-align:center;font-weight:600;color:#1e40af;">{{ $item->received_quantity }}</td>
+                    <td style="text-align:center;font-weight:600;color:{{ ($item->damaged_quantity ?? 0) > 0 ? '#dc2626' : '#94a3b8' }};">{{ $item->damaged_quantity ?? 0 }}</td>
+                    <td style="text-align:center;font-weight:600;color:{{ ($item->excess_quantity ?? 0) > 0 ? '#16a34a' : '#94a3b8' }};">{{ $item->excess_quantity ?? 0 }}</td>
+                    <td style="text-align:center;font-weight:700;">{{ $goodQty }}</td>
+                </tr>
+                @endforeach
+            </tbody>
+        </table>
+    </div>
+</div>
+
+{{-- Adjustment History Modal --}}
+@if(count($adjustHistory) > 0)
+<div id="adjustHistoryModal" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.5);z-index:9999;align-items:center;justify-content:center;">
+    <div style="background:#fff;border-radius:14px;width:700px;max-width:94%;max-height:80vh;overflow-y:auto;box-shadow:0 12px 48px rgba(0,0,0,.2);">
+        <div style="padding:.75rem 1.25rem;border-bottom:1px solid #e2e8f0;display:flex;justify-content:space-between;align-items:center;position:sticky;top:0;background:#fff;border-radius:14px 14px 0 0;">
+            <h3 style="font-size:.95rem;font-weight:700;color:#0d1b2a;margin:0;">
+                <i class="fas fa-history" style="color:#e8a838;margin-right:.3rem;"></i> Adjustment History — {{ $grn->grn_number }}
+            </h3>
+            <button onclick="document.getElementById('adjustHistoryModal').style.display='none'" style="background:none;border:none;cursor:pointer;font-size:1.3rem;color:#94a3b8;">&times;</button>
+        </div>
+        <div style="padding:1rem 1.25rem;">
+            @foreach(array_reverse($adjustHistory) as $hIdx => $entry)
+            <div style="margin-bottom:1rem;padding:.75rem;background:#f8fafc;border-radius:8px;border-left:3px solid #e8a838;">
+                <div style="display:flex;justify-content:space-between;margin-bottom:.4rem;">
+                    <span style="font-size:.78rem;font-weight:700;color:#0d1b2a;">
+                        Adjustment #{{ count($adjustHistory) - $hIdx }}
+                    </span>
+                    <span style="font-size:.68rem;color:#94a3b8;">
+                        {{ \Carbon\Carbon::parse($entry['adjusted_at'])->format('d M Y H:i') }} by {{ $entry['adjusted_by'] ?? '—' }}
+                    </span>
+                </div>
+                <div style="font-size:.75rem;color:#64748b;margin-bottom:.4rem;">
+                    <strong>Reason:</strong> {{ $entry['reason'] ?? '—' }}
+                </div>
+                <table style="width:100%;font-size:.72rem;border-collapse:collapse;">
+                    <thead>
+                        <tr style="background:#e2e8f0;">
+                            <th style="padding:.2rem .4rem;text-align:left;">SKU</th>
+                            <th style="padding:.2rem .4rem;text-align:center;">Old Received</th>
+                            <th style="padding:.2rem .4rem;text-align:center;">New Received</th>
+                            <th style="padding:.2rem .4rem;text-align:center;">Old Damaged</th>
+                            <th style="padding:.2rem .4rem;text-align:center;">New Damaged</th>
+                            <th style="padding:.2rem .4rem;text-align:center;">Old Excess</th>
+                            <th style="padding:.2rem .4rem;text-align:center;">New Excess</th>
+                            <th style="padding:.2rem .4rem;text-align:center;">Inv. Impact</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach($entry['items'] ?? [] as $change)
+                        <tr style="border-bottom:1px solid #f1f5f9;">
+                            <td style="padding:.2rem .4rem;font-family:monospace;font-weight:600;">{{ $change['sku'] ?? '—' }}</td>
+                            <td style="padding:.2rem .4rem;text-align:center;">{{ $change['old']['received'] ?? 0 }}</td>
+                            <td style="padding:.2rem .4rem;text-align:center;font-weight:600;color:{{ ($change['old']['received'] ?? 0) !== ($change['new']['received'] ?? 0) ? '#1e40af' : 'inherit' }};">{{ $change['new']['received'] ?? 0 }}</td>
+                            <td style="padding:.2rem .4rem;text-align:center;">{{ $change['old']['damaged'] ?? 0 }}</td>
+                            <td style="padding:.2rem .4rem;text-align:center;font-weight:600;color:{{ ($change['old']['damaged'] ?? 0) !== ($change['new']['damaged'] ?? 0) ? '#dc2626' : 'inherit' }};">{{ $change['new']['damaged'] ?? 0 }}</td>
+                            <td style="padding:.2rem .4rem;text-align:center;">{{ $change['old']['excess'] ?? 0 }}</td>
+                            <td style="padding:.2rem .4rem;text-align:center;font-weight:600;color:{{ ($change['old']['excess'] ?? 0) !== ($change['new']['excess'] ?? 0) ? '#16a34a' : 'inherit' }};">{{ $change['new']['excess'] ?? 0 }}</td>
+                            <td style="padding:.2rem .4rem;text-align:center;font-weight:700;color:{{ ($change['inventory_impact'] ?? 0) > 0 ? '#16a34a' : (($change['inventory_impact'] ?? 0) < 0 ? '#dc2626' : '#94a3b8') }};">
+                                {{ ($change['inventory_impact'] ?? 0) > 0 ? '+' : '' }}{{ $change['inventory_impact'] ?? 0 }}
+                            </td>
+                        </tr>
+                        @endforeach
+                    </tbody>
+                </table>
+            </div>
+            @endforeach
+        </div>
+    </div>
+</div>
+@endif
+
+<script>
+function toggleGrnEdit(show) {
+    document.getElementById('grnAdjustForm').style.display = show ? 'block' : 'none';
+    document.getElementById('grnReadOnly').style.display = show ? 'none' : 'block';
+    document.getElementById('editGrnBtn').style.display = show ? 'none' : 'inline-flex';
+}
+
+function calcGoodQty(input) {
+    var row = input.closest('tr');
+    var received = parseInt(row.querySelector('[name$="[received_quantity]"]').value) || 0;
+    var damaged = parseInt(row.querySelector('[name$="[damaged_quantity]"]').value) || 0;
+    row.querySelector('.good-qty').textContent = Math.max(0, received - damaged);
+}
+
+function highlightChange(input) {
+    var old = parseInt(input.getAttribute('data-old')) || 0;
+    var now = parseInt(input.value) || 0;
+    input.style.background = (old !== now) ? '#fefce8' : '';
+    input.style.fontWeight = (old !== now) ? '700' : '';
+}
+
+// Close history modal on backdrop
+document.getElementById('adjustHistoryModal')?.addEventListener('click', function(e) {
+    if (e.target === this) this.style.display = 'none';
+});
+</script>
+@endif
+
 @endsection

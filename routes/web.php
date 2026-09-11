@@ -286,7 +286,9 @@ Route::middleware(['auth'])->group(function () {
             Route::post('warehouse-monthly-charges/{warehouseMonthlyCharge}/invoice', [LogisticsController::class, 'enterWarehouseInvoice'])->name('warehouse-monthly-charges.invoice');
             Route::post('warehouse-monthly-charges/{warehouseMonthlyCharge}/explanations', [LogisticsController::class, 'saveVarianceExplanations'])->name('warehouse-monthly-charges.explanations');
             Route::post('warehouse-monthly-charges/{warehouseMonthlyCharge}/approve', [LogisticsController::class, 'approveWarehouseCharge'])->name('warehouse-monthly-charges.approve');
-        });
+            Route::post('grn/{grn}/adjust', [LogisticsController::class, 'adjustGrnQty'])->name('grn.adjust');
+       
+     });
 
 
     // CATALOGUING

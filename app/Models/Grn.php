@@ -22,11 +22,12 @@ class Grn extends Model
         'excess_items',
         'grn_file',
         'remarks',
+        'adjustment_history',
         'uploaded_by',
         'verified_by',
     ];
 
-    protected $casts = ['receipt_date' => 'date'];
+    protected $casts = ['receipt_date' => 'date','adjustment_history' => 'array'];
 
     public function shipment()
     {
