@@ -1556,7 +1556,7 @@ class FinanceController extends Controller
         return back()->with('success', 'WSP revision deleted.');
     }
 
-    public function downloadPayout(\App\Models\VendorPayout $payout)
+    public function downloadPayoutOLD(\App\Models\VendorPayout $payout)
     {
         $snapshot = $payout->calculation_snapshot ?? [];
         $lineItems = collect($snapshot['line_items'] ?? []);
@@ -1591,11 +1591,11 @@ class FinanceController extends Controller
         $sheet->setCellValue('G4', 'Chargebacks');
         $sheet->setCellValue('H4', $summary['total_chargebacks'] ?? $payout->total_chargebacks);
         $sheet->setCellValue('I4', 'Net Payout');
-        $sheet->setCellValue('J4', $summary['net_payout'] ?? $payout->net_payout);
+        $sheet->setCellValue('J4', $payout->net_payout);
         $sheet->getStyle('A4:J4')->getFont()->setBold(true);
 
         // Table headers
-        $headers = ['#', 'Order #', 'Order Date', 'Channel', 'SKU', 'Shipped Qty', 'Vendor WSP', 'Sale Amount', 'Commission', 'Net Payout', 'FIFO Detail'];
+        $headers = ['#', 'Order #', 'Order Date', 'Channel', 'SKU', 'Shipped Qty', 'Vendor WSP', 'Sale Amount', 'Commission', 'Gross Payout', 'FIFO Detail'];
         $row = 6;
         foreach ($headers as $col => $h) {
             $sheet->setCellValue([$col + 1, $row], $h);
@@ -1646,7 +1646,15 @@ class FinanceController extends Controller
         $sheet->setCellValue([2, $row], $summary['total_chargebacks'] ?? $payout->total_chargebacks);
         $row += 2;
         $sheet->setCellValue([1, $row], 'NET PAYOUT');
-        $sheet->setCellValue([2, $row], $summary['net_payout'] ?? $payout->net_payout);
+        $sheet->setCellValue([2, $row], $payout->net_payout);
+        $row++;
+        $sheet->setCellValue([1, $row], 'PAID AMOUNT');
+        $sheet->setCellValue([2, $row], $payout->total_paid);
+        $row++;
+
+        $sheet->setCellValue([1, $row], 'BALANCE DUE');
+        $sheet->setCellValue([2, $row], $payout->balance_due);
+
         $sheet->getStyle([1, $row, 2, $row])->getFont()->setBold(true)->setSize(12);
 
         // Format number columns
@@ -1667,6 +1675,319 @@ class FinanceController extends Controller
         return response()->download($path, $filename)->deleteFileAfterSend(true);
     }
 
+    public function downloadPayout(\App\Models\VendorPayout $payout)
+    {
+        $snapshot = $payout->calculation_snapshot ?? [];
+        $lineItems = collect($snapshot['line_items'] ?? []);
+        $summary = $snapshot['summary'] ?? [];
+        $vendor = $payout->vendor;
+        $period = date('M-Y', mktime(0, 0, 0, $payout->payout_month, 1, $payout->payout_year));
+
+
+        if (!empty($snapshot) && !request('recalculate')) {
+            // ── Read from saved snapshot ──
+            $lineItems = collect($snapshot['line_items'] ?? [])->map(fn ($i) => (object) $i);
+
+            $payoutSummary = $snapshot['summary'] ?? [
+                'total_qty' => $lineItems->sum('qty'),
+                'total_sales' => $lineItems->sum('sale_amount'),
+                'total_commission' => $lineItems->sum('commission'),
+                'total_payout' => $lineItems->sum('net_payout'),
+                'total_warehouse_charges' => $payout->total_warehouse_charges ?? 0,
+                'total_chargebacks' => $payout->total_chargebacks ?? 0,
+                'net_payout' => $payout->net_payout ?? 0,
+            ];
+
+            // Load warehouse charges and chargebacks (live data for display)
+            $warehouseCharges = \App\Models\VendorMonthlyCharge::withoutGlobalScopes()
+                ->where('vendor_id', $payout->vendor_id)
+                ->where('company_code', $payout->company_code)
+                ->where('charge_month', $payout->payout_month)
+                ->where('charge_year', $payout->payout_year)
+                ->where('status', 'approved')
+                 ->where(function ($q) {
+                     $q->where('charge_status', 'active')
+                       ->orWhereNull('charge_status');
+                 })
+                ->with('warehouse')
+                ->get();
+            // echo '<pre>';
+            //print_r( $warehouseCharges->toArray());exit;
+            $chargebacks = Chargeback::withoutGlobalScopes()
+                ->where('vendor_id', $payout->vendor_id)
+                ->whereHas('order', fn ($q) => $q->withoutGlobalScopes()->where('company_code', $payout->company_code))
+                ->where('status', 'confirmed')
+                ->whereMonth('confirmed_at', $payout->payout_month)
+                ->whereYear('confirmed_at', $payout->payout_year)
+                ->with(['order' => fn ($q) => $q->withoutGlobalScopes()])
+                ->get();
+
+            $calculatedAt = $snapshot['calculated_at'] ?? null;
+        } else {
+            // ── Recalculate live ──
+            $service = new \App\Services\VendorPayoutService();
+            $data = $service->buildPayoutData($payout->vendor_id, $payout->company_code, $payout->payout_month, $payout->payout_year);
+
+            $lineItems = collect($data['line_items'])->map(fn ($i) => (object) $i);
+            $payoutSummary = $data['summary'];
+            $warehouseCharges = $data['warehouse_charges'];
+            $chargebacks = $data['chargebacks'];
+            $calculatedAt = null;
+        }
+
+        // Payment data
+        $payments = \App\Models\PayoutPayment::where('vendor_payout_id', $payout->id)
+            ->orderBy('payment_date')
+            ->with('creator')
+            ->get();
+        $totalPaid = $payments->sum('amount');
+        $balanceDue = max(0, round(floatval($payout->net_payout) - $totalPaid, 2));
+
+        $spreadsheet = new \PhpOffice\PhpSpreadsheet\Spreadsheet();
+
+        // ═══════════════════════════════════════════
+        // SHEET 1: Payout Summary + Line Items
+        // ═══════════════════════════════════════════
+        $sheet = $spreadsheet->getActiveSheet();
+        $sheet->setTitle('Payout Details');
+
+        $boldFont = ['font' => ['bold' => true, 'name' => 'Arial', 'size' => 10]];
+        $headerStyle = [
+            'font' => ['bold' => true, 'color' => ['rgb' => 'FFFFFF'], 'name' => 'Arial', 'size' => 9],
+            'fill' => ['fillType' => \PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID, 'startColor' => ['rgb' => '1E3A5F']],
+        ];
+        $greenBg = ['fill' => ['fillType' => \PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID, 'startColor' => ['rgb' => 'F0FDF4']]];
+        $yellowBg = ['fill' => ['fillType' => \PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID, 'startColor' => ['rgb' => 'FEFCE8']]];
+        $redFont = ['font' => ['bold' => true, 'color' => ['rgb' => 'DC2626']]];
+        $greenFont = ['font' => ['bold' => true, 'color' => ['rgb' => '166534']]];
+
+        // ── Title ──
+        $sheet->setCellValue('A1', 'VENDOR PAYOUT STATEMENT');
+        $sheet->mergeCells('A1:K1');
+        $sheet->getStyle('A1')->getFont()->setBold(true)->setSize(14)->setColor(new \PhpOffice\PhpSpreadsheet\Style\Color('1E3A5F'));
+
+        // ── Vendor Info ──
+        $sheet->setCellValue('A3', 'Vendor:');
+        $sheet->setCellValue('B3', $vendor->company_name ?? '—');
+        $sheet->setCellValue('A4', 'Vendor Code:');
+        $sheet->setCellValue('B4', $vendor->vendor_code ?? '—');
+        $sheet->setCellValue('A5', 'Period:');
+        $sheet->setCellValue('B5', $period);
+        $sheet->setCellValue('A6', 'Company:');
+        $sheet->setCellValue('B6', $payout->company_code);
+        $sheet->setCellValue('A7', 'Status:');
+        $sheet->setCellValue('B7', ucfirst(str_replace('_', ' ', $payout->status)));
+        $sheet->setCellValue('A8', 'Calculated:');
+        $sheet->setCellValue('B8', $payout->updated_at?->format('d M Y H:i') ?? '—');
+        $sheet->getStyle('A3:A8')->applyFromArray($boldFont);
+        $sheet->getStyle('B7')->applyFromArray($payout->status === 'paid' ? $greenFont : ($payout->status === 'partially_paid' ? ['font' => ['bold' => true, 'color' => ['rgb' => 'E8A838']]] : []));
+
+        $whCharges = $warehouseCharges->sum(fn ($c) => floatval($c->total_charges ?? $c->amount ?? 0));
+
+        $totalPayout = $payoutSummary['total_payout'] ?? 0;
+
+        $totalChargebacks = $chargebacks->sum('amount');
+        $netPayout = round($totalPayout - $whCharges - $totalChargebacks, 2);
+
+        $finalPayout = $payoutSummary['total_payout'] - $whCharges - $totalChargebacks;
+
+        // ── Summary Box ──
+        $totalSales = $summary['total_sales'] ?? $payout->total_sales;
+        $commission = $summary['total_commission'] ?? $payout->total_commission;
+        $grossPayout = $totalSales - $commission;//$summary['total_payout'] ?? $payout->gross_payout;
+        // $whCharges = $summary['total_warehouse_charges'] ?? $payout->total_warehouse_charges;
+        //$chargebacks = $summary['total_chargebacks'] ?? $payout->total_chargebacks;
+        $netPayout = $finalPayout;
+        $sheet->setCellValue('D3', 'Total Sales:');
+        $sheet->setCellValue('E3', $totalSales);
+        $sheet->setCellValue('D4', 'Commission:');
+        $sheet->setCellValue('E4', $commission);
+        $sheet->setCellValue('D5', 'Gross Payout:');
+        $sheet->setCellValue('E5', $grossPayout);
+        $sheet->setCellValue('D6', 'WH Charges:');
+        $sheet->setCellValue('E6', $whCharges);
+        $sheet->setCellValue('D7', 'Chargebacks:');
+        $sheet->setCellValue('E7', $totalChargebacks);
+        $sheet->setCellValue('D8', 'Net Payout:');
+        $sheet->setCellValue('E8', $netPayout);
+        $sheet->getStyle('D3:D8')->applyFromArray($boldFont);
+        $sheet->getStyle('E3:E8')->getNumberFormat()->setFormatCode('#,##0.00');
+        $sheet->getStyle('E8')->getFont()->setBold(true)->setSize(12);
+        $sheet->getStyle('D8:E8')->applyFromArray($greenBg);
+
+        // ── Payment Summary Box ──
+        $sheet->setCellValue('G3', 'Total Paid:');
+        $sheet->setCellValue('H3', $totalPaid);
+        $sheet->setCellValue('G4', 'Balance Due:');
+        $sheet->setCellValue('H4', $balanceDue);
+        $sheet->setCellValue('G5', 'Payment Status:');
+        $sheet->setCellValue('H5', $balanceDue <= 0.01 && $totalPaid > 0 ? 'Fully Paid' : ($totalPaid > 0 ? 'Partially Paid' : 'Unpaid'));
+        $sheet->setCellValue('G6', 'Tranches:');
+        $sheet->setCellValue('H6', $payments->count());
+        $sheet->getStyle('G3:G6')->applyFromArray($boldFont);
+        $sheet->getStyle('H3:H4')->getNumberFormat()->setFormatCode('#,##0.00');
+        $sheet->getStyle('H3')->applyFromArray($totalPaid > 0 ? $greenFont : []);
+        $sheet->getStyle('H4')->applyFromArray($balanceDue > 0 ? $redFont : $greenFont);
+        $sheet->getStyle('G3:H6')->applyFromArray($yellowBg);
+
+        // ── Line Items Table ──
+        $row = 10;
+        $sheet->setCellValue("A{$row}", 'ORDER-WISE BREAKDOWN');
+        $sheet->getStyle("A{$row}")->getFont()->setBold(true)->setSize(11)->setColor(new \PhpOffice\PhpSpreadsheet\Style\Color('1E3A5F'));
+        $row++;
+
+        $itemHeaders = ['#', 'Order #', 'Order Date', 'Channel', 'SKU', 'Product', 'Shipped Qty', 'Vendor WSP', 'Sale Amount', 'Commission', 'Net Payout', 'FIFO Detail'];
+        foreach ($itemHeaders as $col => $h) {
+            $sheet->setCellValue([$col + 1, $row], $h);
+        }
+        $sheet->getStyle([1, $row, count($itemHeaders), $row])->applyFromArray($headerStyle);
+        $row++;
+
+        foreach ($lineItems as $idx => $item) {
+            $item = (object) $item;
+            $sheet->setCellValue([1, $row], $idx + 1);
+            $sheet->setCellValue([2, $row], $item->order_number ?? '');
+            $sheet->setCellValue([3, $row], $item->order_date ?? '');
+            $sheet->setCellValue([4, $row], $item->channel ?? '');
+            $sheet->setCellValue([5, $row], $item->sku ?? '');
+            $sheet->setCellValue([6, $row], $item->product_name ?? '');
+            $sheet->setCellValue([7, $row], $item->qty ?? 0);
+            $sheet->setCellValue([8, $row], $item->vendor_wsp ?? 0);
+            $sheet->setCellValue([9, $row], $item->sale_amount ?? 0);
+            $sheet->setCellValue([10, $row], $item->commission ?? 0);
+            $sheet->setCellValue([11, $row], $item->net_payout ?? 0);
+            $sheet->setCellValue([12, $row], $item->fifo_detail ?? '');
+            $row++;
+        }
+
+        // Totals row
+        $sheet->setCellValue([5, $row], 'TOTAL');
+        $sheet->setCellValue([7, $row], $lineItems->sum('qty'));
+        $sheet->setCellValue([9, $row], $lineItems->sum('sale_amount'));
+        $sheet->setCellValue([10, $row], $lineItems->sum('commission'));
+        $sheet->setCellValue([11, $row], $lineItems->sum('net_payout'));
+        $sheet->getStyle([1, $row, 12, $row])->applyFromArray($boldFont);
+        $sheet->getStyle([1, $row, 12, $row])->applyFromArray($greenBg);
+
+        // Format number columns
+        for ($r = 12; $r <= $row; $r++) {
+            $sheet->getStyle([8, $r, 11, $r])->getNumberFormat()->setFormatCode('#,##0.00');
+        }
+
+        // ── Deductions Section ──
+        $row += 2;
+        $sheet->setCellValue("A{$row}", 'DEDUCTIONS');
+        $sheet->getStyle("A{$row}")->getFont()->setBold(true)->setSize(11)->setColor(new \PhpOffice\PhpSpreadsheet\Style\Color('DC2626'));
+        $row++;
+
+        $sheet->setCellValue("A{$row}", 'Type');
+        $sheet->setCellValue("B{$row}", 'Details');
+        $sheet->setCellValue("C{$row}", 'Amount');
+        $sheet->getStyle([1, $row, 3, $row])->applyFromArray($headerStyle);
+        $row++;
+
+        // Warehouse charges
+        foreach ($snapshot['warehouse_charges_raw'] ?? [] as $wc) {
+            $sheet->setCellValue([1, $row], 'Warehouse Charge');
+            $sheet->setCellValue([2, $row], $wc['warehouse'] ?? '—');
+            $sheet->setCellValue([3, $row], floatval($wc['amount'] ?? 0));
+            $sheet->getStyle([3, $row])->getNumberFormat()->setFormatCode('#,##0.00');
+            $row++;
+        }
+
+        // Chargebacks
+        foreach ($snapshot['chargebacks_raw'] ?? [] as $cb) {
+            $sheet->setCellValue([1, $row], 'Chargeback');
+            $sheet->setCellValue([2, $row], ($cb['order'] ?? '—') . ' — ' . ($cb['reason'] ?? ''));
+            $sheet->setCellValue([3, $row], floatval($cb['amount'] ?? 0));
+            $sheet->getStyle([3, $row])->getNumberFormat()->setFormatCode('#,##0.00');
+            $row++;
+        }
+
+        // Charge discount
+        if (!empty($snapshot['summary']['charge_discount'])) {
+            $sheet->setCellValue([1, $row], 'Charge Discount');
+            $sheet->setCellValue([2, $row], 'Approved discount');
+            $sheet->setCellValue([3, $row], -floatval($snapshot['summary']['charge_discount']));
+            $sheet->getStyle([3, $row])->getNumberFormat()->setFormatCode('#,##0.00');
+            $sheet->getStyle([1, $row, 3, $row])->applyFromArray($greenFont);
+            $row++;
+        }
+
+        // Deduction totals
+        $sheet->setCellValue([1, $row], 'TOTAL DEDUCTIONS');
+        $totalDed = floatval($summary['total_warehouse_charges'] ?? $payout->total_warehouse_charges ?? 0) + floatval($summary['total_chargebacks'] ?? $payout->total_chargebacks ?? 0);
+        $sheet->setCellValue([3, $row], $totalDed);
+        $sheet->getStyle([1, $row, 3, $row])->applyFromArray($boldFont);
+        $sheet->getStyle([3, $row])->getNumberFormat()->setFormatCode('#,##0.00');
+        $sheet->getStyle([1, $row, 3, $row])->applyFromArray(['fill' => ['fillType' => \PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID, 'startColor' => ['rgb' => 'FEF2F2']]]);
+
+        // ── Net Payout ──
+        $row += 2;
+        $sheet->setCellValue([1, $row], 'NET PAYOUT');
+        $sheet->setCellValue([3, $row], $payout->net_payout);
+        $sheet->getStyle([1, $row, 3, $row])->applyFromArray(['font' => ['bold' => true, 'size' => 12, 'color' => ['rgb' => '166534']]]);
+        $sheet->getStyle([3, $row])->getNumberFormat()->setFormatCode('#,##0.00');
+        $sheet->getStyle([1, $row, 3, $row])->applyFromArray($greenBg);
+
+        // ── Payment History Section ──
+        if ($payments->isNotEmpty()) {
+            $row += 2;
+            $sheet->setCellValue("A{$row}", 'PAYMENT HISTORY');
+            $sheet->getStyle("A{$row}")->getFont()->setBold(true)->setSize(11)->setColor(new \PhpOffice\PhpSpreadsheet\Style\Color('1E40AF'));
+            $row++;
+
+            $payHeaders = ['#', 'Payment Date', 'Amount', 'Mode', 'Reference #', 'Remarks', 'Recorded By', 'Running Total'];
+            foreach ($payHeaders as $col => $h) {
+                $sheet->setCellValue([$col + 1, $row], $h);
+            }
+            $sheet->getStyle([1, $row, count($payHeaders), $row])->applyFromArray($headerStyle);
+            $row++;
+
+            $runningTotal = 0;
+            foreach ($payments as $idx => $payment) {
+                $runningTotal += floatval($payment->amount);
+                $modeLabels = ['bank_transfer' => 'Bank Transfer', 'wire' => 'Wire', 'cheque' => 'Cheque', 'upi' => 'UPI', 'cash' => 'Cash'];
+
+                $sheet->setCellValue([1, $row], $idx + 1);
+                $sheet->setCellValue([2, $row], $payment->payment_date->format('d M Y'));
+                $sheet->setCellValue([3, $row], floatval($payment->amount));
+                $sheet->setCellValue([4, $row], $modeLabels[$payment->payment_mode] ?? $payment->payment_mode ?? '—');
+                $sheet->setCellValue([5, $row], $payment->reference_number ?? '—');
+                $sheet->setCellValue([6, $row], $payment->remarks ?? '—');
+                $sheet->setCellValue([7, $row], $payment->creator->name ?? '—');
+                $sheet->setCellValue([8, $row], $runningTotal);
+
+                $sheet->getStyle([3, $row])->getNumberFormat()->setFormatCode('#,##0.00');
+                $sheet->getStyle([8, $row])->getNumberFormat()->setFormatCode('#,##0.00');
+                $row++;
+            }
+
+            // Payment summary row
+            $sheet->setCellValue([2, $row], 'TOTAL PAID');
+            $sheet->setCellValue([3, $row], $totalPaid);
+            $sheet->setCellValue([5, $row], 'BALANCE DUE');
+            $sheet->setCellValue([6, $row], $balanceDue);
+            $sheet->getStyle([1, $row, 8, $row])->applyFromArray($boldFont);
+            $sheet->getStyle([3, $row])->getNumberFormat()->setFormatCode('#,##0.00');
+            $sheet->getStyle([6, $row])->getNumberFormat()->setFormatCode('#,##0.00');
+            $sheet->getStyle([3, $row])->applyFromArray($greenFont);
+            $sheet->getStyle([6, $row])->applyFromArray($balanceDue > 0 ? $redFont : $greenFont);
+            $sheet->getStyle([1, $row, 8, $row])->applyFromArray($yellowBg);
+        }
+
+        // Auto-size key columns
+        foreach (range(1, 12) as $col) {
+            $sheet->getColumnDimensionByColumn($col)->setAutoSize(true);
+        }
+
+        $filename = "Payout-{$vendor->company_name}-{$period}.xlsx";
+        $path = storage_path("app/temp/{$filename}");
+        @mkdir(dirname($path), 0775, true);
+
+        (new \PhpOffice\PhpSpreadsheet\Writer\Xlsx($spreadsheet))->save($path);
+        return response()->download($path, $filename)->deleteFileAfterSend(true);
+    }
 
     public function recordPayoutPayment(Request $request, \App\Models\VendorPayout $payout)
     {

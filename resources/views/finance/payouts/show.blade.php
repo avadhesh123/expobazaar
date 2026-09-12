@@ -25,7 +25,7 @@ $isFullyPaid = $balanceDue <= 0.01 && $totalPaid > 0;
                </div>
             <div>
                 <div style="font-size:.65rem;color:#64748b;font-weight:600;text-transform:uppercase;">Period</div>
-                <div style="font-weight:600;">{{ $monthName }} {{$totalPaid}} == {{$payout->net_payout}}</div>
+                <div style="font-weight:600;">{{ $monthName }} </div>
             </div>
              
             <div>

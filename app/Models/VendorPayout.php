@@ -18,6 +18,7 @@ class VendorPayout extends Model
         'vendor_invoice_file', 'vendor_invoice_number',
         'approved_by', 'paid_by', 'remarks',
         'calculation_snapshot',
+        'total_paid', 'balance_due',
     ];
 
     protected $casts = [
