@@ -493,16 +493,30 @@ class VendorController extends Controller
             }
 
             // Check if SKU belongs to another vendor
-            $existingProduct = Product::withoutGlobalScopes()->where('sku', $sku)->first();
+            // $existingProduct = Product::withoutGlobalScopes()->where('sku', $sku)->first();
+            // if ($existingProduct && $existingProduct->vendor_id !== $vendor->id) {
+            //     $errors[] = "Row " . ($idx + 1) . ": SKU '{$sku}' already exists under another vendor.";
+            //     continue;
+            // }
+
+            // Check if SKU belongs to another vendor IN SAME COMPANY
+            //Implemented on 15-09-2026 at 7:20 after confirmation from Dhananjay that same SKU can exist across different companies but not within the same company for different vendors
+            $existingProduct = Product::withoutGlobalScopes()
+                ->where('sku', $sku)
+                ->where('company_code', $activeCompany)
+                ->first();
+
             if ($existingProduct && $existingProduct->vendor_id !== $vendor->id) {
-                $errors[] = "Row " . ($idx + 1) . ": SKU '{$sku}' already exists under another vendor.";
+                $errors[] = "Row " . ($idx + 1) . ": SKU '{$sku}' already exists under another vendor in {$activeCompany}.";
                 continue;
             }
+
 
             // Check barcode uniqueness if provided
             $barcode = trim($p['barcode'] ?? '');
             if (!empty($barcode)) {
                 $dupBarcode = Product::withoutGlobalScopes()->where('barcode', $barcode)
+                    ->where('company_code', $activeCompany) //Implemented on 15-09-2026 at 7:20 after confirmation from Dhananjay
                     ->when($existingProduct, fn ($q) => $q->where('id', '!=', $existingProduct->id))
                     ->first();
                 if ($dupBarcode) {
@@ -554,7 +568,10 @@ class VendorController extends Controller
                 $vendorSku = trim($p['vendor_sku'] ?? '');
 
                 // Find or create product
-                $product = Product::withoutGlobalScopes()->where('sku', $vendorSku)->where('vendor_id', $vendor->id)->first();
+                $product = Product::withoutGlobalScopes()
+                ->where('company_code', $activeCompany) //Implemented on 15-09-2026 at 7:20 after confirmation from Dhananjay
+                ->where('sku', $vendorSku)
+                ->where('vendor_id', $vendor->id)->first();
                 if (!$product) {
                     $productData = [
                         'sku'          => $vendorSku,
