@@ -334,9 +334,11 @@ class LogisticsController extends Controller
             ->when(!$user->isAdmin() && !empty($activeCode), function ($q) use ($activeCode) {
                 return $q->where('company_code', $activeCode);
             })
-            ->whereHas('product', function ($pq) use ($activeCode) {
-                $pq->where('company_code', $activeCode);
-            })
+            // ->whereHas('product', function ($pq) use ($activeCode) {
+            //     $pq->where('company_code', $activeCode);
+            // })
+                ->whereHas('product')
+
             ->whereHas('warehouse', function ($wq) use ($activeCode) {
                 $wq->where('company_code', $activeCode);
             })
@@ -353,6 +355,8 @@ class LogisticsController extends Controller
             ->when($request->vendor_id, fn ($q, $v) => $q->whereHas('product', fn ($pq) => $pq->where('vendor_id', $v)))
             ->when($request->search, fn ($q, $v) => $q->whereHas('product', fn ($pq) => $pq->where('sku', 'like', "%{$v}%")->orWhere('name', 'like', "%{$v}%"))); //->where('quantity', '>', 0);
 
+
+           //print_r($query->toSql());exit;
         $inventory = $query->paginate(50)->appends($request->query());
 
         // print_r($inventory->toArray());

@@ -15,7 +15,8 @@
             <thead>
                 <tr>
                     <th>Vendor</th>
-                    <th>GRN</th>
+                    <th width="170">GRN</th>
+                    <th width="50">Period</th>
                     <th>Inward</th>
                     <th>Storage</th>
                     <th>Fulfillment</th>
@@ -33,6 +34,7 @@
                         <div style="font-size:.6rem;color:#94a3b8;">{{ $c->vendor->vendor_code ?? '' }}</div>
                     </td>
                     <td style="font-family:monospace;font-size:.78rem;">{{ $c->grn->grn_number ?? '—' }}</td>
+                    <td style="font-family:monospace;">{{ date('M',mktime(0,0,0,$c->charge_month,1)) }} {{ $c->charge_year }}</td>
                     <td style="font-family:monospace;">{{ $activeCurrencySymbol }}{{ number_format(floatval($c->inward_charge), 2) }}
                         <div style="font-size:.58rem;color:#94a3b8;">{{ $c->inward_cartons }} cartons</div>
                     </td>
@@ -73,13 +75,11 @@
             <thead>
                 <tr>
                     <th>Period</th>
-                    <th>Sales</th>
-                    <th>Storage</th>
-                    <th>Inward</th>
-                    <th>Logistics</th>
-                    <th>Platform Ded.</th>
+                    <th>Total Sales</th>
+                    <th>EB Commission</th> 
+                    <th>Warehouse Charges</th>
                     <th>Chargebacks</th>
-                    <th>Gross Payout</th>
+                    <th>Net Payout</th>
                     <th>Status</th>
                     <th>Invoice</th>
                     <th style="width:120px;">Actions</th>
@@ -91,11 +91,9 @@
                 <tr>
                     <td style="font-weight:700;">{{ date('M',mktime(0,0,0,$p->payout_month,1)) }} {{ $p->payout_year }}</td>
                     <td style="font-family:monospace;color:#166534;font-weight:600;">{{ $activeCurrencySymbol }}{{ number_format($p->total_sales, 2) }}</td>
-                    <td style="font-family:monospace;font-size:.78rem;color:#dc2626;">-{{ $activeCurrencySymbol }}{{ number_format($p->total_storage_charges, 2) }}</td>
-                    <td style="font-family:monospace;font-size:.78rem;color:#dc2626;">-{{ $activeCurrencySymbol }}{{ number_format($p->total_inward_charges, 2) }}</td>
-                    <td style="font-family:monospace;font-size:.78rem;color:#dc2626;">-{{ $activeCurrencySymbol }}{{ number_format($p->total_logistics_charges, 2) }}</td>
-                    <td style="font-family:monospace;font-size:.78rem;color:#dc2626;">-{{ $activeCurrencySymbol }}{{ number_format($p->total_platform_deductions, 2) }}</td>
-                    <td style="font-family:monospace;font-size:.78rem;color:#991b1b;">-{{ $activeCurrencySymbol }}{{ number_format($p->total_chargebacks, 2) }}</td>
+                    <td style="font-family:monospace;font-size:.78rem;color:#dc2626;">-{{ $activeCurrencySymbol }}{{ number_format($p->total_commission, 2) }}</td>
+                    <td style="font-family:monospace;font-size:.78rem;color:#dc2626;">-{{ $activeCurrencySymbol }}{{ number_format($p->total_warehouse_charges, 2) }}</td>
+                    <td style="font-family:monospace;font-size:.78rem;color:#dc2626;">-{{ $activeCurrencySymbol }}{{ number_format($p->total_chargebacks, 2) }}</td>
                     <td style="font-family:monospace;font-weight:800;color:{{ $p->net_payout>=0?'#166534':'#dc2626' }};">{{ $activeCurrencySymbol }}{{ number_format($p->net_payout, 2) }}</td>
                     <td>
                         @php $sc = ['calculated'=>'badge-warning','approved'=>'badge-info','payment_pending'=>'badge-warning','paid'=>'badge-success','invoice_received'=>'badge-success']; @endphp
@@ -114,6 +112,9 @@
                         @if($p->payment_advice_file ?? false)
                         <a href="{{ \App\Helpers\FileStorage::url($p->payment_advice_file) }}" class="btn btn-outline btn-sm" target="_blank"><i class="fas fa-file-download"></i></a>
                         @endif
+                        <a href="{{ route('vendor.payouts.show', $p) }}" class="btn btn-outline btn-sm" title="View Breakdown">
+                            <i class="fas fa-eye"></i> View
+                        </a>
                     </td>
                 </tr>
                 {{-- Invoice Upload Row --}}

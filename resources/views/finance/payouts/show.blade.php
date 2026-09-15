@@ -372,6 +372,148 @@ $isFullyPaid = $balanceDue <= 0.01 && $totalPaid > 0;
     </div>
 </div>
 
+{{-- ===================== WAREHOUSE CHARGES ADJUSTMENT ===================== --}}
+@php
+    $warehouseAdjustments = \App\Models\PayoutWarehouseAdjustment::where('vendor_payout_id', $payout->id)
+        ->orderByDesc('adjustment_date')
+        ->with('creator')
+        ->get();
+
+    $totalWarehouseAdjustment = $warehouseAdjustments->sum('amount');
+@endphp
+ <div style="display:grid;grid-template-columns:60% 40%;gap:1.25rem;margin-bottom:1.25rem;">
+<div class="card" style="margin-bottom:1.25rem;">
+    <div class="card-header">
+        <h3>
+            <i class="fas fa-warehouse" style="margin-right:.5rem;color:#e8a838;"></i>
+            Warehouse Charges Adjustment
+        </h3>
+        <div style="display:flex;align-items:center;gap:.75rem;">
+            <span style="font-size:.78rem;">
+                Total Adjustment:
+                <strong style="color:{{ $totalWarehouseAdjustment >= 0 ? '#dc2626' : '#16a34a' }};">
+                    {{ $totalWarehouseAdjustment < 0 ? '-' : '' }}{{ $activeCurrencySymbol }}{{ number_format(abs($totalWarehouseAdjustment), 2) }}
+                </strong>
+            </span>
+            <button type="button" class="btn btn-primary btn-sm" onclick="toggleWarehouseAdjForm()">
+                <i class="fas fa-plus" style="margin-right:.2rem;"></i> Add Adjustment
+            </button>
+        </div>
+    </div>
+
+    <script>
+        function toggleWarehouseAdjForm() {
+            const form = document.getElementById('warehouseAdjForm');
+            form.style.display = form.style.display === 'none' ? 'block' : 'none';
+        }
+    </script>
+
+    {{-- Adjustment Form --}}
+    <div id="warehouseAdjForm" style="display:none;padding:1rem 1.4rem;background:#fffbeb;border-bottom:1px solid #fde68a;">
+        <form method="POST" action="{{ route('finance.payouts.warehouse-adjustment', $payout) }}">
+            @csrf
+            <div style="display:flex;gap:.6rem;align-items:flex-end;flex-wrap:wrap;">
+                <div>
+                    <label style="font-size:.65rem;font-weight:600;color:#92400e;display:block;margin-bottom:.2rem;">
+                        Amount <span style="color:#dc2626;">*</span>
+                        <span style="font-size:.55rem;color:#64748b;">(Positive = Charge, Negative = Credit)</span>
+                    </label>
+                    <input type="number" name="amount" step="0.01" required
+                           placeholder="0.00"
+                           style="width:120px;padding:.4rem .5rem;border:1.5px solid #fde68a;border-radius:6px;font-size:.85rem;font-family:monospace;text-align:center;">
+                </div>
+                <div>
+                    <label style="font-size:.65rem;font-weight:600;color:#92400e;display:block;margin-bottom:.2rem;">
+                        Date <span style="color:#dc2626;">*</span>
+                    </label>
+                    <input type="date" name="adjustment_date" required value="{{ date('Y-m-d') }}"
+                           style="padding:.4rem .5rem;border:1.5px solid #fde68a;border-radius:6px;font-size:.82rem;">
+                </div>
+                <div>
+                    <label style="font-size:.65rem;font-weight:600;color:#92400e;display:block;margin-bottom:.2rem;">Reason</label>
+                    <select name="reason" style="padding:.4rem .5rem;border:1.5px solid #fde68a;border-radius:6px;font-size:.82rem;">
+                        <option value="">Select...</option>
+                        <option value="extra_storage">Extra Storage</option>
+                        <option value="damaged_goods">Damaged Goods</option>
+                        <option value="missing_items">Missing Items</option>
+                        <option value="fulfillment_error">Fulfillment Error</option>
+                        <option value="credit_note">Credit Note / Refund</option>
+                        <option value="other">Other</option>
+                    </select>
+                </div>
+                <div style="flex:1;min-width:140px;">
+                    <label style="font-size:.65rem;font-weight:600;color:#92400e;display:block;margin-bottom:.2rem;">Remarks</label>
+                    <input type="text" name="remarks" placeholder="Optional notes..."
+                           style="width:100%;padding:.4rem .5rem;border:1.5px solid #fde68a;border-radius:6px;font-size:.82rem;">
+                </div>
+                <button type="submit" class="btn btn-primary btn-sm" style="padding:.45rem .8rem;"
+                        onclick="return confirm('Save this warehouse adjustment?')">
+                    <i class="fas fa-save" style="margin-right:.2rem;"></i> Save
+                </button>
+                <button type="button" class="btn btn-outline btn-sm"
+                        onclick="document.getElementById('warehouseAdjForm').style.display='none'">
+                    Cancel
+                </button>
+            </div>
+        </form>
+    </div>
+
+    {{-- Adjustment History --}}
+    <div class="card-body" style="padding:0;">
+        @if($warehouseAdjustments->isNotEmpty())
+        <table class="data-table" style="font-size:.78rem;margin:0;">
+            <thead>
+                <tr style="background:#f0f4f8;">
+                    <th style="width:30px;">#</th>
+                    <th>Date</th>
+                    <th style="text-align:right;">Amount</th>
+                    <th>Reason</th>
+                    <th>Remarks</th>
+                    <th>Recorded By</th>
+                    <th style="width:40px;"></th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach($warehouseAdjustments as $idx => $adj)
+                <tr>
+                    <td style="text-align:center;color:#94a3b8;">{{ $idx + 1 }}</td>
+                    <td style="font-family:monospace;font-size:.75rem;">{{ $adj->adjustment_date->format('d M Y') }}</td>
+                    <td style="text-align:right;font-family:monospace;font-weight:700;color:{{ $adj->amount >= 0 ? '#dc2626' : '#16a34a' }};">
+                        {{ $adj->amount < 0 ? '-' : '+' }}{{ $activeCurrencySymbol }}{{ number_format(abs($adj->amount), 2) }}                    </td>
+                    <td style="font-size:.72rem;">{{ $adj->reason ? ucwords(str_replace('_', ' ', $adj->reason)) : '—' }}</td>
+                    <td style="font-size:.72rem;color:#64748b;">{{ $adj->remarks ?? '—' }}</td>
+                    <td style="font-size:.72rem;">{{ $adj->creator->name ?? '—' }}</td>
+                    <td>
+                        <form method="POST" action="{{ route('finance.payout-warehouse-adjustment.delete', $adj) }}"
+                              onsubmit="return confirm('Delete this adjustment?')" style="display:inline;">
+                            @csrf @method('DELETE')
+                            <button type="submit" style="background:none;border:none;color:#dc2626;cursor:pointer;font-size:.7rem;padding:2px;" title="Delete">
+                                <i class="fas fa-trash"></i>
+                            </button>
+                        </form>
+                    </td>
+                </tr>
+                @endforeach
+            </tbody>
+            <tfoot>
+                <tr style="background:#fffbeb;font-weight:700;">
+                    <td colspan="2">Total Adjustment</td>
+                    <td style="text-align:right;font-family:monospace;color:{{ $totalWarehouseAdjustment >= 0 ? '#dc2626' : '#16a34a' }};">
+                       {{ $totalWarehouseAdjustment < 0 ? '-' : '' }}{{ $activeCurrencySymbol }}{{ number_format(abs($totalWarehouseAdjustment), 2) }}
+                    </td>
+                    <td colspan="4"></td>
+                </tr>
+            </tfoot>
+        </table>
+        @else
+        <div style="padding:1.5rem;text-align:center;color:#94a3b8;font-size:.82rem;">
+            <i class="fas fa-warehouse" style="font-size:1.5rem;display:block;margin-bottom:.3rem;"></i>
+            No warehouse charge adjustments yet.
+        </div>
+        @endif
+    </div>
+</div>
+
 {{-- Final Payout Summary --}}
 
 @php
@@ -379,9 +521,9 @@ $totalPayout = $payoutSummary['total_payout'] ?? 0;
 $totalWhCharges = $warehouseCharges->sum(fn($c) => floatval($c->total_charges ?? $c->amount ?? 0));
 
 $totalChargebacks = $chargebacks->sum('amount');
-$netPayout = round($totalPayout - $totalWhCharges - $totalChargebacks, 2);
+$netPayout = round($totalPayout - $totalWhCharges - $totalChargebacks + $totalWarehouseAdjustment, 2);
 
-$finalPayout = $payoutSummary['total_payout'] - $totalWhCharges - $totalChargebacks;
+$finalPayout = $payoutSummary['total_payout'] - $totalWhCharges - $totalChargebacks + $totalWarehouseAdjustment;
 
 @endphp
 <div class="card">
@@ -411,16 +553,19 @@ $finalPayout = $payoutSummary['total_payout'] - $totalWhCharges - $totalChargeba
                 <td style="padding:.4rem 0;color:#dc2626;">— Chargebacks</td>
                 <td style="text-align:right;font-family:monospace;color:#dc2626;">-{{ $activeCurrencySymbol }}{{ number_format($totalChargebacks, 2) }}</td>
             </tr>
+  
+            <tr>
+                <td style="padding:.4rem 0;color:#dc2626;">— Warehouse Charges Adjustments</td>
+                <td style="text-align:right;font-family:monospace;color:#dc2626;">{{ $totalWarehouseAdjustment < 0 ? '-' : '' }}{{ $activeCurrencySymbol }}{{ number_format(abs($totalWarehouseAdjustment), 2) }}</td>
+            </tr>
             <tr style="border-top:2px solid #1e3a5f;">
                 <td style="padding:.6rem 0;font-weight:800;font-size:1rem;">NET PAYOUT</td>
                 <td style="text-align:right;font-family:monospace;font-weight:800;font-size:1.1rem;color:{{ $netPayout >= 0 ? '#7c3aed' : '#dc2626' }};">{{ $activeCurrencySymbol }}{{ number_format($netPayout, 2) }}</td>
             </tr>
         </table>
-    </div>
-
-    
+    </div>    
 </div>
-
+</div>
 <div style="margin-top:1rem;display:flex;gap:.5rem;">
     <a href="{{ route('finance.payouts') }}" class="btn btn-outline"><i class="fas fa-arrow-left"></i> Back to Payouts</a>
 </div>

@@ -287,8 +287,8 @@ Route::middleware(['auth'])->group(function () {
             Route::post('warehouse-monthly-charges/{warehouseMonthlyCharge}/explanations', [LogisticsController::class, 'saveVarianceExplanations'])->name('warehouse-monthly-charges.explanations');
             Route::post('warehouse-monthly-charges/{warehouseMonthlyCharge}/approve', [LogisticsController::class, 'approveWarehouseCharge'])->name('warehouse-monthly-charges.approve');
             Route::post('grn/{grn}/adjust', [LogisticsController::class, 'adjustGrnQty'])->name('grn.adjust');
-       
-     });
+
+        });
 
 
     // CATALOGUING
@@ -406,6 +406,20 @@ Route::middleware(['auth'])->group(function () {
 
         Route::post('vendor-charges/{charge}/supersede', [FinanceController::class, 'supersedeCharge'])->name('vendor-charges.supersede');
         Route::post('vendor-charges/{charge}/restore', [FinanceController::class, 'restoreCharge'])->name('vendor-charges.restore');
+
+        // Warehouse Charge Adjustments
+
+        // Warehouse Charge Adjustments
+        Route::post('payouts/{payout}/warehouse-adjustment', [FinanceController::class, 'storeWarehouseAdjustment'])
+            ->name('payouts.warehouse-adjustment');
+
+        Route::delete('payout-warehouse-adjustment/{adjustment}', [FinanceController::class, 'deleteWarehouseAdjustment'])
+            ->name('payout-warehouse-adjustment.delete');
+        // Route::post('payouts/{payout}/warehouse-adjustment', [FinanceController::class, 'storeWarehouseAdjustment'])
+        //     ->name('finance.payouts.warehouse-adjustment');
+
+        // Route::delete('payout-warehouse-adjustment/{adjustment}', [FinanceController::class, 'deleteWarehouseAdjustment'])
+        //     ->name('finance.payout-warehouse-adjustment.delete');
 
     });
 

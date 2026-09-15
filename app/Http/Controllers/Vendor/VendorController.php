@@ -78,14 +78,27 @@ class VendorController extends Controller
                 'net_payout' => $payout->net_payout ?? 0,
             ];
 
- 
+
+            // $warehouseCharges = \App\Models\VendorMonthlyCharge::withoutGlobalScopes()
+            //     ->where('vendor_id', $payout->vendor_id)
+            //     ->where('company_code', $payout->company_code)
+            //     ->where('charge_month', $payout->payout_month)
+            //     ->where('charge_year', $payout->payout_year)
+            //     ->with('warehouse')
+            //     ->get();
+
             $warehouseCharges = \App\Models\VendorMonthlyCharge::withoutGlobalScopes()
-                ->where('vendor_id', $payout->vendor_id)
-                ->where('company_code', $payout->company_code)
-                ->where('charge_month', $payout->payout_month)
-                ->where('charge_year', $payout->payout_year)
-                ->with('warehouse')
-                ->get();
+                            ->where('vendor_id', $payout->vendor_id)
+                            ->where('company_code', $payout->company_code)
+                            ->where('charge_month', $payout->payout_month)
+                            ->where('charge_year', $payout->payout_year)
+                            ->where('status', 'approved')
+                             ->where(function ($q) {
+                                 $q->where('charge_status', 'active')
+                                   ->orWhereNull('charge_status');
+                             })
+                            ->with('warehouse')
+                            ->get();
 
             $chargebacks = Chargeback::withoutGlobalScopes()
                 ->where('vendor_id', $payout->vendor_id)
@@ -548,7 +561,7 @@ class VendorController extends Controller
                         'category_id'  => $categoryId,
                         'vendor_id'    => $vendor->id,
                         'name'         => $p['product_name'],
-                        'company_code' => $activeCompany ?? $vendor->company_code,
+                        'company_code' => $activeCompany ,
                         'length'       => $p['length'] ?? null,
                         'width'        => $p['width'] ?? null,
                         'height'       => $p['height'] ?? null,
@@ -2149,7 +2162,7 @@ class VendorController extends Controller
         return back()->with('success', 'Inspection report uploaded successfully.');
     }
 
-    public function salesReport(Request $request)
+    public function salesReport15092026(Request $request)
     {
         $vendor = auth()->user()->vendor;
         $activeCompany = session('active_company');
@@ -2225,7 +2238,7 @@ class VendorController extends Controller
             }
             unset($batch);
         }
-
+        //print_r($fifoQueue);exit;
         // Build line items per order
         $orderLineItems = [];
         foreach ($orders as $order) {
@@ -2260,6 +2273,7 @@ class VendorController extends Controller
                         $itemComm += round(($batch['commission'] / 100) * $batchSale, 2);
                         $batch['remaining_qty'] -= $allocate;
                         $qtyToAllocate -= $allocate;
+
                     }
                     unset($batch);
                 }
@@ -2267,7 +2281,11 @@ class VendorController extends Controller
                 if ($qtyToAllocate > 0) {
                     $fallbackWsp = floatval($product->vendor_wsp ?? $product->fob_price ?? 0);
                     $itemSale += round($fallbackWsp * $qtyToAllocate, 2);
+                    echo '===';
                 }
+
+
+
 
                 $orderTotal += $itemSale;
                 $orderShippedQty += $shippedQty;
@@ -2283,6 +2301,264 @@ class VendorController extends Controller
         $totalShippedQty = array_sum(array_column($orderLineItems, 'shipped_qty'));
 
         return view('vendor.sales.index', compact('orders', 'vendor', 'totalSales', 'totalShippedQty', 'orderLineItems'));
+    }
+    public function salesReport(Request $request)
+    {
+        $vendor = auth()->user()->vendor;
+        $activeCompany = session('active_company');
+
+        // Get shipped orders with vendor's items
+        $orders = Order::withoutGlobalScopes()
+            ->whereIn('status', ['shipped', 'delivered'])
+            ->where('company_code', $activeCompany)
+            ->whereHas('items', fn ($q) => $q->where('vendor_id', $vendor->id)->where('shipped_qty', '>', 0))
+            ->with([
+                'salesChannel',
+                'items' => fn ($q) => $q->where('vendor_id', $vendor->id)
+                    ->where('shipped_qty', '>', 0)
+                    ->with(['product' => fn ($pq) => $pq->withoutGlobalScopes()])
+            ])
+            ->when($request->month, fn ($q, $v) => $q->whereMonth('order_date', $v))
+            ->when($request->year, fn ($q, $v) => $q->whereYear('order_date', $v))
+            ->latest('order_date')
+            ->paginate(25);
+
+        // Build FIFO queue from live sheets
+        $vendorLiveSheets = \App\Models\LiveSheet::withoutGlobalScopes()
+            ->where('vendor_id', $vendor->id)
+            ->where('company_code', $activeCompany)
+            ->where('status', 'locked')
+            ->orderBy('approved_at', 'asc')
+            ->with(['items' => fn ($q) => $q->select('id', 'live_sheet_id', 'product_id', 'quantity', 'unit_price', 'product_details')])
+            ->get();
+
+        $lsIds = $vendorLiveSheets->pluck('id');
+
+        // Preload ALL WSP revisions for this vendor's live sheets
+        $wspRevisions = \App\Models\WspRevision::whereIn('live_sheet_id', $lsIds)
+            ->orderByDesc('effective_from')
+            ->get();
+
+        $fifoQueue = [];
+        foreach ($vendorLiveSheets as $ls) {
+            $commPercent = floatval($ls->commission_percentage ?? 0);
+            foreach ($ls->items as $lsItem) {
+                $pid = $lsItem->product_id;
+                $d = $lsItem->product_details ?? [];
+                $baseWsp = floatval($d['wsp'] ?? $d['vendor_wsp'] ?? $lsItem->unit_price ?? 0);
+
+                if (!isset($fifoQueue[$pid])) {
+                    $fifoQueue[$pid] = [];
+                }
+                $fifoQueue[$pid][] = [
+                    'live_sheet_id' => $ls->id,
+                    'vendor_wsp'    => $baseWsp,
+                    'commission'    => $commPercent,
+                    'remaining_qty' => intval($lsItem->quantity),
+                ];
+            }
+        }
+
+        // Deduct prior sold
+        $priorSold = \App\Models\OrderItem::withoutGlobalScopes()
+            ->where('vendor_id', $vendor->id)
+            ->where('shipped_qty', '>', 0)
+            ->whereHas('order', fn ($q) => $q->withoutGlobalScopes()
+                ->where('company_code', $activeCompany)
+                ->whereIn('status', ['shipped', 'delivered']))
+            ->select('product_id', \DB::raw('SUM(shipped_qty) as shipped'))
+            ->groupBy('product_id')
+            ->pluck('shipped', 'product_id');
+
+        foreach ($priorSold as $pid => $soldQty) {
+            if (!isset($fifoQueue[$pid])) {
+                continue;
+            }
+            $remaining = intval($soldQty);
+            foreach ($fifoQueue[$pid] as &$batch) {
+                if ($remaining <= 0) {
+                    break;
+                }
+                $deduct = min($remaining, $batch['remaining_qty']);
+                $batch['remaining_qty'] -= $deduct;
+                $remaining -= $deduct;
+            }
+            unset($batch);
+        }
+
+        // Build line items per order — WSP resolved per order date
+        $orderLineItems = [];
+        foreach ($orders as $order) {
+            $orderDate = $order->order_date?->format('Y-m-d') ?? now()->toDateString();
+            $orderTotal = 0;
+            $orderShippedQty = 0;
+
+            foreach ($order->items as $item) {
+                $product = $item->product;
+                if (!$product) {
+                    continue;
+                }
+                $pid = $product->id;
+                $shippedQty = intval($item->shipped_qty);
+                if ($shippedQty <= 0) {
+                    continue;
+                }
+
+                $qtyToAllocate = $shippedQty;
+                $itemSale = 0;
+                $itemComm = 0;
+
+                if (isset($fifoQueue[$pid])) {
+                    foreach ($fifoQueue[$pid] as &$batch) {
+                        if ($qtyToAllocate <= 0) {
+                            break;
+                        }
+                        if ($batch['remaining_qty'] <= 0) {
+                            continue;
+                        }
+
+                        // Resolve WSP from wsp_revisions for this order date
+                        $batchWsp = $this->getWspForDate(
+                            $wspRevisions,
+                            $batch['live_sheet_id'],
+                            $pid,
+                            $orderDate,
+                            $batch['vendor_wsp']
+                        );
+
+                        $allocate = min($qtyToAllocate, $batch['remaining_qty']);
+                        $batchSale = round($batchWsp * $allocate, 2);
+                        $itemSale += $batchSale;
+                        $itemComm += round(($batch['commission'] / 100) * $batchSale, 2);
+                        $batch['remaining_qty'] -= $allocate;
+                        $qtyToAllocate -= $allocate;
+                    }
+                    unset($batch);
+                }
+
+                // Unallocated — fallback
+                if ($qtyToAllocate > 0) {
+                    $fallbackWsp = floatval($product->vendor_wsp ?? $product->fob_price ?? 0);
+                    $itemSale += round($fallbackWsp * $qtyToAllocate, 2);
+                }
+
+                $orderTotal += $itemSale;
+                $orderShippedQty += $shippedQty;
+            }
+
+            $orderLineItems[$order->id] = [
+                'sale_amount' => round($orderTotal, 2),
+                'shipped_qty' => $orderShippedQty,
+            ];
+        }
+
+        $totalSales = array_sum(array_column($orderLineItems, 'sale_amount'));
+        $totalShippedQty = array_sum(array_column($orderLineItems, 'shipped_qty'));
+
+        return view('vendor.sales.index', compact('orders', 'vendor', 'totalSales', 'totalShippedQty', 'orderLineItems'));
+    }
+
+    /**
+     * Get WSP from wsp_revisions for a specific order date
+     * Same logic as VendorPayoutService::getWspForDate()
+     */
+    private function getWspForDate($wspRevisions, int $liveSheetId, int $productId, string $orderDate, float $fallbackWsp): float
+    {
+        if ($wspRevisions->isEmpty()) {
+            return $fallbackWsp;
+        }
+
+        $orderDateCarbon = \Carbon\Carbon::parse($orderDate);
+        $match = null;
+
+        // Priority 1: Product-specific on this live sheet
+        foreach ($wspRevisions as $r) {
+            if ($r->live_sheet_id != $liveSheetId) {
+                continue;
+            }
+            if ($r->product_id != $productId) {
+                continue;
+            }
+
+            $from = \Carbon\Carbon::parse($r->effective_from);
+            if ($from->gt($orderDateCarbon)) {
+                continue;
+            }
+
+            if ($r->effective_to) {
+                $to = \Carbon\Carbon::parse($r->effective_to);
+                if ($orderDateCarbon->gt($to)) {
+                    continue;
+                }
+            }
+
+            if (!$match || \Carbon\Carbon::parse($r->effective_from)->gt(\Carbon\Carbon::parse($match->effective_from))) {
+                $match = $r;
+            }
+        }
+
+        if ($match) {
+            return floatval($match->vendor_wsp);
+        }
+
+        // Priority 2: Product-specific on any live sheet
+        foreach ($wspRevisions as $r) {
+            if ($r->product_id != $productId) {
+                continue;
+            }
+
+            $from = \Carbon\Carbon::parse($r->effective_from);
+            if ($from->gt($orderDateCarbon)) {
+                continue;
+            }
+
+            if ($r->effective_to) {
+                $to = \Carbon\Carbon::parse($r->effective_to);
+                if ($orderDateCarbon->gt($to)) {
+                    continue;
+                }
+            }
+
+            if (!$match || \Carbon\Carbon::parse($r->effective_from)->gt(\Carbon\Carbon::parse($match->effective_from))) {
+                $match = $r;
+            }
+        }
+
+        if ($match) {
+            return floatval($match->vendor_wsp);
+        }
+
+        // Priority 3: Sheet-level on this live sheet
+        foreach ($wspRevisions as $r) {
+            if ($r->live_sheet_id != $liveSheetId) {
+                continue;
+            }
+            if ($r->product_id !== null) {
+                continue;
+            }
+
+            $from = \Carbon\Carbon::parse($r->effective_from);
+            if ($from->gt($orderDateCarbon)) {
+                continue;
+            }
+
+            if ($r->effective_to) {
+                $to = \Carbon\Carbon::parse($r->effective_to);
+                if ($orderDateCarbon->gt($to)) {
+                    continue;
+                }
+            }
+
+            if (!$match || \Carbon\Carbon::parse($r->effective_from)->gt(\Carbon\Carbon::parse($match->effective_from))) {
+                $match = $r;
+            }
+        }
+
+        if ($match) {
+            return floatval($match->vendor_wsp);
+        }
+
+        return $fallbackWsp;
     }
     public function salesReportBAK(Request $request)
     {
@@ -2649,13 +2925,26 @@ class VendorController extends Controller
             ->orderByDesc('payout_month')
             ->paginate(12);
 
+        // $vendorMonthlyCharges = \App\Models\VendorMonthlyCharge::where('vendor_id', $vendor->id)
+        //     ->where('company_code', $activeCompany)
+        //     ->where('status', 'approved')
+        //     ->with('warehouse', 'grn')
+        //     ->latest()
+        //     ->take(10)
+        //     ->get();
+
+
         $vendorMonthlyCharges = \App\Models\VendorMonthlyCharge::where('vendor_id', $vendor->id)
-            ->where('company_code', $activeCompany)
-            ->where('status', 'approved')
-            ->with('warehouse', 'grn')
-            ->latest()
-            ->take(10)
-            ->get();
+                              ->where('company_code', $activeCompany)
+                              ->where('status', 'approved')
+                              ->with('warehouse', 'grn')
+                              ->where(function ($q) {
+                                  $q->where('charge_status', 'active')
+                                    ->orWhereNull('charge_status');
+                              })->latest()
+                               ->take(10)
+                              ->get();
+
 
         return view('vendor.payouts.index', compact('payouts', 'vendor', 'vendorMonthlyCharges'));
     }
@@ -2690,12 +2979,26 @@ class VendorController extends Controller
         }
 
         // Warehouse charges
-        $warehouseCharges = \App\Models\VendorMonthlyCharge::where('vendor_id', $vendor->id)
-            ->where('company_code', $payout->company_code)
-            ->where('charge_month', $payout->payout_month)
-            ->where('charge_year', $payout->payout_year)
-            ->with('warehouse')
-            ->get();
+        // $warehouseCharges = \App\Models\VendorMonthlyCharge::where('vendor_id', $vendor->id)
+        //     ->where('company_code', $payout->company_code)
+        //     ->where('charge_month', $payout->payout_month)
+        //     ->where('charge_year', $payout->payout_year)
+        //     ->with('warehouse')
+        //     ->get();
+
+        $warehouseCharges = \App\Models\VendorMonthlyCharge::withoutGlobalScopes()
+                        ->where('vendor_id', $payout->vendor_id)
+                        ->where('company_code', $payout->company_code)
+                        ->where('charge_month', $payout->payout_month)
+                        ->where('charge_year', $payout->payout_year)
+                        ->where('status', 'approved')
+                        ->where(function ($q) {
+                            $q->where('charge_status', 'active')
+                              ->orWhereNull('charge_status');
+                        })
+                        ->with('warehouse')
+                        ->get();
+
 
         // Chargebacks
         $chargebacks = \App\Models\Chargeback::where('vendor_id', $vendor->id)

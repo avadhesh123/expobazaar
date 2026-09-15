@@ -380,15 +380,32 @@ class SalesController extends Controller
             //         (count($result['errors']) > 0 ? ' ' . implode(", ", $result['errors']) : '')
             // );
 
-            return back()
-                ->with(
-                    $result['created'] > 0 ? 'success' : 'error',
-                    "{$result['created']} order(s) created from {$result['total_rows']} rows." .
-                    (count($result['errors']) > 0 ? ' ' . count($result['errors']) . ' error(s).' : '')
-                )
-                ->with('upload_errors', array_slice($result['errors'] ?? [], 0, 10))
-                ->with('created_count', $result['created'] ?? 0)
-                ->with('skipped_count', $result['skipped'] ?? 0);
+            // Build message
+            $errorCount = count($result['errors'] ?? []);
+            $msg = "{$result['created']} order(s) created from {$result['total_rows']} rows." .
+                ($errorCount > 0 ? " {$errorCount} error(s)." : '');
+
+            // Store errors in cache if any (not session)
+            if ($errorCount > 0) {
+                $errorKey = 'upload_errors_' . auth()->id() . '_' . time();
+                \Cache::put($errorKey, array_slice($result['errors'], 0, 20), now()->addMinutes(10));
+
+                return back()
+                    ->with($result['created'] > 0 ? 'success' : 'error', $msg)
+                    ->with('error_key', $errorKey);
+            }
+
+            return back()->with($result['created'] > 0 ? 'success' : 'error', $msg);
+
+            // return back()
+            //     ->with(
+            //         $result['created'] > 0 ? 'success' : 'error',
+            //         "{$result['created']} order(s) created from {$result['total_rows']} rows." .
+            //         (count($result['errors']) > 0 ? ' ' . count($result['errors']) . ' error(s).' : '')
+            //     )
+            //     ->with('upload_errors', array_slice($result['errors'] ?? [], 0, 10))
+            //     ->with('created_count', $result['created'] ?? 0)
+            //     ->with('skipped_count', $result['skipped'] ?? 0);
 
 
         } catch (\Exception $e) {

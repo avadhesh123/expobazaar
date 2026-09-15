@@ -25,7 +25,7 @@
 <div style="display:flex;gap:.75rem;margin-bottom:1.25rem;">
     <div class="kpi-card" style="flex:1;border-left:3px solid #16a34a;"><div class="kpi-label">Sales (WSP x Qty)</div><div class="kpi-value" style="color:#16a34a;">{{ $activeCurrencySymbol }}{{ number_format($payoutSummary['total_sales'] ?? 0, 2) }}</div></div>
     <div class="kpi-card" style="flex:1;border-left:3px solid #e8a838;"><div class="kpi-label">Commission</div><div class="kpi-value" style="color:#e8a838;">{{ $activeCurrencySymbol }}{{ number_format($payoutSummary['total_commission'] ?? 0, 2) }}</div></div>
-    <div class="kpi-card" style="flex:1;border-left:3px solid #7c3aed;"><div class="kpi-label">Gross Payout</div><div class="kpi-value" style="color:{{ ($payoutSummary['net_payout'] ?? 0) >= 0 ? '#7c3aed' : '#dc2626' }};">{{ $activeCurrencySymbol }}{{ number_format($payoutSummary['net_payout'] ?? 0, 2) }}</div></div>
+    <div class="kpi-card" style="flex:1;border-left:3px solid #7c3aed;"><div class="kpi-label">Net Payout</div><div class="kpi-value" style="color:{{ ($payoutSummary['net_payout'] ?? 0) >= 0 ? '#7c3aed' : '#dc2626' }};">{{ $activeCurrencySymbol }}{{ number_format($payoutSummary['net_payout'] ?? 0, 2) }}</div></div>
 </div>
 
 {{-- SKU-Level Breakdown --}}
@@ -127,10 +127,19 @@
 
 {{-- Final Summary --}}
 @php
+
+    $warehouseAdjustments = \App\Models\PayoutWarehouseAdjustment::where('vendor_payout_id', $payout->id)
+      ->orderByDesc('adjustment_date')
+      ->with('creator')
+      ->get();
+
+    $totalWarehouseAdjustment = $warehouseAdjustments->sum('amount');
+
     $totalWhCharges = $warehouseCharges->sum(fn($c) => floatval($c->total_charges ?? $c->total_charge ?? 0));
     $totalChargebacks = $chargebacks->sum('amount');
     $grossPayout = $payoutSummary['total_payout'] ?? 0;
-    $netPayout = round($grossPayout - $totalWhCharges - $totalChargebacks, 2);
+    $netPayout = round($grossPayout - $totalWhCharges - $totalChargebacks + $totalWarehouseAdjustment, 2);
+
 @endphp
 <div class="card">
     <div class="card-header"><h3><i class="fas fa-calculator" style="margin-right:.5rem;color:#7c3aed;"></i> Final Payout Summary</h3></div>
@@ -141,6 +150,7 @@
             <tr style="border-top:1px solid #e2e8f0;"><td style="padding:.4rem 0;font-weight:600;">Gross Payout</td><td style="text-align:right;font-family:monospace;font-weight:600;">{{ $activeCurrencySymbol }}{{ number_format($grossPayout, 2) }}</td></tr>
             <tr><td style="padding:.4rem 0;color:#dc2626;">— Warehouse Charges</td><td style="text-align:right;font-family:monospace;color:#dc2626;">-{{ $activeCurrencySymbol }}{{ number_format($totalWhCharges, 2) }}</td></tr>
             <tr><td style="padding:.4rem 0;color:#dc2626;">— Chargebacks</td><td style="text-align:right;font-family:monospace;color:#dc2626;">-{{ $activeCurrencySymbol }}{{ number_format($totalChargebacks, 2) }}</td></tr>
+            <tr><td style="padding:.4rem 0;color:#dc2626;">— Warehouse Adjustments</td><td style="text-align:right;font-family:monospace;color:#dc2626;">-{{ $activeCurrencySymbol }}{{ number_format($totalWarehouseAdjustment, 2) }}</td></tr>
             <tr style="border-top:2px solid #1e3a5f;"><td style="padding:.6rem 0;font-weight:800;font-size:1rem;">NET PAYOUT</td><td style="text-align:right;font-family:monospace;font-weight:800;font-size:1.1rem;color:{{ $netPayout >= 0 ? '#7c3aed' : '#dc2626' }};">{{ $activeCurrencySymbol }}{{ number_format($netPayout, 2) }}</td></tr>
         </table>
     </div>

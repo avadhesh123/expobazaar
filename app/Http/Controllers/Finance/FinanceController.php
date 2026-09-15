@@ -3,7 +3,7 @@
 namespace App\Http\Controllers\Finance;
 
 use App\Http\Controllers\Controller;
-use App\Models\{FinanceReceivable, Chargeback, VendorPayout, Vendor, Order, SalesChannel, LiveSheet};
+use App\Models\{FinanceReceivable, Chargeback, VendorPayout, Vendor, Order, SalesChannel, LiveSheet,PayoutWarehouseAdjustment};
 use App\Services\{DashboardService, FinanceService, VendorService};
 use Illuminate\Http\Request;
 use App\Services\VendorPayoutService;
@@ -2158,6 +2158,85 @@ class FinanceController extends Controller
         return back()->with('success', "Charge restored to active.");
     }
 
+    /**
+     * Record Warehouse Charge Adjustment
+     */
+    public function storeWarehouseAdjustment(Request $request, VendorPayout $payout)
+    {
+        $request->validate([
+            'amount'           => 'required|numeric',
+            'adjustment_date'  => 'required|date',
+            'reason'           => 'nullable|string|max:255',
+            'remarks'          => 'nullable|string|max:500',
+        ]);
 
+        PayoutWarehouseAdjustment::create([
+            'vendor_payout_id' => $payout->id,
+            'amount'           => $request->amount,
+            'reason'           => $request->reason,
+            'remarks'          => $request->remarks,
+            'adjustment_date'  => $request->adjustment_date,
+            'created_by'       => auth()->id(),
+        ]);
+        $netPayoutBefore = $payout->net_payout;
+        $netPayoutAfter = round($payout->net_payout + $request->amount, 2);
+        $payout->update([ 'net_payout' => $netPayoutAfter]);
+
+        \App\Models\ActivityLog::log('wh_ch_adjustment', 'WarehouseChargesAdjustment', $payout, [
+            'net_payout_before' => $netPayoutBefore,
+            'amount'            => $request->amount,
+            'net_payout_after'  => $netPayoutAfter,
+        ], [
+                  'vendor_payout_id'     => $payout->id,
+                  'amount'     => $request->amount,
+                  'reason' => $request->reason,
+                  'adjusted_by' => auth()->user()->name,
+              ], "Wh charge adjustment of {$request->amount} for {$payout->id} by " . auth()->user()->name);
+
+        return back()->with('success', 'Warehouse charge adjustment recorded successfully.');
+    }
+
+    /**
+     * Delete Warehouse Charge Adjustment
+     */
+    public function deleteWarehouseAdjustment(PayoutWarehouseAdjustment $adjustment)
+    {
+        // Get the related payout
+        $payout = $adjustment->payout;
+
+        if (!$payout) {
+            return back()->with('error', 'Related payout not found.');
+        }
+
+        $netPayoutBefore = $payout->net_payout;
+        $netPayoutAfter = round($payout->net_payout - $adjustment->amount, 2);
+
+        // Reverse the adjustment → Add the amount back to net_payout
+        $payout->update(['net_payout' => $netPayoutAfter]);
+
+        // Activity Log
+        \App\Models\ActivityLog::log(
+            'wh_ch_adjustment_deleted',
+            'WarehouseChargesAdjustment',
+            $adjustment,
+            [
+            'net_payout_before' => $netPayoutBefore,
+            'amount'            => $adjustment->amount,
+            'net_payout_after'  => $netPayoutAfter,
+          ],
+            [
+                'vendor_payout_id' => $adjustment->vendor_payout_id ?? '—',
+                'amount'           => $adjustment->amount,
+                'reason'           => $adjustment->reason,
+                'deleted_by'       => auth()->user()->name,
+            ],
+            "WH charge adjustment of {$adjustment->amount} deleted by " . auth()->user()->name
+        );
+
+        // Delete the record
+        $adjustment->delete();
+
+        return back()->with('success', 'Warehouse charge adjustment deleted.');
+    }
 
 }
