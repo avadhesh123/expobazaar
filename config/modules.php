@@ -72,7 +72,7 @@ return [
             'access'    => ['label' => 'Access Sales Module',           'actions' => ['view'], 'route' => 'sales.dashboard',  'icon' => 'fas fa-tachometer-alt', 'sidebar' => false],
             'dashboard' => ['label' => 'Sales Dashboard',               'actions' => ['view'], 'route' => 'sales.dashboard',  'icon' => 'fas fa-tachometer-alt'],
             'upload'    => ['label' => 'Upload Sales or Create Orders',  'actions' => ['view'], 'route' => 'sales.upload',     'icon' => 'fas fa-upload'],
-            'order'     => ['label' => 'Orders',                        'actions' => ['view'], 'route' => 'sales.orders',     'icon' => 'fas fa-shopping-cart'],
+            'order'     => ['label' => 'Orders',                        'actions' => ['view', 'delete'], 'route' => 'sales.orders',     'icon' => 'fas fa-shopping-cart'],
             'to-be-shipped' => ['label' => 'To Be Shipped',             'actions' => ['view'], 'route' => 'sales.to-be-shipped',  'icon' => 'fas fa-shipping-fast'],
             'order-management' => ['label' => 'Order Management',        'actions' => ['view', 'update', 'cancel'], 'route' => 'sales.order-management',  'icon' => 'fas fa-clipboard-list'],
             'returns'      => ['label' => 'Order Returns',                  'actions' => ['view', 'create'], 'route' => 'sales.returns', 'icon' => 'fas fa-undo-alt'],

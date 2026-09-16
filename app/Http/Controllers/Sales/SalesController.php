@@ -1077,4 +1077,41 @@ class SalesController extends Controller
             return back()->with('error', 'Restock failed: ' . $e->getMessage());
         }
     }
+
+    public function deleteOrder(\App\Models\Order $order)
+    {
+        if (!auth()->user()->isAdmin() && !\App\Services\PermissionService::can(auth()->user(), 'sales.orders.delete')) {
+            abort(403, 'You do not have permission to delete orders.');
+        }
+
+        $orderNumber = $order->order_number;
+        $itemCount = $order->items()->count();
+
+        \DB::transaction(function () use ($order) {
+            // Restore inventory for shipped items
+            foreach ($order->items as $item) {
+                $qty = intval($item->shipped_qty > 0 ? $item->shipped_qty : $item->quantity);
+                if ($qty > 0 && $item->product_id) {
+                    $inventory = \App\Models\Inventory::where('product_id', $item->product_id)
+                        ->where('warehouse_id', $order->warehouse_id)
+                        ->first();
+                    if ($inventory) {
+                        $inventory->increment('quantity', $qty);
+                        $inventory->increment('available_quantity', $qty);
+                    }
+                }
+            }
+
+            $order->items()->delete();
+            $order->delete();
+        });
+
+        \App\Models\ActivityLog::log('deleted', 'order', null, null, [
+            'order_number' => $orderNumber,
+            'items_deleted' => $itemCount,
+            'deleted_by'    => auth()->user()->name,
+        ], "Order {$orderNumber} deleted with {$itemCount} items, inventory restored — by " . auth()->user()->name);
+
+        return back()->with('success', "Order {$orderNumber} deleted. {$itemCount} item(s) removed, inventory restored.");
+    }
 }

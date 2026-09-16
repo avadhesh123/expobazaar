@@ -338,6 +338,8 @@ Route::middleware(['auth'])->group(function () {
         Route::get('returns/{orderReturn}', [SalesController::class, 'showReturn'])->name('returns.show');
         Route::post('returns/{orderReturn}/update-status', [SalesController::class, 'updateReturnStatus'])->name('returns.update-status');
         Route::post('returns/{orderReturn}/restock', [SalesController::class, 'restockReturn'])->name('returns.restock');
+        Route::delete('orders/{order}', [SalesController::class, 'deleteOrder'])->name('orders.delete');
+
     });
 
 

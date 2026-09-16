@@ -152,6 +152,16 @@
                             <i class="fas fa-edit"></i>
                         </button>
                         @endif
+
+                        @if(auth()->user()->isAdmin() || \App\Services\PermissionService::can(auth()->user(), 'sales.orders.delete'))
+                        <form method="POST" action="{{ route('sales.orders.delete', $o) }}" style="display:inline;"
+                            onsubmit="return confirm('Delete order {{ $o->order_number }}? Inventory will be restored.')">
+                            @csrf @method('DELETE')
+                            <button type="submit" class="btn btn-outline btn-sm" style="color:#dc2626;border-color:#fecaca;" title="Delete Order">
+                                <i class="fas fa-trash"></i>
+                            </button>
+                        </form>
+                        @endif
                     </td>
                 </tr>
                 @empty

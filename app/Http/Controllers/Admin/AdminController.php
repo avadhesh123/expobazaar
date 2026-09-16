@@ -908,7 +908,7 @@ class AdminController extends Controller
                     ->orWhere('name', 'LIKE', "%{$q}%")
                     ->orWhere('barcode', 'LIKE', "%{$q}%");
             })
-         //   ->when($activeCompany, fn ($qr) => $qr->where('company_code', $activeCompany))
+            ->when($activeCompany, fn ($qr) => $qr->where('company_code', $activeCompany))
             ->with(['vendor:id,company_name'])
             ->limit(20)
             ->get();
