@@ -607,6 +607,7 @@ class FinanceController extends Controller
             // Check products table — use first() not count()
             $dupProduct = \App\Models\Product::withoutGlobalScopes()
                 ->where('sap_code', $code)
+                ->where('company_code', $liveSheet->company_code)
                 ->where('id', '!=', $item->product_id)
                 ->first();
 
@@ -915,6 +916,7 @@ class FinanceController extends Controller
                     // Uniqueness against existing products
                     $dup = \App\Models\Product::withoutGlobalScopes()
                         ->where('sap_code', $newSap)
+                        ->where('company_code', $liveSheet->company_code)
                         ->when($item->product_id, fn ($q) => $q->where('id', '!=', $item->product_id))
                         ->first();
                     if ($dup) {

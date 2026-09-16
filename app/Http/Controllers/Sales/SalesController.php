@@ -226,10 +226,11 @@ class SalesController extends Controller
 
     public function uploadSales(Request $request)
     {
+        $activeCode = session('active_company');
         // AJAX SKU check
         if ($request->has('check_sku')) {
             $sku = trim($request->check_sku);
-            $product = \App\Models\Product::where('sku', $sku)->first();
+            $product = \App\Models\Product::where(['sku' => $sku, 'company_code' => $activeCode])->first();
             if ($product) {
                 $stock = \App\Models\Inventory::where('product_id', $product->id)->sum('available_quantity');
                 return response()->json([

@@ -333,9 +333,9 @@ class CatalogueController extends Controller
                 $sku = trim($row[$skuCol] ?? '');
                 if (empty($sku)) continue;
 
-                $product = Product::withoutGlobalScopes()->where('sku', $sku)->first();
+                $product = Product::withoutGlobalScopes()->where(['sku' => $sku,'company_code' => $activeCompany])->first();
                 if (!$product) {
-                    $errors[] = "Row {$rowNum}: SKU '{$sku}' not found.";
+                    $errors[] = "Row {$rowNum}: SKU '{$sku}' not found for company {$activeCompany}.";
                     continue;
                 }
 

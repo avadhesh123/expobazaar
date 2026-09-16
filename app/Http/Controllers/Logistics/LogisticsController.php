@@ -356,7 +356,7 @@ class LogisticsController extends Controller
             ->when($request->search, fn ($q, $v) => $q->whereHas('product', fn ($pq) => $pq->where('sku', 'like', "%{$v}%")->orWhere('name', 'like', "%{$v}%"))); //->where('quantity', '>', 0);
 
 
-           //print_r($query->toSql());exit;
+        //print_r($query->toSql());exit;
         $inventory = $query->paginate(50)->appends($request->query());
 
         // print_r($inventory->toArray());
@@ -632,9 +632,11 @@ class LogisticsController extends Controller
                     continue;
                 }
 
-                $product = \App\Models\Product::withoutGlobalScopes()->where('sku', $sku)->first();
+                $product = \App\Models\Product::withoutGlobalScopes()
+                ->where(['sku' => $sku, 'company_code' => $companyCode])
+                ->first();
                 if (!$product) {
-                    $errors[] = "Row {$rowNum}: SKU '{$sku}' not found.";
+                    $errors[] = "Row {$rowNum}: SKU '{$sku}' not found for company {$companyCode}.";
                     continue;
                 }
 

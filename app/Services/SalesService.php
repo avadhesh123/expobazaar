@@ -655,9 +655,9 @@ class SalesService
                 $qty = intval($itemData['quantity']);
                 $unitPrice = floatval($itemData['unit_price']);
 
-                $product = Product::where('sku', $sku)->first();
+                $product = Product::where(['sku' => $sku, 'company_code' => $companyCode])->first();
                 if (!$product) {
-                    $errors[] = "Row {$rowNum}: SKU '{$sku}' not found.";
+                    $errors[] = "Row {$rowNum}: SKU '{$sku}' not found for company '{$companyCode}'.";
                     $hasError = true;
                     break;
                 }

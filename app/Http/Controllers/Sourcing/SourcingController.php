@@ -760,7 +760,7 @@ class SourcingController extends Controller
                 // ── Barcode validation ──
                 if (!empty($barcode)) {
                     // Check uniqueness against other products (exclude current product)
-                    $dupBarcode = \App\Models\Product::withoutGlobalScopes()->where('barcode', $barcode)
+                    $dupBarcode = \App\Models\Product::withoutGlobalScopes()->where(['barcode' => $barcode, 'company_code' => $liveSheet->company_code])
                         ->where('id', '!=', $item->product_id)
                         ->first();
                     if ($dupBarcode) {
