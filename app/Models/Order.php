@@ -125,11 +125,23 @@ class Order extends Model
     {
         return $this->hasMany(OrderTracking::class)->latest();
     }
-    public static function generateOrderNumber(string $companyCode): string
+    public static function generateOrderNumberOLD(string $companyCode): string
     {
         $prefix = 'ORD-' . $companyCode . '-';
         $last = self::where('order_number', 'like', $prefix . '%')->orderBy('id', 'desc')->first();
         $next = $last ? intval(substr($last->order_number, strlen($prefix))) + 1 : 1;
         return $prefix . str_pad($next, 6, '0', STR_PAD_LEFT);
     }
+	public static function generateOrderNumber(string $companyCode): string
+	{
+		$prefix = 'ORD-' . $companyCode . '-';
+		$last = self::withoutGlobalScopes()
+			->where('order_number', 'like', $prefix . '%')
+			->orderByDesc('order_number')
+			->first();
+		$next = $last ? intval(substr($last->order_number, strlen($prefix))) + 1 : 1;
+		return $prefix . str_pad($next, 6, '0', STR_PAD_LEFT);
+	}
+	
+	
 }

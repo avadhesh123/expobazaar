@@ -9,14 +9,15 @@ $disabled = $liveSheet->is_locked ? 'disabled' : '';
 @endphp
 <div style="display:flex;gap:.5rem;margin-bottom:1.25rem;">
     <a href="{{ route('sourcing.live-sheets') }}" class="btn btn-outline btn-sm"><i class="fas fa-arrow-left"></i> All Live Sheets</a>
-    @if($liveSheet->status === 'submitted' || $liveSheet->status === 'draft' && !$liveSheet->is_locked)
-    @if($liveSheet->canBeLocked())
-    <form method="POST" action="{{ route('sourcing.live-sheets.approve', $liveSheet) }}" style="display:inline;" onsubmit="return confirm('Approve and lock this live sheet?')">
-        @csrf<button type="submit" class="btn btn-success btn-sm"><i class="fas fa-lock"></i> Approve & Lock</button>
-    </form>
-    @else
-    <button class="btn btn-secondary" disabled>Approve & Lock (Waiting for SAP codes)</button>
-    @endif
+    @if(($liveSheet->status === 'submitted' || $liveSheet->status === 'unlocked' || $liveSheet->status === 'draft') && !$liveSheet->is_locked)
+        @if($liveSheet->canBeLocked() || $liveSheet->unlocked_by > 0)
+            <form method="POST" action="{{ route('sourcing.live-sheets.approve', $liveSheet) }}" style="display:inline;" onsubmit="return confirm('Approve and lock this live sheet?')">
+                @csrf
+                <button type="submit" class="btn btn-success btn-sm"><i class="fas fa-lock"></i> Approve & Lock</button>
+            </form>
+        @else
+            <button class="btn btn-secondary" disabled>Approve & Lock (Waiting for SAP codes)</button>
+        @endif
     @endif
     @if($liveSheet->is_locked && !$liveSheet->consignment)
     <form method="POST" action="{{ route('sourcing.live-sheets.create-consignment', $liveSheet) }}" style="display:inline;" onsubmit="return confirm('Create consignment from this live sheet?')">@csrf
@@ -266,7 +267,10 @@ $disabled = $liveSheet->is_locked ? 'disabled' : '';
                         @endif
                     </tr>
                 </thead>
-                <tbody>
+                <tbody>       
+                    @php
+                    $finalCBM = 0;
+                    @endphp          
                     @foreach($liveSheet->items as $idx => $item)
 
                     @php
@@ -279,18 +283,31 @@ $disabled = $liveSheet->is_locked ? 'disabled' : '';
                     $qtyMaster = (int)($d['qty_master_pack'] ?? 1);
                     $finalQty = (int)($d['final_qty'] ?? $item->quantity);
 
-                    $masterCbm = ($masterL > 0 && $masterW > 0 && $masterH > 0)
-                    ? ($masterL * $masterW * $masterH) / 61023
-                    : 0;
+                   // $masterCbm = ($masterL > 0 && $masterW > 0 && $masterH > 0)
+                   // ? ($masterL * $masterW * $masterH) / 61023
+                  //  : 0;
+
+                    
+                    if ($activeCompany === '2100') {
+                        //USA
+                        $masterCbm = ($masterL > 0 && $masterW > 0 && $masterH > 0)
+                            ? ($masterL * $masterW * $masterH) / 61023
+                            : 0;
+                    } else {
+                        //EU & UK
+                        $masterCbm = ($masterL > 0 && $masterW > 0 && $masterH > 0)
+                            ? ($masterL * $masterW * $masterH) / 1000000
+                            : 0;
+                    }
+
 
                     $totalCartons = $d['no_of_master_carton'] ?? ($qtyMaster > 0 ? ceil($finalQty / $qtyMaster) : 0);
                     $cbmShipment = $totalCartons * $masterCbm;
-
                     $finalFob = (float)($d['final_fob'] ?? $item->unit_price);
                     $dutyPercent = (float)($d['duty_percent'] ?? 0);
                     $freightFactor = (float)($d['freight_factor'] ?? 0);
                     $wspFactor = (float)($d['wsp_factor'] ?? 0);
-
+$finalCBM += $cbmShipment;
                     $dutyAmt = $finalFob * ($dutyPercent / 100);
                     $freightAmt = $finalFob * ( $freightFactor /100 );
                     $landedCost = $finalFob + $dutyAmt + $freightAmt;
@@ -305,7 +322,7 @@ $disabled = $liveSheet->is_locked ? 'disabled' : '';
                         <td style="text-align:center;position:sticky;left:40px;background:#fff;z-index:1;">{{ $d['sno'] ?? $loop->iteration }}</td>
                         <td style="font-family:monospace;font-weight:600;position:sticky;left:70px;background:#fff;z-index:1;">
                             <input type="hidden" name="items[{{ $idx }}][item_id]" value="{{ $item->id }}">
-                            {{ $item->product->sku ?? '—' }}
+                            {{ $item->product->sku ?? '—' }} 
                         </td>
                         <td>{{ $item->product->sap_code ?? $d['sap_code'] ?? '—' }}</td>
                         <td>{{ $item->product->barcode ?? $d['barcode'] ?? '—' }}</td>
@@ -443,13 +460,12 @@ $disabled = $liveSheet->is_locked ? 'disabled' : '';
                     @endforeach
                     {{-- Totals --}}
                     <tr style="background:#f8fafc;font-weight:700;">
-                        <td colspan="27" style="text-align:right;position:sticky;left:0;background:#f8fafc;">TOTALS</td>
-                        <td style="text-align:center;">{{ $liveSheet->items->sum('quantity') }}</td>
+                        <td colspan="8" style="text-align:right;position:sticky;left:0;background:#f8fafc;">TOTALS </td>
+                        <td style="text-align:center;">QTY:{{ $liveSheet->items->sum('quantity') }}</td>
+                        <td>{{$finalCBM}}</td>
                         <td></td>
-                        <td colspan="2"></td>
                         <td></td>
-                        <td></td>
-                        <td style="font-family:monospace;color:#1e40af;">{{ number_format($liveSheet->items->sum('total_cbm'), 3) }}</td>
+                        <td style="font-family:monospace;color:#1e40af;">CBM:{{ number_format($liveSheet->items->sum('total_cbm'), 3) }}</td>
                         <td colspan="8"></td>
                         <td></td>
                     </tr>
@@ -590,7 +606,6 @@ td:hover .cell-edit-icon { opacity:1; }
     $allCategories = \App\Models\Category::orderBy('name')->pluck('name')->toArray();
 @endphp
 
- >
 <script>
     
 const categoryList = @json($allCategories);

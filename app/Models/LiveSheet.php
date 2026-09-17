@@ -88,13 +88,25 @@ class LiveSheet extends Model
         return 'LS-' . $ref;
     }
     // app/Models/LiveSheet.php
-
     public function canBeLocked(): bool
+    {
+        // All items must have SAP code — either in product table or in live_sheet_items JSON
+        return !$this->items()
+            ->whereDoesntHave('product', fn ($q) => $q->withoutGlobalScopes()->whereNotNull('sap_code')->where('sap_code', '!=', ''))
+            ->where(function ($q) {
+                $q->whereNull('product_details->sap_code')
+                ->orWhere('product_details->sap_code', '');
+            })
+            ->exists();
+    }
+
+    public function canBeLocked17092026(): bool
     {
         // All items must have a SAP code before locking
         return $this->items()
             ->whereNull('product_details->sap_code')  // or wherever you store SAP code
             ->doesntExist();
+
     }
 
     public function isLocked(): bool

@@ -10,9 +10,13 @@ class SalesService
     /**
      * Clean numeric values from Excel (may contain line breaks, spaces, tabs)
      */
+    private static $orderCounter = [];
+
     private function cleanNum($value)
     {
-        if ($value === null || $value === '') return null;
+        if ($value === null || $value === '') {
+            return null;
+        }
         $clean = preg_replace('/[\r\n\t\s]+/', '', trim($value));
         return is_numeric($clean) ? $clean : $value;
     }
@@ -38,10 +42,41 @@ class SalesService
     /**
      * Generate order number: ORD-CompanyCode-Sequence
      */
-    public function generateOrderNumber(string $companyCode): string
+    public function generateOrderNumber17092026(string $companyCode): string
     {
         $count = Order::where('company_code', $companyCode)->count() + 1;
         return 'ORD-' . $companyCode . '-' . str_pad($count, 6, '0', STR_PAD_LEFT);
+    }
+
+
+
+    public function generateOrderNumber(string $companyCode): string
+    {
+        $prefix = 'ORD-' . $companyCode . '-';
+
+        // Always get fresh MAX from DB (handles rollbacks)
+        $lastNum = (int) Order::withoutGlobalScopes()
+            ->where('order_number', 'like', $prefix . '%')
+            ->selectRaw("MAX(CAST(REPLACE(order_number, '{$prefix}', '') AS UNSIGNED)) as max_num")
+            ->value('max_num');
+
+        // Also check static counter (handles batch inserts within same request)
+        if (isset(self::$orderCounter[$companyCode]) && self::$orderCounter[$companyCode] > $lastNum) {
+            $lastNum = self::$orderCounter[$companyCode];
+        }
+
+        $next = $lastNum + 1;
+
+        // Safety: keep incrementing if somehow exists
+        $orderNumber = $prefix . str_pad($next, 6, '0', STR_PAD_LEFT);
+        while (Order::withoutGlobalScopes()->where('order_number', $orderNumber)->exists()) {
+            $next++;
+            $orderNumber = $prefix . str_pad($next, 6, '0', STR_PAD_LEFT);
+        }
+
+        self::$orderCounter[$companyCode] = $next;
+
+        return $orderNumber;
     }
 
     /**
@@ -199,9 +234,9 @@ class SalesService
      */
     public function processUploadedRows(array $rows, string $companyCode, ?string $uploadDate = null): array
     {
-        $header = array_map(fn($h) => strtolower(trim($h ?? '')), $rows[0]);
+        $header = array_map(fn ($h) => strtolower(trim($h ?? '')), $rows[0]);
         $colMap = [];
-     
+
         $colAliases = [
             'order_date'    => ['order date', 'date', 'order_date'],
             'po_number'     => ['po number / order id', 'po number', 'order id', 'po_number', 'order_id'],
@@ -234,18 +269,23 @@ class SalesService
 
         $missing = [];
         foreach (['order_date', 'po_number', 'sku', 'unit_price', 'qty', 'warehouse_id_number', 'channel'] as $req) {
-            if (!isset($colMap[$req])) $missing[] = $req;
+            if (!isset($colMap[$req])) {
+                $missing[] = $req;
+            }
         }
         if (!empty($missing)) {
             return ['created' => 0, 'errors' => ['Missing required columns: ' . implode(', ', $missing)], 'total_rows' => 0];
         }
 
         $get = function ($row, $key) use ($colMap) {
-            $val = isset($colMap[$key]) ? trim($row[$colMap[$key]] ?? '') : ''; return preg_replace('/[\r\n]+/', ' ', $val);
+            $val = isset($colMap[$key]) ? trim($row[$colMap[$key]] ?? '') : '';
+            return preg_replace('/[\r\n]+/', ' ', $val);
         };
 
         $parseDate = function ($val) {
-            if (empty($val)) return null;
+            if (empty($val)) {
+                return null;
+            }
             if (is_numeric($val) && $val > 25000 && $val < 60000) {
                 return \Carbon\Carbon::createFromFormat('Y-m-d', '1899-12-30')->addDays(intval($val))->toDateString();
             }
@@ -266,7 +306,9 @@ class SalesService
             $row = $rows[$i];
             $rowNum = $i + 1;
             $sku = $get($row, 'sku');
-            if (empty($sku)) continue;
+            if (empty($sku)) {
+                continue;
+            }
 
             $poNumber = $get($row, 'po_number');
             $channel = $get($row, 'channel');
@@ -276,7 +318,9 @@ class SalesService
             $qty = $this->cleanNum($get($row, 'qty'));
 
             // Skip rows belonging to already-failed POs
-            if (in_array($poNumber, $skippedPOs)) continue;
+            if (in_array($poNumber, $skippedPOs)) {
+                continue;
+            }
 
             if (empty($orderDate)) {
                 $errors[] = "Row {$rowNum}: Order Date is empty.";
@@ -405,7 +449,9 @@ class SalesService
                 }
             }
 
-            if (!$poValid) continue;
+            if (!$poValid) {
+                continue;
+            }
 
             try {
                 $group['order_data']['total_amount'] = $group['total_amount'];
@@ -422,7 +468,7 @@ class SalesService
     }
     public function processUploadedRows30May(array $rows, string $companyCode): array
     {
-        $header = array_map(fn($h) => strtolower(trim($h ?? '')), $rows[0]);
+        $header = array_map(fn ($h) => strtolower(trim($h ?? '')), $rows[0]);
         $colMap = [];
         $colAliases = [
             'order_date'    => ['order date', 'date', 'order_date'],
@@ -465,7 +511,8 @@ class SalesService
         }
 
         $get = function ($row, $key) use ($colMap) {
-            $val = isset($colMap[$key]) ? trim($row[$colMap[$key]] ?? '') : ''; return preg_replace('/[\r\n]+/', ' ', $val);
+            $val = isset($colMap[$key]) ? trim($row[$colMap[$key]] ?? '') : '';
+            return preg_replace('/[\r\n]+/', ' ', $val);
         };
 
         $parseDate = function ($val) {
@@ -900,7 +947,7 @@ class SalesService
             'material_cost'            => $data['material_cost'] ?? null,
             'order_processing_charges' => $data['order_processing_charges'] ?? null,
             'remarks'                  => $data['remarks'] ?? null,
-        ], fn($v) => $v !== null && $v !== '');
+        ], fn ($v) => $v !== null && $v !== '');
 
         // Auto-set delivery date when delivered
         if (($data['current_status'] ?? '') === 'delivered' && !$order->delivery_date) {

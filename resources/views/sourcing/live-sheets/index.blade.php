@@ -96,14 +96,14 @@
                                 </form>
                             @endif -->
 
-                            @if($ls->status === 'submitted' && !$ls->is_locked)
-                            @if($ls->canBeLocked())
-                            <form method="POST" action="{{ route('sourcing.live-sheets.approve', $ls) }}" style="display:inline;" onsubmit="return confirm('Approve and lock this live sheet?')">
-                                @csrf<button type="submit" class="btn btn-success btn-sm"><i class="fas fa-lock"></i> Approve & Lock</button>
-                            </form>
-                            @else
-                            <span style="font-size:.72rem;color:#F5B027;padding:.3rem;display:flex;align-items:center;gap:.2rem;font-weight:600;"><i class="fas fa-clock"></i> Waiting for SAP Codes</span>
-                            @endif
+                            @if(($ls->status === 'submitted' || $ls->status === 'unlocked') && !$ls->is_locked)
+                                @if($ls->canBeLocked() || $ls->unlocked_by > 0)
+                                <form method="POST" action="{{ route('sourcing.live-sheets.approve', $ls) }}" style="display:inline;" onsubmit="return confirm('Approve and lock this live sheet?')">
+                                    @csrf<button type="submit" class="btn btn-success btn-sm"><i class="fas fa-lock"></i> Approve & Lock</button>
+                                </form>                                
+                                @else
+                                <span style="font-size:.72rem;color:#F5B027;padding:.3rem;display:flex;align-items:center;gap:.2rem;font-weight:600;"><i class="fas fa-clock"></i> Waiting for SAP Codes</span>
+                                @endif
                             @endif
 
                             {{-- Already has consignment --}}
