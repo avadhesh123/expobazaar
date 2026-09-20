@@ -1078,7 +1078,7 @@ class SalesController extends Controller
         }
     }
 
-    public function deleteOrder(\App\Models\Order $order)
+    public function deleteOrderOLD(\App\Models\Order $order)
     {
         if (!auth()->user()->isAdmin() && !\App\Services\PermissionService::can(auth()->user(), 'sales.orders.delete')) {
             abort(403, 'You do not have permission to delete orders.');
@@ -1113,5 +1113,109 @@ class SalesController extends Controller
         ], "Order {$orderNumber} deleted with {$itemCount} items, inventory restored — by " . auth()->user()->name);
 
         return back()->with('success', "Order {$orderNumber} deleted. {$itemCount} item(s) removed, inventory restored.");
+    }
+    /**
+ * Delete order, restore inventory, log everything
+ * Route: DELETE sales/orders/{order}
+ */
+    public function deleteOrder(\App\Models\Order $order)
+    {
+        if (!auth()->user()->isAdmin() && !\App\Services\PermissionService::can(auth()->user(), 'sales.orders.delete')) {
+            abort(403, 'You do not have permission to delete orders.');
+        }
+
+        $orderNumber = $order->order_number;
+        $itemCount = $order->items()->count();
+        $restoredItems = [];
+
+        \DB::transaction(function () use ($order, &$restoredItems) {
+            foreach ($order->items as $item) {
+                $qty = intval($item->shipped_qty > 0 ? $item->shipped_qty : $item->quantity);
+                $sku = $item->sku ?? ($item->product->sku ?? '—');
+
+                if ($qty <= 0 || !$item->product_id) {
+                    continue;
+                }
+
+                $inventory = \App\Models\Inventory::where('product_id', $item->product_id)
+                    ->where('warehouse_id', $order->warehouse_id)
+                    ->first();
+
+                if (!$inventory) {
+                    continue;
+                }
+
+                // Capture before values
+                $prevQty = intval($inventory->quantity);
+                $prevAvailable = intval($inventory->available_quantity);
+                $prevReserved = intval($inventory->reserved_quantity ?? 0);
+
+                // Restore inventory
+                $inventory->increment('quantity', $qty);
+                $inventory->increment('available_quantity', $qty);
+
+                // After values
+                $updatedQty = $prevQty + $qty;
+                $updatedAvailable = $prevAvailable + $qty;
+
+                // Inventory log
+                \DB::table('inventory_logs')->insert([
+                    'product_id'          => $item->product_id,
+                    'warehouse_id'        => $order->warehouse_id,
+                    'company_code'        => $order->company_code,
+                    'sku'                 => $sku,
+                    'action'              => 'order_deleted',
+                    'description'         => "Order {$order->order_number} deleted — qty restored",
+                    'previous_quantity'   => $prevQty,
+                    'change_quantity'     => $qty,
+                    'updated_quantity'    => $updatedQty,
+                    'previous_available'  => $prevAvailable,
+                    'change_available'    => $qty,
+                    'updated_available'   => $updatedAvailable,
+                    'previous_reserved'   => $prevReserved,
+                    'change_reserved'     => 0,
+                    'updated_reserved'    => $prevReserved,
+                    'reference_type'      => 'App\\Models\\Order',
+                    'reference_id'        => $order->id,
+                    'reference_code'      => $order->order_number,
+                    'performed_by'        => auth()->id(),
+                    'ip_address'          => request()->ip(),
+                    'metadata'            => json_encode([
+                        'order_status'    => $order->status,
+                        'shipped_qty'     => intval($item->shipped_qty),
+                        'ordered_qty'     => intval($item->quantity),
+                        'restored_qty'    => $qty,
+                        'platform_order'  => $order->platform_order_id,
+                        'channel'         => $order->salesChannel->name ?? null,
+                    ]),
+                    'created_at'          => now(),
+                ]);
+
+                $restoredItems[] = [
+                    'sku'      => $sku,
+                    'qty'      => $qty,
+                    'inv_from' => $prevQty,
+                    'inv_to'   => $updatedQty,
+                ];
+            }
+
+            // Delete order items then order
+            $order->items()->delete();
+            $order->delete();
+        });
+
+        // Activity log
+        \App\Models\ActivityLog::log('deleted', 'order', $order, null, [
+            'order_number'    => $orderNumber,
+            'company_code'    => $order->company_code,
+            'platform_order'  => $order->platform_order_id,
+            'status_at_delete' => $order->status,
+            'items_deleted'   => $itemCount,
+            'inventory_restored' => $restoredItems,
+            'deleted_by'      => auth()->user()->name,
+            'ip'              => request()->ip(),
+        ], "Order {$orderNumber} deleted — {$itemCount} items, inventory restored for " . count($restoredItems) . " SKUs — by " . auth()->user()->name);
+
+        return back()->with('success', "Order {$orderNumber} deleted. Inventory restored for " . count($restoredItems) . " item(s).");
     }
 }

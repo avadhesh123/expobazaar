@@ -154,13 +154,10 @@
                         @endif
 
                         @if(auth()->user()->isAdmin() || \App\Services\PermissionService::can(auth()->user(), 'sales.orders.delete'))
-                        <form method="POST" action="{{ route('sales.orders.delete', $o) }}" style="display:inline;"
-                            onsubmit="return confirm('Delete order {{ $o->order_number }}? Inventory will be restored.')">
-                            @csrf @method('DELETE')
-                            <button type="submit" class="btn btn-outline btn-sm" style="color:#dc2626;border-color:#fecaca;" title="Delete Order">
-                                <i class="fas fa-trash"></i>
-                            </button>
-                        </form>
+                        <button type="button" class="btn btn-outline btn-sm" style="color:#dc2626;border-color:#fecaca;font-size:.65rem;"
+                            onclick="openDeleteOrderModal({{ $o->id }}, '{{ $o->order_number }}', '{{ $o->status }}')" title="Delete Order">
+                            <i class="fas fa-trash"></i>
+                        </button>
                         @endif
                     </td>
                 </tr>
@@ -234,6 +231,52 @@
         </form>
     </div>
 </div>
+{{-- Delete Order Modal --}}
+@if(auth()->user()->isAdmin() || \App\Services\PermissionService::can(auth()->user(), 'sales.orders.delete'))
+<div id="deleteOrderModal" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.5);z-index:9999;align-items:center;justify-content:center;">
+    <div style="background:#fff;border-radius:12px;width:460px;max-width:92%;box-shadow:0 8px 32px rgba(0,0,0,.2);">
+        <div style="padding:.75rem 1.25rem;border-bottom:1px solid #fecaca;display:flex;justify-content:space-between;align-items:center;">
+            <h3 style="font-size:.9rem;font-weight:700;color:#dc2626;margin:0;">
+                <i class="fas fa-trash" style="margin-right:.3rem;"></i> Delete Order — <span id="delOrderNum"></span>
+            </h3>
+            <button onclick="document.getElementById('deleteOrderModal').style.display='none'" style="background:none;border:none;cursor:pointer;font-size:1.2rem;color:#94a3b8;">&times;</button>
+        </div>
+        <form method="POST" id="deleteOrderForm" action="" class="no-loader">
+            @csrf @method('DELETE')
+            <div style="padding:1rem 1.25rem;">
+                <div style="padding:.5rem;background:#fef2f2;border:1px solid #fecaca;border-radius:8px;font-size:.78rem;color:#991b1b;margin-bottom:.75rem;">
+                    <i class="fas fa-exclamation-triangle" style="margin-right:.3rem;"></i>
+                    This will <strong>permanently delete</strong> the order and all its items.<br>
+                    Inventory will be <strong>restored</strong> and changes will be logged.
+                </div>
+                <div style="font-size:.78rem;color:#64748b;margin-bottom:.5rem;">
+                    Current status: <strong id="delOrderStatus" style="color:#334155;"></strong>
+                </div>
+            </div>
+            <div style="padding:.6rem 1.25rem;border-top:1px solid #e2e8f0;display:flex;justify-content:flex-end;gap:.4rem;">
+                <button type="button" class="btn btn-outline btn-sm" onclick="document.getElementById('deleteOrderModal').style.display='none'">Cancel</button>
+                <button type="submit" class="btn btn-sm" style="background:#dc2626;color:#fff;border:none;padding:.4rem .8rem;border-radius:6px;font-weight:700;cursor:pointer;"
+                    onclick="return confirm('Are you sure? This cannot be undone.')">
+                    <i class="fas fa-trash" style="margin-right:.2rem;"></i> Delete Order
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+function openDeleteOrderModal(orderId, orderNumber, status) {
+    document.getElementById('deleteOrderForm').action = '{{ url("sales/orders") }}/' + orderId;
+    document.getElementById('delOrderNum').textContent = orderNumber;
+    document.getElementById('delOrderStatus').textContent = status.charAt(0).toUpperCase() + status.slice(1);
+    document.getElementById('deleteOrderModal').style.display = 'flex';
+}
+
+document.getElementById('deleteOrderModal')?.addEventListener('click', function(e) {
+    if (e.target === this) this.style.display = 'none';
+});
+ </script>
+@endif
 <script>
     function cancelOrder(orderId, orderNumber) {
         $('#cancel_order_id').val(orderId);
