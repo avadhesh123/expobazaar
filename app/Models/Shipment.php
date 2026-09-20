@@ -8,7 +8,9 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Shipment extends Model
 {
-    use HasFactory, \App\Traits\FiltersByCompany, SoftDeletes;
+    use HasFactory;
+    use \App\Traits\FiltersByCompany;
+    use SoftDeletes;
 
     protected $fillable = [
         'shipment_code',
@@ -59,6 +61,8 @@ class Shipment extends Model
         'drayage_cost',
         'duty_amount',
         'manpower_no_of_hours',
+        'cancelled_at', 'cancelled_by', 'cancel_reason',
+
     ];
 
     protected $casts = [
@@ -74,6 +78,8 @@ class Shipment extends Model
         'entry_summary_date' => 'date',
         'entry_summary_upload_date' => 'date',
         'status_changed_at' => 'datetime',
+        'cancelled_at' => 'datetime',
+
     ];
 
     public function consignments()
@@ -129,4 +135,5 @@ class Shipment extends Model
         $next = $last ? intval(substr($last->shipment_code, strlen($prefix))) + 1 : 1;
         return $prefix . str_pad($next, 5, '0', STR_PAD_LEFT);
     }
+    public function cancelledByUser() { return $this->belongsTo(User::class, 'cancelled_by'); }
 }

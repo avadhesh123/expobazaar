@@ -69,10 +69,13 @@
                 @forelse($shipments as $sh)
                 @php
                 $utilPct = $sh->capacity_cbm > 0 ? round(($sh->total_cbm / $sh->capacity_cbm) * 100) : 0;
+                
+                $consignmentRemarks = $sh->consignments->filter(fn ($c) => !empty($c->remarks));
+
                 @endphp
                 <tr>
-                    <td>
-                        <a href="{{ route('logistics.shipments.show', $sh) }}" style="font-weight:700;font-family:monospace;font-size:.85rem;color:#1e3a5f;text-decoration:none;">{{ $sh->shipment_code }}</a>
+                    <td> 
+                        <a href="{{ route('logistics.shipments.show', $sh) }}"  class="mono-link">{{ $sh->shipment_code }}</a>
                         @if($sh->container_number)<div style="font-size:.65rem;color:#94a3b8;">Container: {{ $sh->container_number }}</div>@endif
                     </td>
                     <td>
@@ -114,6 +117,10 @@
                             </div>
                             <span style="font-size:.72rem;font-weight:700;color:{{ $utilPct > 100 ? '#dc2626' : '#64748b' }};">{{ $utilPct }}%</span>
                         </div>
+
+                        @if($consignmentRemarks->isNotEmpty())
+                                <div style="font-size:.65rem;color:#94a3b8;">{{ $consignmentRemarks->count() }} consignment(s) with remarks</div>
+                        @endif
                     </td>
                     <td>
                         @if($sh->sailing_date)
@@ -173,6 +180,27 @@
                             @if(in_array($sh->status, ['asn_generated','locked']) && $sh->asn)
                             <a href="{{ route('logistics.asn.download', $sh->asn) }}" class="btn btn-outline btn-sm" title="Download ASN"><i class="fas fa-download"></i></a>
                             @endif
+
+                            @if(!in_array($sh->status, ['cancelled', 'delivered']))
+                            <button type="button" class="btn btn-outline btn-sm" style="color:#dc2626;border-color:#fecaca;font-size:.65rem;"
+                                onclick="openCancelModal('{{ route('logistics.shipments.cancel', $sh) }}', '{{ $sh->shipment_number }}')" title="Cancel Shipment">
+                                <i class="fas fa-times-circle"></i>
+                            </button>
+                            @endif
+
+                            @if($sh->status === 'cancelled')
+                            <div style="padding:.6rem 1rem;background:#fef2f2;border:1px solid #fecaca;border-radius:8px;margin-bottom:1rem;">
+                                <div style="font-size:.82rem;font-weight:700;color:#dc2626;">
+                                    <i class="fas fa-times-circle" style="margin-right:.3rem;"></i> Shipment Cancelled
+                                </div>
+                                <div style="font-size:.75rem;color:#991b1b;margin-top:.2rem;">
+                                    Reason: {{ $sh->cancel_reason ?? '—' }}
+                                </div>
+                                <div style="font-size:.62rem;color:#94a3b8;margin-top:.15rem;">
+                                    by {{ $sh->cancelledByUser->name ?? '—' }} on {{ $sh->cancelled_at?->format('d M Y H:i') ?? '—' }}
+                                </div>
+                            </div>
+                            @endif
                         </div>
                     </td>
 
@@ -205,6 +233,72 @@
     </div>
     @if($shipments->hasPages())<div style="padding:1rem 1.4rem;border-top:1px solid #e8ecf1;">{{ $shipments->links('pagination::tailwind') }}</div>@endif
 </div>
+<style>
+.mono-link {
+    font-weight: 700;
+    font-family: monospace;
+    font-size: .85rem;
+    color: #1e3a5f;
+    text-decoration: none;
+}
+
+.mono-link:hover {
+    text-decoration: underline;
+    color:#e8a838;
+}
+
+</style>
+
+{{-- Cancel Modal --}}
+{{-- Cancel Shipment Modal --}}
+<div id="cancelModal" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.5);z-index:9999;align-items:center;justify-content:center;">
+    <div style="background:#fff;border-radius:12px;width:460px;max-width:92%;box-shadow:0 8px 32px rgba(0,0,0,.2);">
+        <div style="padding:.75rem 1.25rem;border-bottom:1px solid #fecaca;display:flex;justify-content:space-between;align-items:center;">
+            <h3 style="font-size:.9rem;font-weight:700;color:#dc2626;margin:0;">
+                <i class="fas fa-times-circle" style="margin-right:.3rem;"></i> Cancel Shipment — <span id="cancelShipNum"></span>
+            </h3>
+            <button onclick="closeCancelModal()" style="background:none;border:none;cursor:pointer;font-size:1.2rem;color:#94a3b8;">&times;</button>
+        </div>
+        <form method="POST" id="cancelForm" action="">
+            @csrf
+            <div style="padding:1rem 1.25rem;">
+                <div style="padding:.5rem;background:#fef2f2;border:1px solid #fecaca;border-radius:8px;font-size:.78rem;color:#991b1b;margin-bottom:.75rem;">
+                    <i class="fas fa-exclamation-triangle" style="margin-right:.3rem;"></i>
+                    This will cancel the shipment and move all consignments back to <strong>Container Planning</strong>.
+                </div>
+                <label style="font-size:.78rem;font-weight:600;color:#374151;display:block;margin-bottom:.3rem;">Reason <span style="color:#dc2626;">*</span></label>
+                <textarea name="cancel_reason" id="cancelReason" required rows="3"
+                    placeholder="e.g. Container booking cancelled, vendor unable to fulfil..."
+                    style="width:100%;padding:.5rem .6rem;border:1.5px solid #d1d5db;border-radius:8px;font-size:.85rem;font-family:inherit;resize:vertical;"></textarea>
+            </div>
+            <div style="padding:.6rem 1.25rem;border-top:1px solid #e2e8f0;display:flex;justify-content:flex-end;gap:.4rem;">
+                <button type="button" class="btn btn-outline btn-sm" onclick="closeCancelModal()">Back</button>
+                <button type="submit" class="btn btn-sm" style="background:#dc2626;color:#fff;border:none;padding:.4rem .8rem;border-radius:6px;font-weight:700;cursor:pointer;"
+                    onclick="return confirm('Cancel this shipment?')">
+                    <i class="fas fa-times-circle" style="margin-right:.2rem;"></i> Confirm Cancel
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+function openCancelModal(actionUrl, shipmentNumber) {
+    document.getElementById('cancelForm').action = actionUrl;
+    document.getElementById('cancelShipNum').textContent = shipmentNumber;
+    document.getElementById('cancelReason').value = '';
+    document.getElementById('cancelModal').style.display = 'flex';
+    document.getElementById('cancelReason').focus();
+}
+
+function closeCancelModal() {
+    document.getElementById('cancelModal').style.display = 'none';
+}
+
+document.getElementById('cancelModal')?.addEventListener('click', function(e) {
+    if (e.target === this) closeCancelModal();
+});
+</script>
 <script>
     let palletTimers = {};
     document.querySelectorAll('.pallet-input').forEach(input => {

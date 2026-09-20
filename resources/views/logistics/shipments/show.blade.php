@@ -150,6 +150,7 @@
                         <th>Vendor</th>
                         <th>Items</th>
                         <th>CBM</th>
+                        <th>Remarks </th>
                     </tr>
                 </thead>
                 <tbody>
@@ -162,6 +163,7 @@
                         </td>
                         <td style="text-align:center;font-weight:600;">{{ $con->total_items }}</td>
                         <td style="font-family:monospace;font-weight:600;">{{ number_format($con->pivot->cbm ?? $con->total_cbm, 2) }}</td>
+                        <td>{!! nl2br(e($con->remarks)) !!}</td>
                     </tr>
                     @endforeach
                 </tbody>

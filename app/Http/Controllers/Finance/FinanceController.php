@@ -979,10 +979,13 @@ class FinanceController extends Controller
             ->withQueryString();
 
         // Filter vendors based on user's allowed companies
-        $vendors = \App\Models\Vendor::orderBy('company_name')
-            ->where('company_code', $activeCode)
-            ->get();
+        // $vendors = \App\Models\Vendor::orderBy('company_name')
+        //     ->where('company_code', $activeCode)
+        //     ->get();
 
+        $vendors = \App\Models\Vendor::whereHas('user', fn ($q) => $q->whereJsonContains('company_codes', $activeCode))
+            ->orderBy('company_name')
+            ->get();
 
         return view('finance.vendor-rate-cards', compact('rateCards', 'vendors'));
     }
@@ -1064,9 +1067,11 @@ class FinanceController extends Controller
             ->byMonth($month, $year)->when($request->vendor_id, fn ($q, $v) => $q->where('vendor_id', $v))
             ->orderBy('vendor_id')->paginate(50)->withQueryString();
 
-        $vendors = \App\Models\Vendor::orderBy('company_name')
-            ->where('company_code', $activeCode)
-            ->get();
+
+        $vendors = \App\Models\Vendor::whereHas('user', fn ($q) => $q->whereJsonContains('company_codes', $activeCode))
+                    ->orderBy('company_name')
+                    ->get();
+
         $baseQ = \App\Models\VendorMonthlyCharge::where('company_code', $activeCode)
             ->byMonth($month, $year);
 

@@ -32,7 +32,7 @@ class LogisticsController extends Controller
         $activeCode = session('active_company');
 
         $consignments = Consignment::with('vendor', 'liveSheet')
-            ->whereIN('status', ['created', 'live_sheet_locked'])
+            ->whereIN('status', ['created', 'live_sheet_locked','planned'])
             ->where('company_code', $activeCode)
             //  ->when($request->company_code, fn($q, $v) => $q->where('company_code', $v))
             ->whereDoesntHave('shipments')
@@ -2119,5 +2119,87 @@ class LogisticsController extends Controller
             return back()->with('error', 'Adjustment failed: ' . $e->getMessage());
         }
     }
+    /**
+     * Save consignment remarks
+     * Route: POST logistics/container-planning/{consignment}/remarks
+     */
+    public function updateConsignmentRemarks(Request $request, \App\Models\Consignment $consignment)
+    {
+        $request->validate([
+            'remarks' => 'required|string|max:2000',
+        ]);
 
+        $consignment->update(['remarks' => $request->remarks]);
+
+        \App\Models\ActivityLog::log('updated', 'consignment', $consignment, null, [
+            'remarks' => $request->remarks,
+        ], "Remarks updated on consignment {$consignment->consignment_number} by " . auth()->user()->name);
+
+        if ($request->expectsJson()) {
+            return response()->json(['success' => true, 'message' => 'Remarks saved.']);
+        }
+
+        return back()->with('success', 'Remarks saved.');
+    }
+
+    /**
+ * Cancel shipment — move back to container planning
+ * Route: POST logistics/shipments/{shipment}/cancel
+ */
+    public function cancelShipment(Request $request, \App\Models\Shipment $shipment)
+    {
+        $request->validate([
+            'cancel_reason' => 'required|string|max:500',
+        ]);
+
+        if ($shipment->status === 'cancelled') {
+            return back()->with('error', 'Shipment is already cancelled.');
+        }
+
+        $hasGrn = \App\Models\Grn::where('shipment_id', $shipment->id)->exists();
+        if ($hasGrn) {
+            return back()->with('error', 'Cannot cancel — GRN already exists for this shipment.');
+        }
+
+        $oldStatus = $shipment->status;
+        $consignmentCount = 0;
+
+        \DB::transaction(function () use ($shipment, $request) {
+            // Update consignment status back to "planned" via pivot
+            $consignmentIds = \DB::table('shipment_consignments')
+                ->where('shipment_id', $shipment->id)
+                ->pluck('consignment_id');
+            
+            $consignmentCount = $consignmentIds->count();
+
+            if ($consignmentIds->isNotEmpty()) {
+                \App\Models\Consignment::whereIn('id', $consignmentIds)
+                    ->update(['status' => 'planned']);
+            }
+
+            // Remove pivot entries
+            \DB::table('shipment_consignments')
+                ->where('shipment_id', $shipment->id)
+                ->delete();
+
+            // Update shipment
+            $shipment->update([
+                'status'        => 'cancelled',
+                'cancelled_at'  => now(),
+                'cancelled_by'  => auth()->id(),
+                'cancel_reason' => $request->cancel_reason,
+            ]);
+        });
+
+        \App\Models\ActivityLog::log('cancelled', 'shipment', $shipment, null, [
+            'shipment_number' => $shipment->shipment_number,
+            'old_status'      => $oldStatus,
+            'cancel_reason'   => $request->cancel_reason,
+            'consignments'    => $consignmentCount,
+            'cancelled_by'    => auth()->user()->name,
+        ], "Shipment {$shipment->shipment_number} cancelled — {$request->cancel_reason}");
+
+        return redirect()->route('logistics.shipments')
+            ->with('success', "Shipment {$shipment->shipment_number} cancelled. {$consignmentCount} consignment(s) moved back to Container Planning.");
+    }
 }

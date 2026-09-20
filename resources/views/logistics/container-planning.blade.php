@@ -108,6 +108,7 @@
                         <th>Total Master Cartons</th>
                         <th>CBM</th>
                         <th>Value</th>
+                        <th>Remarks</th>
                         <th>Live Sheet</th>
                     </tr>
                 </thead>
@@ -139,14 +140,28 @@
                         <th>Total Master Cartons</th> -->
                          <td style="font-family:monospace;font-weight:700;">{{ number_format($con->total_cbm, 3) }} <span style="font-size:.65rem;color:#94a3b8;">CBM</span></td>
                         <td style="font-family:monospace;">{{ $activeCurrencySymbol }}{{ number_format($con->total_value, 2) }}</td>
+                       
+                        {{-- Add to each row --}}
+                        <td>
+                            <div style="display:flex;align-items:center;gap:.3rem;">
+                                <span id="remark-text-{{ $con->id }}" style="font-size:.72rem;color:#64748b;max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"
+                                    title="{{ $con->remarks ?? '' }}">
+                                    {{ $con->remarks ? \Str::limit($con->remarks, 30) : '—' }}
+                                </span>
+                                <button type="button" onclick="openRemarkEdit({{ $con->id }}, '{{ addslashes($con->remarks ?? '') }}')"
+                                    style="background:none;border:none;cursor:pointer;color:#e8a838;font-size:.65rem;padding:2px;" title="Edit remarks">
+                                    <i class="fas fa-pen"></i>
+                                </button>
+                            </div>
+                        </td>
                         <td>@if($con->liveSheet)
                             <span class="badge badge-success">
                                 
                             </span>
                             <a href="{{ route('logistics.container-planning.download-livesheet', $con) }}" 
-   class="btn btn-success btn-sm" title="Download Live Sheet">
-    <i class="fas fa-lock" style="font-size:.5rem;margin-right:.15rem;"></i>  {{ $con->liveSheet->live_sheet_number }}
-</a>
+                                class="btn btn-success btn-sm" title="Download Live Sheet">
+                                    <i class="fas fa-lock" style="font-size:.5rem;margin-right:.15rem;"></i>  {{ $con->liveSheet->live_sheet_number }}
+                                </a>
                         @else<span class="badge badge-gray">—</span>@endif</td>
                     </tr>
                     @empty
@@ -159,7 +174,51 @@
         </div>
     </div>
 </form>
+{{-- Consignment Remarks Modal --}}
+<div id="remarkModal" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.5);z-index:9999;align-items:center;justify-content:center;">
+    <div style="background:#fff;border-radius:12px;width:460px;max-width:92%;box-shadow:0 8px 32px rgba(0,0,0,.2);">
+        <div style="padding:.75rem 1.25rem;border-bottom:1px solid #fde68a;display:flex;justify-content:space-between;align-items:center;">
+            <h3 style="font-size:.9rem;font-weight:700;color:#854d0e;margin:0;">
+                <i class="fas fa-comment-alt" style="margin-right:.3rem;color:#e8a838;"></i> Consignment Remarks
+            </h3>
+            <button onclick="closeRemarkModal()" style="background:none;border:none;cursor:pointer;font-size:1.2rem;color:#94a3b8;">&times;</button>
+        </div>
+        <form method="POST" id="remarkForm" action="">
+            @csrf
+            <div style="padding:1rem 1.25rem;">
+                <textarea name="remarks" id="remarkInput" rows="4" required
+                    placeholder="e.g. Qty mismatch: EB-001 shows 100 in PO but 95 received. Approved to proceed..."
+                    style="width:100%;padding:.5rem .65rem;border:1.5px solid #fde68a;border-radius:8px;font-size:.85rem;font-family:inherit;resize:vertical;"></textarea>
+                <div style="font-size:.6rem;color:#94a3b8;margin-top:.2rem;">
+                    <i class="fas fa-info-circle"></i> This remark will also be visible in the shipment after it is generated.
+                </div>
+            </div>
+            <div style="padding:.6rem 1.25rem;border-top:1px solid #e2e8f0;display:flex;justify-content:flex-end;gap:.4rem;">
+                <button type="button" class="btn btn-outline btn-sm" onclick="closeRemarkModal()">Cancel</button>
+                <button type="submit" class="btn btn-primary btn-sm" style="padding:.4rem .7rem;">
+                    <i class="fas fa-save" style="margin-right:.2rem;"></i> Save
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
 
+<script>
+function openRemarkEdit(consignmentId, currentRemark) {
+    document.getElementById('remarkForm').action = '/logistics/container-planning/' + consignmentId + '/remarks';
+    document.getElementById('remarkInput').value = currentRemark.replace(/\\n/g, '\n');
+    document.getElementById('remarkModal').style.display = 'flex';
+    document.getElementById('remarkInput').focus();
+}
+
+function closeRemarkModal() {
+    document.getElementById('remarkModal').style.display = 'none';
+}
+
+document.getElementById('remarkModal')?.addEventListener('click', function(e) {
+    if (e.target === this) closeRemarkModal();
+});
+</script>
 @push('scripts')
 <script>
     var capacities = {

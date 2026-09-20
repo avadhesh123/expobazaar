@@ -288,6 +288,9 @@ Route::middleware(['auth'])->group(function () {
             Route::post('warehouse-monthly-charges/{warehouseMonthlyCharge}/approve', [LogisticsController::class, 'approveWarehouseCharge'])->name('warehouse-monthly-charges.approve');
             Route::post('grn/{grn}/adjust', [LogisticsController::class, 'adjustGrnQty'])->name('grn.adjust');
 
+            Route::post('container-planning/{consignment}/remarks', [LogisticsController::class, 'updateConsignmentRemarks'])->name('container-planning.remarks');
+            Route::post('shipments/{shipment}/cancel', [LogisticsController::class, 'cancelShipment'])->name('shipments.cancel');
+
         });
 
 

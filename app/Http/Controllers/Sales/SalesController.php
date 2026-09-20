@@ -1106,7 +1106,7 @@ class SalesController extends Controller
             $order->delete();
         });
 
-        \App\Models\ActivityLog::log('deleted', 'order', null, null, [
+        \App\Models\ActivityLog::log('deleted', 'order', $order, null, [
             'order_number' => $orderNumber,
             'items_deleted' => $itemCount,
             'deleted_by'    => auth()->user()->name,

@@ -460,12 +460,12 @@ $finalCBM += $cbmShipment;
                     @endforeach
                     {{-- Totals --}}
                     <tr style="background:#f8fafc;font-weight:700;">
-                        <td colspan="8" style="text-align:right;position:sticky;left:0;background:#f8fafc;">TOTALS </td>
+                        <td colspan="15" style="text-align:right;left:0;background:#f8fafc;">TOTALS </td>
                         <td style="text-align:center;">QTY:{{ $liveSheet->items->sum('quantity') }}</td>
-                        <td>{{$finalCBM}}</td>
                         <td></td>
                         <td></td>
-                        <td style="font-family:monospace;color:#1e40af;">CBM:{{ number_format($liveSheet->items->sum('total_cbm'), 3) }}</td>
+                        <td></td>
+                        <td style="font-family:monospace;color:#1e40af;">CBM:{{-- number_format($liveSheet->items->sum('total_cbm'), 3) --}}{{ number_format($finalCBM, 3) }}</td>
                         <td colspan="8"></td>
                         <td></td>
                     </tr>
