@@ -557,7 +557,7 @@ class SalesController extends Controller
     {
         $request->validate([
             'shipped_qty'   => 'required|integer|min:1',
-            'tracking_id'   => 'required|string|max:100',
+            'tracking_id'   => 'required|string|max:250',
             'shipping_cost' => 'nullable|numeric|min:0',
             'carrier'       => 'required|in:Fedex,UPS,USPS,LTL,Other',
         ]);
