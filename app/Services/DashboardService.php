@@ -80,7 +80,7 @@ class DashboardService
 
                 'monthly_sales' => (clone $orderQuery)->whereMonth('order_date', now()->month)->sum('total_amount'),
                 'ytd_sales' => (clone $orderQuery)->whereYear('order_date', now()->year)->sum('total_amount'),
-                'pending_payouts' => VendorPayout::when($companyCode, fn($q) => $q->where('company_code', $companyCode))
+                'pending_payouts' => VendorPayout::when($companyCode, fn ($q) => $q->where('company_code', $companyCode))
                     ->pending()->sum('net_payout'),
             ],
             'vendor_activity' => [
@@ -105,15 +105,15 @@ class DashboardService
     {
         $vendor = Vendor::findOrFail($vendorId);
         $activeCode = session('active_company');
-     
+
         return [
             'kpis' => [
                 'products_approved' => Product::where('vendor_id', $vendorId)->where('company_code', $activeCode)->whereIn('status', ['approved', 'listed'])->count(),
-                'inventory_available' => Inventory::whereHas('product', fn($q) => $q->where('vendor_id', $vendorId))->where('company_code', $activeCode)->sum('available_quantity'),
-                'units_sold' => Order::whereHas('items', fn($q) => $q->where('vendor_id', $vendorId))
+                'inventory_available' => Inventory::whereHas('product', fn ($q) => $q->where('vendor_id', $vendorId))->where('company_code', $activeCode)->sum('available_quantity'),
+                'units_sold' => Order::whereHas('items', fn ($q) => $q->where('vendor_id', $vendorId))
                     ->where('company_code', $activeCode)
                     ->whereMonth('order_date', now()->month)->withSum('items', 'quantity')->get()->sum('items_sum_quantity'),
-                'monthly_sales' => Order::whereHas('items', fn($q) => $q->where('vendor_id', $vendorId))
+                'monthly_sales' => Order::whereHas('items', fn ($q) => $q->where('vendor_id', $vendorId))
                     ->where('company_code', $activeCode)
                     ->whereMonth('order_date', now()->month)->sum('total_amount'),
                 'pending_payout' => VendorPayout::where('vendor_id', $vendorId)->where('status', 'approved')->sum('net_payout'),
@@ -165,23 +165,71 @@ class DashboardService
     {
         $activeCode = session('active_company');
 
+        // Inventory Ageing from GRN receipt_date
+        $inventoryAgeing = \DB::table('inventory')
+            ->join('grn_items', 'inventory.product_id', '=', 'grn_items.product_id')
+            ->join('grn', 'grn_items.grn_id', '=', 'grn.id')
+            ->join('products', function ($j) {
+                $j->on('inventory.product_id', '=', 'products.id')
+                  ->whereNull('products.deleted_at');
+            })
+            ->leftJoin('warehouses', 'inventory.warehouse_id', '=', 'warehouses.id')
+            ->when($activeCode, fn ($q) => $q->where('inventory.company_code', $activeCode))
+            ->where('inventory.quantity', '>', 0)
+            ->select(
+                'inventory.product_id',
+                'products.sku',
+                'products.name as product_name',
+                'warehouses.name as warehouse_name',
+                'inventory.quantity',
+                'inventory.available_quantity',
+                'grn.receipt_date',
+                \DB::raw('DATEDIFF(NOW(), grn.receipt_date) as days_in_stock')
+            )
+            ->orderByDesc('days_in_stock')
+            ->get();
+
+        // Group by ageing buckets
+        $ageingBuckets = [
+            '0-30'   => $inventoryAgeing->where('days_in_stock', '<=', 30)->count(),
+            '31-60'  => $inventoryAgeing->whereBetween('days_in_stock', [31, 60])->count(),
+            '61-90'  => $inventoryAgeing->whereBetween('days_in_stock', [61, 90])->count(),
+            '91-180' => $inventoryAgeing->whereBetween('days_in_stock', [91, 180])->count(),
+            '180+'   => $inventoryAgeing->where('days_in_stock', '>', 180)->count(),
+        ];
+
+        $ageingQtyBuckets = [
+            '0-30'   => $inventoryAgeing->where('days_in_stock', '<=', 30)->sum('quantity'),
+            '31-60'  => $inventoryAgeing->whereBetween('days_in_stock', [31, 60])->sum('quantity'),
+            '61-90'  => $inventoryAgeing->whereBetween('days_in_stock', [61, 90])->sum('quantity'),
+            '91-180' => $inventoryAgeing->whereBetween('days_in_stock', [91, 180])->sum('quantity'),
+            '180+'   => $inventoryAgeing->where('days_in_stock', '>', 180)->sum('quantity'),
+        ];
+
         return [
             'kpis' => [
-                'containers_planned' => Shipment::whereIn('status', ['planning', 'shipment'])->when($activeCode, fn($q) => $q->byCompanyCode($activeCode))->count(),
-                'in_transit' => Shipment::inTransit()->when($activeCode, fn($q) => $q->byCompanyCode($activeCode))->count(),
-                'grn_pending' => Shipment::where('status', 'grn_pending')->when($activeCode, fn($q) => $q->byCompanyCode($activeCode))->count(),
+                'containers_planned' => Shipment::whereIn('status', ['planning', 'shipment','grn_completed'])->when($activeCode, fn ($q) => $q->byCompanyCode($activeCode))->count(),
+                'in_transit' => Shipment::inTransit()->when($activeCode, fn ($q) => $q->byCompanyCode($activeCode))->count(),
+                'grn_pending' => Shipment::where('status', 'grn_pending')->when($activeCode, fn ($q) => $q->byCompanyCode($activeCode))->count(),
                 'received_this_month' => Grn::where('company_code', $activeCode)->whereMonth('receipt_date', now()->month)->count(),
             ],
             'container_planning' => [
                 'live_sheets_ready' => LiveSheet::locked()->with('consignment')->where('company_code', $activeCode)->get(),
-                'fcl_count' => Shipment::where('shipment_type', 'FCL')->when($activeCode, fn($q) => $q->byCompanyCode($activeCode))->count(),
-                'lcl_count' => Shipment::where('shipment_type', 'LCL')->when($activeCode, fn($q) => $q->byCompanyCode($activeCode))->count(),
+                'fcl_count' => Shipment::where('shipment_type', 'FCL')->when($activeCode, fn ($q) => $q->byCompanyCode($activeCode))->count(),
+                'lcl_count' => Shipment::where('shipment_type', 'LCL')->when($activeCode, fn ($q) => $q->byCompanyCode($activeCode))->count(),
             ],
             'shipments' => Shipment::with('consignments.vendor')->where('company_code', $activeCode)->latest()->take(20)->get(),
             'warehouse_charges' => [
                 'storage' => WarehouseCharge::where('charge_type', 'storage')->whereMonth('created_at', now()->month)->sum('calculated_amount'),
                 'variance' => WarehouseCharge::whereMonth('created_at', now()->month)->sum('variance'),
             ],
+           'inventory_ageing' => [
+            'buckets'      => $ageingBuckets,
+            'qty_buckets'  => $ageingQtyBuckets,
+            'top_aged'     => $inventoryAgeing->take(20),  // Top 20 oldest items
+            'total_skus'   => $inventoryAgeing->count(),
+            'total_qty'    => $inventoryAgeing->sum('quantity'),
+        ],
         ];
     }
 
@@ -190,15 +238,15 @@ class DashboardService
     {
         $companyCode = $companyCode ?? session('active_company');
         $channels = SalesChannel::active()
-            ->when($companyCode, fn($q) => $q->whereJsonContains('company_codes', $companyCode))
+            ->when($companyCode, fn ($q) => $q->whereJsonContains('company_codes', $companyCode))
             ->orderBy('name')->get();
 
-        $totalSkus = Product::when($companyCode, fn($q) => $q->where('company_code', $companyCode))->count();
+        $totalSkus = Product::when($companyCode, fn ($q) => $q->where('company_code', $companyCode))->count();
 
         $listingsByPlatform = [];
         foreach ($channels as $channel) {
             $baseQ = ProductCatalogue::where('sales_channel_id', $channel->id)
-                ->when($companyCode, fn($q) => $q->where('company_code', $companyCode));
+                ->when($companyCode, fn ($q) => $q->where('company_code', $companyCode));
 
             $listed = (clone $baseQ)->where('listing_status', 'listed')->count();
             $pending = (clone $baseQ)->where('listing_status', 'pending')->count();
@@ -216,32 +264,32 @@ class DashboardService
             ];
         }
 
-        $totalListed = ProductCatalogue::when($companyCode, fn($q) => $q->where('company_code', $companyCode))
+        $totalListed = ProductCatalogue::when($companyCode, fn ($q) => $q->where('company_code', $companyCode))
             ->where('listing_status', 'listed')->count();
-        $totalPending = ProductCatalogue::when($companyCode, fn($q) => $q->where('company_code', $companyCode))
+        $totalPending = ProductCatalogue::when($companyCode, fn ($q) => $q->where('company_code', $companyCode))
             ->where('listing_status', 'pending')->count();
 
         // SKUs not listed on any channel
-        $notListedAnywhere = Product::when($companyCode, fn($q) => $q->where('company_code', $companyCode))
-            ->whereDoesntHave('catalogues', fn($q) => $q->where('listing_status', 'listed'))
+        $notListedAnywhere = Product::when($companyCode, fn ($q) => $q->where('company_code', $companyCode))
+            ->whereDoesntHave('catalogues', fn ($q) => $q->where('listing_status', 'listed'))
             ->count();
 
         // Recently listed (last 7 days)
-        $recentlyListed = ProductCatalogue::when($companyCode, fn($q) => $q->where('company_code', $companyCode))
+        $recentlyListed = ProductCatalogue::when($companyCode, fn ($q) => $q->where('company_code', $companyCode))
             ->where('listing_status', 'listed')
             ->where('listed_at', '>=', now()->subDays(7))
             ->count();
 
         // Top vendors by listed count
         $topVendors = Product::select('vendor_id', \DB::raw('COUNT(*) as total_products'))
-            ->when($companyCode, fn($q) => $q->where('company_code', $companyCode))
-            ->whereHas('catalogues', fn($q) => $q->where('listing_status', 'listed'))
+            ->when($companyCode, fn ($q) => $q->where('company_code', $companyCode))
+            ->whereHas('catalogues', fn ($q) => $q->where('listing_status', 'listed'))
             ->groupBy('vendor_id')
             ->orderByDesc('total_products')
             ->limit(5)
             ->with('vendor:id,company_name')
             ->get()
-            ->map(fn($p) => [
+            ->map(fn ($p) => [
                 'vendor_name' => $p->vendor->company_name ?? '—',
                 'count'       => $p->total_products,
             ]);
@@ -268,13 +316,14 @@ class DashboardService
     {
         $dateFrom = $dateFrom ?? now()->startOfMonth()->toDateString();
         $dateTo = $dateTo ?? now()->toDateString();
-
-        $orderQuery = Order::when($companyCode, fn($q) => $q->where('company_code', $companyCode));
+        $currentMonth = now()->month;
+        $orderQuery = Order::when($companyCode, fn ($q) => $q->where('company_code', $companyCode));
 
         return [
             'kpis' => [
                 'daily_sales'      => (clone $orderQuery)->whereDate('order_date', today())->sum('total_amount'),
-                'period_sales'     => (clone $orderQuery)->whereBetween('order_date', [$dateFrom, $dateTo])->sum('total_amount'),
+                                'current_month_sales'      => (clone $orderQuery)->whereYear('order_date', now()->year)->whereMonth('order_date', $currentMonth)->sum('total_amount'),
+'period_sales'     => (clone $orderQuery)->whereBetween('order_date', [$dateFrom, $dateTo])->sum('total_amount'),
                 'orders_received'  => (clone $orderQuery)->whereBetween('order_date', [$dateFrom, $dateTo])->count(),
                 'pending_shipment' => (clone $orderQuery)->where(function ($q) {
                     $q->whereNull('shipment_status')->orWhere('shipment_status', 'pending');
@@ -282,7 +331,7 @@ class DashboardService
                 'orders_shipped'   => (clone $orderQuery)->where('shipment_status', 'shipped')
                     ->whereBetween('order_date', [$dateFrom, $dateTo])->count(),
             ],
-            'by_platform' => Order::when($companyCode, fn($q) => $q->where('company_code', $companyCode))
+            'by_platform' => Order::when($companyCode, fn ($q) => $q->where('company_code', $companyCode))
                 ->select('sales_channel_id', DB::raw('SUM(total_amount) as total'), DB::raw('COUNT(*) as count'))
                 ->whereBetween('order_date', [$dateFrom, $dateTo])
                 ->groupBy('sales_channel_id')
@@ -303,7 +352,7 @@ class DashboardService
     }
     public function getSalesDashboard1(?string $companyCode = null): array
     {
-        $orderQuery = Order::when($companyCode, fn($q) => $q->where('company_code', $companyCode));
+        $orderQuery = Order::when($companyCode, fn ($q) => $q->where('company_code', $companyCode));
 
         return [
             'kpis' => [
@@ -315,7 +364,7 @@ class DashboardService
                 })->count(),
                 'orders_shipped'   => (clone $orderQuery)->where('shipment_status', 'shipped')->count(),
             ],
-            'by_platform' => Order::when($companyCode, fn($q) => $q->where('company_code', $companyCode))
+            'by_platform' => Order::when($companyCode, fn ($q) => $q->where('company_code', $companyCode))
                 ->select('sales_channel_id', DB::raw('SUM(total_amount) as total'), DB::raw('COUNT(*) as count'))
                 ->whereMonth('order_date', now()->month)
                 ->whereYear('order_date', now()->year)
@@ -338,19 +387,19 @@ class DashboardService
     {
         return [
             'kpis' => [
-                'receivables' => FinanceReceivable::when($companyCode, fn($q) => $q->byCompanyCode($companyCode))->unpaid()->sum('net_receivable'),
-                'payouts_pending' => VendorPayout::when($companyCode, fn($q) => $q->where('company_code', $companyCode))->pending()->sum('net_payout'),
-                'platform_deductions' => FinanceReceivable::when($companyCode, fn($q) => $q->byCompanyCode($companyCode))
+                'receivables' => FinanceReceivable::when($companyCode, fn ($q) => $q->byCompanyCode($companyCode))->unpaid()->sum('net_receivable'),
+                'payouts_pending' => VendorPayout::when($companyCode, fn ($q) => $q->where('company_code', $companyCode))->pending()->sum('net_payout'),
+                'platform_deductions' => FinanceReceivable::when($companyCode, fn ($q) => $q->byCompanyCode($companyCode))
                     ->whereMonth('created_at', now()->month)
                     ->sum(DB::raw('platform_commission + platform_fee')),
-                'chargebacks' => \App\Models\Chargeback::when($companyCode, fn($q) => $q->where('company_code', $companyCode))
+                'chargebacks' => \App\Models\Chargeback::when($companyCode, fn ($q) => $q->where('company_code', $companyCode))
                     ->whereMonth('created_at', now()->month)->sum('amount'),
             ],
-            'unpaid_by_platform' => FinanceReceivable::when($companyCode, fn($q) => $q->byCompanyCode($companyCode))
+            'unpaid_by_platform' => FinanceReceivable::when($companyCode, fn ($q) => $q->byCompanyCode($companyCode))
                 ->unpaid()
                 ->select('sales_channel_id', DB::raw('SUM(net_receivable) as total'), DB::raw('COUNT(*) as count'))
                 ->groupBy('sales_channel_id')->with('salesChannel')->get(),
-            'vendor_settlements' => VendorPayout::when($companyCode, fn($q) => $q->where('company_code', $companyCode))
+            'vendor_settlements' => VendorPayout::when($companyCode, fn ($q) => $q->where('company_code', $companyCode))
                 ->byMonth(now()->month, now()->year)->with('vendor')->get(),
         ];
     }
@@ -360,9 +409,9 @@ class DashboardService
     {
         return [
             'kpis' => [
-                'total_revenue' => Order::when($companyCode, fn($q) => $q->where('company_code', $companyCode))->whereYear('order_date', now()->year)->sum('total_amount'),
+                'total_revenue' => Order::when($companyCode, fn ($q) => $q->where('company_code', $companyCode))->whereYear('order_date', now()->year)->sum('total_amount'),
                 'gross_margin' => $this->calculateGrossMargin(),
-                'inventory_value' => Inventory::when($companyCode, fn($q) => $q->where('inventory.company_code', $companyCode))->join('products', 'inventory.product_id', '=', 'products.id')
+                'inventory_value' => Inventory::when($companyCode, fn ($q) => $q->where('inventory.company_code', $companyCode))->join('products', 'inventory.product_id', '=', 'products.id')
                     ->sum(DB::raw('inventory.quantity * products.vendor_price')),
                 'top_vendors' => $this->getTopVendors(5),
                 'top_platforms' => $this->getTopPlatforms(5),
@@ -386,7 +435,7 @@ class DashboardService
 
     protected function getInventoryAgeing(?string $companyCode = null): array
     {
-        $query = Inventory::when($companyCode, fn($q) => $q->byCompanyCode($companyCode));
+        $query = Inventory::when($companyCode, fn ($q) => $q->byCompanyCode($companyCode));
         return [
             '0_30' => (clone $query)->where('received_date', '>=', now()->subDays(30))->sum('quantity'),
             '31_60' => (clone $query)->whereBetween('received_date', [now()->subDays(60), now()->subDays(30)])->sum('quantity'),
@@ -398,7 +447,7 @@ class DashboardService
 
     protected function getVendorInventoryAgeing(int $vendorId): array
     {
-        $query = Inventory::whereHas('product', fn($q) => $q->where('vendor_id', $vendorId));
+        $query = Inventory::whereHas('product', fn ($q) => $q->where('vendor_id', $vendorId));
         return [
             '0_30' => (clone $query)->where('received_date', '>=', now()->subDays(30))->sum('quantity'),
             '31_60' => (clone $query)->whereBetween('received_date', [now()->subDays(60), now()->subDays(30)])->sum('quantity'),
@@ -409,7 +458,7 @@ class DashboardService
 
     protected function getSalesByPlatform(?string $companyCode = null): array
     {
-        return Order::when($companyCode, fn($q) => $q->byCompanyCode($companyCode))
+        return Order::when($companyCode, fn ($q) => $q->byCompanyCode($companyCode))
             ->select('sales_channel_id', DB::raw('SUM(total_amount) as revenue'), DB::raw('COUNT(*) as orders'))
             ->whereYear('order_date', now()->year)
             ->groupBy('sales_channel_id')
@@ -473,7 +522,7 @@ class DashboardService
         return DB::table('order_items')
             ->join('products', 'order_items.product_id', '=', 'products.id')
             ->select('products.sku', 'products.name', DB::raw('SUM(order_items.quantity) as sold'))
-            ->whereExists(fn($q) => $q->selectRaw(1)->from('orders')->whereColumn('orders.id', 'order_items.order_id')->where('orders.order_date', '>=', now()->subDays(30)))
+            ->whereExists(fn ($q) => $q->selectRaw(1)->from('orders')->whereColumn('orders.id', 'order_items.order_id')->where('orders.order_date', '>=', now()->subDays(30)))
             ->groupBy('products.sku', 'products.name')
             ->orderByDesc('sold')
             ->limit($limit)->get()->toArray();
@@ -482,7 +531,7 @@ class DashboardService
     protected function getDeadStock(int $limit): array
     {
         return Product::where('stock_quantity', '>', 0)
-            ->whereDoesntHave('orderItems', fn($q) => $q->whereHas('order', fn($q2) => $q2->where('order_date', '>=', now()->subDays(90))))
+            ->whereDoesntHave('orderItems', fn ($q) => $q->whereHas('order', fn ($q2) => $q2->where('order_date', '>=', now()->subDays(90))))
             ->select('sku', 'name', 'stock_quantity')
             ->limit($limit)->get()->toArray();
     }
