@@ -874,8 +874,200 @@ class SalesController extends Controller
 
         return view('sales.returns.create', compact('warehouses'));
     }
-
     public function storeReturn(Request $request)
+    {
+        $request->validate([
+            'order_id'                 => 'required|exists:orders,id',
+            'reason'                   => 'required|in:damaged,wrong_item,missing_item,quality_issue,customer_request,short_shipment,other',
+            'reason_detail'            => 'nullable|string|max:1000',
+            'warehouse_id'             => 'nullable|exists:warehouses,id',
+            'tracking_id'              => 'nullable|string|max:100',
+            'carrier'                  => 'nullable|string|max:50',
+            'items'                    => 'required|array|min:1',
+            'items.*.product_id'       => 'required|exists:products,id',
+            'items.*.return_qty'       => 'nullable|integer|min:0',
+            'items.*.condition_status' => 'nullable|in:good,damaged,defective,unsellable',
+        ]);
+
+        $order = Order::withoutGlobalScopes()->with(['items.product' => fn ($q) => $q->withoutGlobalScopes()])->findOrFail($request->order_id);
+        $activeCode = session('active_company') ?? $order->company_code;
+
+        // Filter out items with 0 return qty
+
+        $returnItems = collect($request->items)->filter(fn ($item) => intval(data_get($item, 'return_qty', 0)) > 0);
+
+        if ($returnItems->isEmpty()) {
+            return back()->with('error', 'Please enter return quantity for at least one item.')->withInput();
+        }
+
+        // Validate quantities before anything
+        $errors = [];
+        $vendorId = null;
+
+        foreach ($returnItems as $itemData) {
+            $orderItem = $order->items->firstWhere('product_id', $itemData['product_id']);
+            if (!$orderItem) {
+                $errors[] = "Product #{$itemData['product_id']} not found in this order.";
+                continue;
+            }
+
+            $shippedQty = intval($orderItem->shipped_qty > 0 ? $orderItem->shipped_qty : $orderItem->quantity);
+            $alreadyReturned = intval($orderItem->returned_qty ?? 0);
+            $maxReturnable = $shippedQty - $alreadyReturned;
+            $returnQty = intval($itemData['return_qty']);
+            $sku = $orderItem->sku ?? $orderItem->product->sku ?? '—';
+
+            if ($returnQty > $maxReturnable) {
+                $errors[] = "SKU {$sku}: return qty ({$returnQty}) exceeds returnable ({$maxReturnable}). Shipped: {$shippedQty}, already returned: {$alreadyReturned}.";
+            }
+
+            if (!$vendorId) {
+                $vendorId = $orderItem->vendor_id;
+            }
+        }
+
+        if (!empty($errors)) {
+            return back()->with('error', implode(' | ', $errors))->withInput();
+        }
+
+        try {
+            \DB::beginTransaction();
+
+            $totalReturnAmount = 0;
+            $warehouseId = $request->warehouse_id ?? $order->warehouse_id;
+
+            $orderReturn = \App\Models\OrderReturn::create([
+                'return_number'      => \App\Models\OrderReturn::generateNumber($activeCode),
+                'order_id'           => $order->id,
+                'company_code'       => $activeCode,
+                'vendor_id'          => $vendorId,
+                'return_date'        => now()->toDateString(),
+                'reason'             => $request->reason,
+                'reason_detail'      => $request->reason_detail,
+                'status'             => 'initiated',
+                'warehouse_id'       => $warehouseId,
+                'tracking_id'        => $request->tracking_id,
+                'carrier'            => $request->carrier,
+                'created_by'         => auth()->id(),
+            ]);
+
+            foreach ($returnItems as $itemData) {
+                $orderItem = $order->items->firstWhere('product_id', $itemData['product_id']);
+                if (!$orderItem) {
+                    continue;
+                }
+                $returnQty = intval($itemData['return_qty'] ?? 0);
+                $unitPrice = floatval($orderItem->unit_price);
+                $returnAmount = round($unitPrice * $returnQty, 2);
+                $totalReturnAmount += $returnAmount;
+                $sku = $orderItem->sku ?? $orderItem->product->sku ?? '—';
+                $condition = $itemData['condition_status'] ?? 'good';
+
+                // Create return item
+                \App\Models\OrderReturnItem::create([
+                    'order_return_id'  => $orderReturn->id,
+                    'order_item_id'    => $orderItem->id,
+                    'product_id'       => $itemData['product_id'],
+                    'sku'              => $sku,
+                    'return_qty'       => $returnQty,
+                    'unit_price'       => $unitPrice,
+                    'return_amount'    => $returnAmount,
+                    'condition_status' => $condition,
+                ]);
+
+                // Update order item returned qty
+                $orderItem->increment('returned_qty', $returnQty);
+
+                // Restore inventory if condition is good
+                if ($condition === 'good' && $orderItem->product_id) {
+                    $inventory = \App\Models\Inventory::where('product_id', $orderItem->product_id)
+                        ->where('warehouse_id', $warehouseId)
+                        ->first();
+
+                    if ($inventory) {
+                        $prevQty = intval($inventory->quantity);
+                        $prevAvailable = intval($inventory->available_quantity);
+                        $prevReserved = intval($inventory->reserved_quantity ?? 0);
+
+                        $inventory->increment('quantity', $returnQty);
+                        $inventory->increment('available_quantity', $returnQty);
+
+                        // Inventory log
+                        \DB::table('inventory_logs')->insert([
+                            'product_id'         => $orderItem->product_id,
+                            'warehouse_id'       => $warehouseId,
+                            'company_code'       => $activeCode,
+                            'sku'                => $sku,
+                            'action'             => 'return',
+                            'description'        => "Return {$orderReturn->return_number} from order {$order->order_number} — {$request->reason}",
+                            'previous_quantity'  => $prevQty,
+                            'change_quantity'    => $returnQty,
+                            'updated_quantity'   => $prevQty + $returnQty,
+                            'previous_available' => $prevAvailable,
+                            'change_available'   => $returnQty,
+                            'updated_available'  => $prevAvailable + $returnQty,
+                            'previous_reserved'  => $prevReserved,
+                            'change_reserved'    => 0,
+                            'updated_reserved'   => $prevReserved,
+                            'reference_type'     => 'App\\Models\\OrderReturn',
+                            'reference_id'       => $orderReturn->id,
+                            'reference_code'     => $orderReturn->return_number,
+                            'performed_by'       => auth()->id(),
+                            'ip_address'         => request()->ip(),
+                            'metadata'           => json_encode([
+                                'order_number' => $order->order_number,
+                                'reason'       => $request->reason,
+                                'condition'    => $condition,
+                                'return_qty'   => $returnQty,
+                                'unit_price'   => $unitPrice,
+                            ]),
+                            'created_at'         => now(),
+                        ]);
+                    }
+                }
+            }
+
+            $orderReturn->update(['total_return_amount' => $totalReturnAmount]);
+
+            // Update order status based on return completeness
+            $order->refresh();
+            $allReturned = $order->items->every(function ($item) {
+                $shipped = intval($item->shipped_qty > 0 ? $item->shipped_qty : $item->quantity);
+                return intval($item->returned_qty ?? 0) >= $shipped;
+            });
+
+            $anyReturned = $order->items->contains(fn ($item) => intval($item->returned_qty ?? 0) > 0);
+
+            if ($allReturned) {
+                $order->update(['status' => 'returned']);
+            } elseif ($anyReturned) {
+                $order->update(['status' => 'partially_returned']);
+            }
+
+            // Activity log
+            \App\Models\ActivityLog::log('created', 'order_return', $orderReturn, null, [
+                'order_number'  => $order->order_number,
+                'return_number' => $orderReturn->return_number,
+                'items_count'   => $returnItems->count(),
+                'total_amount'  => $totalReturnAmount,
+                'reason'        => $request->reason,
+                'order_status'  => $order->fresh()->status,
+                'inventory_restored' => $returnItems->filter(fn ($i) => ($i['condition_status'] ?? 'good') === 'good')->count() . ' items',
+                'created_by'    => auth()->user()->name,
+            ], "Return {$orderReturn->return_number} for order {$order->order_number} — {$returnItems->count()} items, amount: {$totalReturnAmount}");
+
+            \DB::commit();
+
+            $cs = config('app.active_currency_symbol', '$');
+            return redirect()->route('sales.returns.show', $orderReturn)
+                ->with('success', "Return {$orderReturn->return_number} created. Amount: {$cs}" . number_format($totalReturnAmount, 2));
+        } catch (\Exception $e) {
+            \DB::rollBack();
+            \Log::error('Return creation failed: ' . $e->getMessage());
+            return back()->with('error', 'Failed: ' . $e->getMessage())->withInput();
+        }
+    }
+    public function storeReturn22092026(Request $request)
     {
         $request->validate([
             'order_id'              => 'required|exists:orders,id',
@@ -886,7 +1078,7 @@ class SalesController extends Controller
             'carrier'               => 'nullable|string|max:50',
             'items'                 => 'required|array|min:1',
             'items.*.product_id'    => 'required|exists:products,id',
-            'items.*.return_qty'    => 'required|integer|min:1',
+            'items.*.return_qty'       => 'required|integer|min:0',
             'items.*.condition_status' => 'nullable|in:good,damaged,defective,unsellable',
         ]);
 
@@ -1115,9 +1307,9 @@ class SalesController extends Controller
         return back()->with('success', "Order {$orderNumber} deleted. {$itemCount} item(s) removed, inventory restored.");
     }
     /**
- * Delete order, restore inventory, log everything
- * Route: DELETE sales/orders/{order}
- */
+     * Delete order, restore inventory, log everything
+     * Route: DELETE sales/orders/{order}
+     */
     public function deleteOrder(\App\Models\Order $order)
     {
         if (!auth()->user()->isAdmin() && !\App\Services\PermissionService::can(auth()->user(), 'sales.orders.delete')) {

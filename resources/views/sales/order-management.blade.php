@@ -48,7 +48,7 @@
                     <option value="exception" {{ request('status')==='exception'?'selected':'' }}>Exception</option>
                     <option value="lost_in_transit" {{ request('status')==='lost_in_transit'?'selected':'' }}>Lost in transit</option>
 
-                 </select></div>
+                </select></div>
             <div style="flex:1;min-width:150px;"><label style="font-size:.7rem;font-weight:600;color:#64748b;display:block;margin-bottom:.25rem;">Search</label><input type="text" name="search" value="{{ request('search') }}" placeholder="PO, Tracking, Invoice..." style="width:100%;padding:.4rem .5rem;border:1px solid #d1d5db;border-radius:8px;font-size:.82rem;"></div>
             <button type="submit" class="btn btn-primary btn-sm"><i class="fas fa-filter"></i></button>
             <a href="{{ route('sales.order-management') }}" class="btn btn-outline btn-sm"><i class="fas fa-times"></i></a>
@@ -87,7 +87,7 @@
                     <th style="background:#eef2ff;text-align:center;">Ageing</th>
                     <th style="background:#eef2ff;min-width:70px;">Material Cost</th>
                     <th style="background:#eef2ff;min-width:70px;">Processing Cost</th>
-                                        <th style="background:#eef2ff;min-width:70px;">Shipping Cost</th>
+                    <th style="background:#eef2ff;min-width:70px;">Shipping Cost</th>
                     <th style="background:#eef2ff;min-width:80px;">Remarks</th>
                     <th>Save</th>
                 </tr>
@@ -105,11 +105,22 @@
                 'delivered'=>'#16a34a','returned'=>'#dc2626','exception'=>'#7c2d12',
                 'shipped'=>'#e8a838',
                 ];
+
+                $statusBg = [
+                'in_transit' => '#e8a838',
+                'out_for_delivery' => '#1e40af',
+                'delivered' => '#adf4c3',
+                'returned' => '#dc2626',
+                'exception' => '#7c2d12',
+                'shipped' => '#e8a838',
+                'cancelled' => '#f1f5f9',
+                ];
+                $status = $o->current_status ?? $o->status;
+
                 @endphp
                 <form method="POST" action="{{ route('sales.order-management.update', $o) }}">
                     @csrf
-                    <tr style="{{ in_array($o->ageing_label ?? '', ['OVERDUE','CRITICAL']) ? 'background:#fef2f2;' : ($o->current_status === 'delivered' ? 'background:#f0fdf4;' : '') }}">
-                        {{-- Cols 1-10: Read-only from Sales Data --}}
+                    <tr style="{{ isset($statusBg[$status]) ? 'background:' . $statusBg[$status] . ';' : '' }}"> {{-- Cols 1-10: Read-only from Sales Data --}}
                         <td style="font-size:.72rem;">{{ $o->order_date?->format('d M y') ?? '—' }}</td>
                         <td style="font-family:monospace;font-weight:600;font-size:.72rem;">{{ $o->platform_order_id ?? '—' }}</td>
                         <td style="font-family:monospace;font-size:.68rem;">{{ $o->invoice_number ?? '—' }}</td>
@@ -160,7 +171,8 @@
                         <td style="background:#eef2ff;">
                             <input type="number" step="0.01" name="order_processing_charges" value="{{ $o->order_processing_charges }}" placeholder="0.00"
                                 style="width:60px;padding:.2rem .25rem;border:1px solid #c7d2fe;border-radius:4px;font-size:.72rem;font-family:monospace;text-align:right;">
-                        </td> <td style="background:#eef2ff;">
+                        </td>
+                        <td style="background:#eef2ff;">
                             <input type="number" step="0.01" name="shipping_cost" value="{{ $o->shipping_cost }}" placeholder="0.00"
                                 style="width:60px;padding:.2rem .25rem;border:1px solid #c7d2fe;border-radius:4px;font-size:.72rem;font-family:monospace;text-align:right;">
                         </td>
