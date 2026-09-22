@@ -38,6 +38,7 @@ class VendorPayoutService
                     'line_items'        => $data['line_items'],
                     'warehouse_charges' => $data['warehouse_charges_raw'],
                     'chargebacks'       => $data['chargebacks_raw'],
+                    'returns_raw'       => $data['returns_raw'],
                     'summary'           => $data['summary'],
                     'calculated_at'     => now()->toISOString(),
                     'calculated_by'     => auth()->id(),
@@ -244,10 +245,55 @@ class VendorPayoutService
             ->with(['order' => fn ($q) => $q->withoutGlobalScopes()])
             ->get();
 
+
         $totalChargebacks = $chargebacks->sum('amount');
 
+        // ── 6b. Return Orders ──
+        $returnOrders = Order::withoutGlobalScopes()
+            ->where('company_code', $companyCode)
+            ->where('status', 'returned')
+            ->whereMonth('order_date', $month)
+            ->whereYear('order_date', $year)
+            ->whereHas('items', fn ($q) => $q->where('vendor_id', $vendorId))
+            ->with([
+                'salesChannel',
+                'items' => fn ($q) => $q->where('vendor_id', $vendorId)
+                    ->with(['product' => fn ($pq) => $pq->withoutGlobalScopes()])
+            ])
+            ->get();
+
+        $totalReturns = 0;
+        $returnsRaw = [];
+
+        foreach ($returnOrders as $ro) {
+            foreach ($ro->items as $item) {
+                $qty = intval($item->shipped_qty > 0 ? $item->shipped_qty : $item->quantity);
+                $wsp = floatval($item->unit_price ?? 0);
+                $amount = round($wsp * $qty, 2);
+                $totalReturns += $amount;
+
+                $returnsRaw[] = [
+                    'order'   => $ro->order_number,
+                    'sku'     => $item->sku ?? $item->product->sku ?? '—',
+                    'product' => $item->product->name ?? '—',
+                    'qty'     => $qty,
+                    'wsp'     => $wsp,
+                    'amount'  => $amount,
+                    'channel' => $ro->salesChannel->name ?? '—',
+                    'date'    => $ro->order_date?->format('Y-m-d'),
+                    'reason'  => $ro->return_reason ?? $item->return_reason ?? '—',
+                ];
+            }
+        }
+
+        $totalReturns = round($totalReturns, 2);
+
+
+
         // ── 7. Net payout ──
-        $netPayout = round($totalPayout - $totalWarehouseCharges - $totalChargebacks, 2);
+        //        $netPayout = round($totalPayout - $totalWarehouseCharges - $totalChargebacks, 2);
+
+        $netPayout = round($totalPayout - $totalWarehouseCharges - $totalChargebacks - $totalReturns, 2);
 
         return [
             'line_items' => $lineItems,
@@ -258,6 +304,8 @@ class VendorPayoutService
                 'amount' => floatval($c->total_charge ?? $c->calculated_amount ?? 0),
             ])->toArray(),
             'chargebacks' => $chargebacks,
+            'return_orders'     => $returnOrders,
+            'returns_raw'       => $returnsRaw,
             'chargebacks_raw' => $chargebacks->map(fn ($c) => [
                 'order' => $c->order->order_number ?? '—',
                 'amount' => floatval($c->amount),
@@ -270,6 +318,7 @@ class VendorPayoutService
                 'total_payout'            => round($totalPayout, 2),
                 'total_warehouse_charges' => round($totalWarehouseCharges, 2),
                 'total_chargebacks'       => round($totalChargebacks, 2),
+                'total_returns'           => $totalReturns,
                 'net_payout'              => $netPayout,
             ],
         ];

@@ -19,6 +19,7 @@ class VendorPayout extends Model
         'approved_by', 'paid_by', 'remarks',
         'calculation_snapshot',
         'total_paid', 'balance_due',
+        'total_returns'
     ];
 
     protected $casts = [
