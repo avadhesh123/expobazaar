@@ -2873,42 +2873,89 @@ class VendorController extends Controller
     {
         $user = auth()->user();
         $activeCompany = session('active_company');
-
         $vendor = $user->vendor;
 
-        $inventory = \App\Models\Inventory::with('product', 'warehouse', 'grn')
-            ->whereHas('product', fn ($q) => $q->where('vendor_id', $vendor->id))
-            ->when($request->warehouse_id, fn ($q, $v) => $q->where('warehouse_id', $v))           
+        $inventory = \App\Models\Inventory::with([
+                'product' => fn ($q) => $q->withoutGlobalScopes(),
+                'warehouse',
+                'grn'
+            ])
+            ->whereHas('product', fn ($q) => $q->withoutGlobalScopes()->where('vendor_id', $vendor->id))
             ->where('company_code', $activeCompany)
+            ->when($request->warehouse_id, fn ($q, $v) => $q->where('warehouse_id', $v))
             ->latest('received_date')
             ->paginate(30);
+
+        // Get GRN totals per product (total ever received)
+
+$grnTotals = \DB::table('grn_items')
+    ->join('grn', 'grn_items.grn_id', '=', 'grn.id')
+    ->join('products', function ($j) use ($vendor) {
+        $j->on('grn_items.product_id', '=', 'products.id')
+          ->where('products.vendor_id', $vendor->id);
+    })
+    ->where('grn.company_code', $activeCompany)
+    ->select(
+        'grn_items.product_id',
+        \DB::raw('SUM(grn_items.received_quantity) as total_received'),
+        \DB::raw('SUM(COALESCE(grn_items.damaged_quantity, 0)) as total_damaged'),
+        \DB::raw('SUM(COALESCE(grn_items.excess_quantity, 0)) as total_excess')
+    )
+    ->groupBy('grn_items.product_id')
+    ->get()
+    ->keyBy('product_id')
+    ->map(fn ($row) => [
+        'total_received' => intval($row->total_received ?? 0),
+        'total_damaged'  => intval($row->total_damaged ?? 0),
+        'total_excess'   => intval($row->total_excess ?? 0),
+        'good_received'  => intval(($row->total_received ?? 0) - ($row->total_damaged ?? 0)),
+    ]);
+
+
+        // Sold qty per product
+        $soldTotals = \App\Models\OrderItem::withoutGlobalScopes()
+            ->where('vendor_id', $vendor->id)
+            ->where('shipped_qty', '>', 0)
+            ->whereHas('order', fn ($q) => $q->withoutGlobalScopes()
+                ->where('company_code', $activeCompany)
+                ->whereIn('status', ['shipped', 'delivered']))
+            ->select('product_id', \DB::raw('SUM(shipped_qty) as total_sold'))
+            ->groupBy('product_id')
+            ->pluck('total_sold', 'product_id');
+
+        // Returned qty per product
+        $returnedTotals = \DB::table('order_return_items')
+            ->join('order_returns', 'order_return_items.order_return_id', '=', 'order_returns.id')
+            ->where('order_returns.vendor_id', $vendor->id)
+            ->where('order_returns.company_code', $activeCompany)
+            ->whereIn('order_returns.status', ['approved', 'received', 'completed'])
+            ->select('order_return_items.product_id', \DB::raw('SUM(order_return_items.return_qty) as total_returned'))
+            ->groupBy('order_return_items.product_id')
+            ->pluck('total_returned', 'product_id');
 
         $warehouses = \App\Models\Warehouse::orderBy('name')->get(['id', 'name']);
 
         // Stats
-        // $stats = [
-        //     'total_skus'     => \App\Models\Inventory::whereHas('product', fn ($q) => $q->where('vendor_id', $vendor->id))->distinct('product_id')->count('product_id'),
-        //     'total_qty'      => (int) \App\Models\Inventory::whereHas('product', fn ($q) => $q->where('vendor_id', $vendor->id))->sum('quantity'),
-        //     'available_qty'  => (int) \App\Models\Inventory::whereHas('product', fn ($q) => $q->where('vendor_id', $vendor->id))->sum('available_quantity'),
-        //     'reserved_qty'   => (int) \App\Models\Inventory::whereHas('product', fn ($q) => $q->where('vendor_id', $vendor->id))->sum('reserved_quantity'),
-        // ];
+        $baseQuery = fn () => \App\Models\Inventory::where('company_code', $activeCompany)
+            ->whereHas('product', fn ($q) => $q->withoutGlobalScopes()->where('vendor_id', $vendor->id));
 
-            $stats = [
-                'total_skus'    => \App\Models\Inventory::where('company_code', $activeCompany)
-                    ->whereHas('product', fn ($q) => $q->withoutGlobalScopes()->where('vendor_id', $vendor->id))
-                    ->distinct('product_id')->count('product_id'),
-                'total_qty'     => (int) \App\Models\Inventory::where('company_code', $activeCompany)
-                    ->whereHas('product', fn ($q) => $q->withoutGlobalScopes()->where('vendor_id', $vendor->id))
-                    ->sum('quantity'),
-                'available_qty' => (int) \App\Models\Inventory::where('company_code', $activeCompany)
-                    ->whereHas('product', fn ($q) => $q->withoutGlobalScopes()->where('vendor_id', $vendor->id))
-                    ->sum('available_quantity'),
-                'reserved_qty'  => (int) \App\Models\Inventory::where('company_code', $activeCompany)
-                    ->whereHas('product', fn ($q) => $q->withoutGlobalScopes()->where('vendor_id', $vendor->id))
-                    ->sum('reserved_quantity'),
-            ];
+        $totalGrnReceived = $grnTotals->sum('total_received');
+        $totalGrnGood = $grnTotals->sum('good_received');
+        $totalSold = $soldTotals->sum();
+        $totalReturned = $returnedTotals->sum();
 
-        return view('vendor.inventory.index', compact('inventory', 'vendor', 'warehouses', 'stats'));
+        $stats = [
+            'total_skus'      => $baseQuery()->distinct('product_id')->count('product_id'),
+            'grn_received'    => $totalGrnReceived,
+            'grn_good'        => $totalGrnGood,
+            'total_sold'      => intval($totalSold),
+            'total_returned'  => intval($totalReturned),
+            'total_qty'       => (int) $baseQuery()->sum('quantity'),
+            'available_qty'   => (int) $baseQuery()->sum('available_quantity'),
+            'reserved_qty'    => (int) $baseQuery()->sum('reserved_quantity'),
+        ];
+
+        return view('vendor.inventory.index', compact('inventory', 'vendor', 'warehouses', 'stats', 'grnTotals', 'soldTotals', 'returnedTotals'));
     }
 
     public function chargebacks()

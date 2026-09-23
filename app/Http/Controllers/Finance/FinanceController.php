@@ -9,7 +9,6 @@ use Illuminate\Http\Request;
 use App\Services\VendorPayoutService;
 use App\Helpers\FileStorage;
 
-use function PHPUnit\Framework\isArray;
 
 class FinanceController extends Controller
 {
@@ -147,7 +146,7 @@ class FinanceController extends Controller
         // AJAX: Lookup order by number
         if ($request->has('lookup_order')) {
             $orderNumber = trim($request->lookup_order);
-            $order = Order::where('order_number', $orderNumber)
+            $order = Order::withoutGlobalScopes()->where('order_number', $orderNumber)
                 ->orWhere('platform_order_id', $orderNumber)
                 ->with(['items.product', 'salesChannel'])
                 ->first();
@@ -214,7 +213,7 @@ class FinanceController extends Controller
             'chargeback_items.*.evidence'  => 'nullable|file|max:10240|mimes:pdf,jpg,jpeg,png',
         ]);
 
-        $order = Order::where('order_number', $orderNumber)
+        $order = Order::withoutGlobalScopes()->where('order_number', $orderNumber)
             ->orWhere('platform_order_id', $orderNumber)
             ->first();
 
@@ -558,18 +557,6 @@ class FinanceController extends Controller
 
         return view('finance.live-sheets.index', compact('liveSheets', 'vendors'));
     }
-    public function liveSheetsBAK(Request $request)
-    {
-        $activeCode = session('active_company');
-
-        $liveSheets = \App\Models\LiveSheet::with('vendor', 'offerSheet', 'items.product')
-            ->where('company_code', $activeCode)
-            ->when($request->status, fn ($q, $v) => $q->where('status', $v))
-            ->latest()->paginate(20);
-
-        return view('finance.live-sheets.index', compact('liveSheets'));
-    }
-
     public function showLiveSheet(\App\Models\LiveSheet $liveSheet)
     {
         if ($liveSheet->company_code !== session('active_company')) {
@@ -625,15 +612,16 @@ class FinanceController extends Controller
                 continue;
             }
 
-            // Check live_sheet_items JSON — exclude same product
+            // Check live_sheet_items JSON — same company only
             $dupItems = \App\Models\LiveSheetItem::whereJsonContains('product_details', ['sap_code' => $code])
                 ->where('product_id', '!=', $item->product_id)
-                ->with(['product' => fn ($q) => $q->withoutGlobalScopes()])
+                ->whereHas('liveSheet', fn($q) => $q->withoutGlobalScopes()->where('company_code', $liveSheet->company_code))
+                ->with(['product' => fn($q) => $q->withoutGlobalScopes()])
                 ->get();
 
             foreach ($dupItems as $dup) {
                 $sku = $dup->product->sku ?? 'unknown';
-                $errors[] = "SAP code '{$code}' is already used on live sheet item (SKU: {$sku}).";
+                $errors[] = "SAP code '{$code}' is already used on live sheet item (SKU: {$sku}) in {$liveSheet->company_code}.";
             }
         }
 
@@ -680,98 +668,7 @@ class FinanceController extends Controller
 
         return back()->with('success', "{$updated} SAP code and Vendor WSP(s) updated successfully.");
     }
-    public function updateSapCodesBAK(Request $request, \App\Models\LiveSheet $liveSheet)
-    {
-        $request->validate([
-            'sap_codes'              => 'required|array',
-            'sap_codes.*.item_id'    => 'required|exists:live_sheet_items,id',
-            'sap_codes.*.sap_code'   => 'nullable|string|max:50|regex:/^[A-Za-z0-9\-_]+$/',
-            'sap_codes.*.vendor_wsp' => 'nullable|numeric|min:0|decimal:0,2',
-        ], [
-            'sap_codes.*.sap_code.regex' => 'SAP code can only contain letters, numbers, hyphens and underscores.',
-            'sap_codes.*.vendor_wsp.decimal' => 'Vendor WSP must be a valid decimal number with up to 2 decimal places.',
-        ]);
-
-        // ── Pre-validation: check uniqueness across all products and live sheets ──
-        $errors = [];
-        $seen = []; // track duplicates within the same submission
-
-        foreach ($request->sap_codes as $idx => $row) {
-            $code = trim($row['sap_code'] ?? '');
-            if ($code === '') {
-                continue;
-            }
-
-            // Duplicate within current submission
-            if (isset($seen[$code])) {
-                $errors[] = "SAP code '{$code}' is used multiple times in this form.";
-                continue;
-            }
-            $seen[$code] = true;
-
-            $item = \App\Models\LiveSheetItem::find($row['item_id']);
-            if (!$item) {
-                continue;
-            }
-
-            // Check products table — exclude the current product (re-saving same code is OK)
-
-            $dup = \App\Models\Product::where('sap_code', $code)
-                ->when($item->product_id ?? null, function ($q, $productId) {
-                    $q->where('id', '!=', $productId);
-                })
-                ->count();
-
-            if ($dup > 1) {
-
-                $errors[] = "SAP code '{$code}' is already assigned to product '{$dup->sku}' ({$dup->name}).";
-                continue;
-            }
-            // Check live_sheet_items JSON product_details.sap_code on OTHER items
-
-            $dupItem = \App\Models\LiveSheetItem::whereJsonContains('product_details', ['sap_code' => $code])
-                ->get();
-            foreach ($dupItem as $dup) {
-                if (($dup->product_id ?? null) != ($item->product_id ?? null)) {
-                    $sku = $dup->product->sku ?? 'unknown';
-                    $errors[] = "SAP code '{$code}' is already used on live sheet item ID {$dup->id} with SKU '{$sku}'.";
-                }
-            }
-
-        }
-
-        if (!empty($errors)) {
-            return back()
-                ->withErrors(['sap_codes' => $errors])
-                ->with('error', 'SAP code validation failed. Codes must be unique across the system.');
-        }
-
-        // ── All codes are unique — proceed with update ──
-        $updated = 0;
-        foreach ($request->sap_codes as $row) {
-            $item = \App\Models\LiveSheetItem::find($row['item_id']);
-            if ($item && $item->live_sheet_id === $liveSheet->id) {
-                $details = $item->product_details ?? [];
-                $details['sap_code'] = $row['sap_code'];
-                $details['vendor_wsp'] = $row['vendor_wsp'];
-                $item->update(['product_details' => $details]);
-
-                if (!empty($row['sap_code']) && $item->product) {
-                    $item->product->update(['sap_code' => $row['sap_code']]);
-                }
-                if (!empty($row['vendor_wsp']) && $item->product) {
-                    $item->product->update(['vendor_wsp' => $row['vendor_wsp']]);
-                }
-                $updated++;
-            }
-        }
-
-
-
-        \App\Models\ActivityLog::log('updated', 'live_sheet', $liveSheet, null, ['sap_codes_updated' => $updated], 'SAP codes and Vendor WSP updated by Finance');
-
-        return back()->with('success', "{$updated} SAP code and Vendor WSP(s) updated successfully.");
-    }
+     
     /**
      * Download pre-filled SAP template CSV for a live sheet
      */
@@ -866,14 +763,6 @@ class FinanceController extends Controller
             }
 
             // Add right after header parsing, before the loop:
-            \Log::info('SAP Upload Debug', [
-                'headers' => $header,
-                'itemIdCol' => $itemIdCol,
-                'newSapCol' => $newSapCol,
-                'newPayoutCol' => $newPayoutCol,
-                'row_count' => count($rows),
-                'sample_row' => $rows[1] ?? [],
-            ]);
 
             $updated = 0;
             $errors = [];
@@ -922,14 +811,26 @@ class FinanceController extends Controller
                     }
                     $sapCodes[] = $newSap;
 
-                    // Uniqueness against existing products
+                    // Uniqueness against existing products — same company
                     $dup = \App\Models\Product::withoutGlobalScopes()
                         ->where('sap_code', $newSap)
                         ->where('company_code', $liveSheet->company_code)
-                        ->when($item->product_id, fn ($q) => $q->where('id', '!=', $item->product_id))
+                        ->where('id', '!=', $item->product_id)
                         ->first();
                     if ($dup) {
-                        $errors[] = "Row {$rowNum}: SAP '{$newSap}' already used by {$dup->sku}.";
+                        $errors[] = "Row {$rowNum}: SAP '{$newSap}' already used by SKU '{$dup->sku}' in {$liveSheet->company_code}.";
+                        continue;
+                    }
+
+                    // Check live_sheet_items JSON — same company
+                    $dupLsItem = \App\Models\LiveSheetItem::whereJsonContains('product_details', ['sap_code' => $newSap])
+                        ->where('product_id', '!=', $item->product_id)
+                        ->whereHas('liveSheet', fn($q) => $q->withoutGlobalScopes()->where('company_code', $liveSheet->company_code))
+                        ->with(['product' => fn($q) => $q->withoutGlobalScopes()])
+                        ->first();
+                    if ($dupLsItem) {
+                        $sku = $dupLsItem->product->sku ?? 'unknown';
+                        $errors[] = "Row {$rowNum}: SAP '{$newSap}' already used on live sheet item (SKU: {$sku}) in {$liveSheet->company_code}.";
                         continue;
                     }
                 }
@@ -950,7 +851,7 @@ class FinanceController extends Controller
 
                 // Update product table
                 if (!empty($productUpdate) && $item->product_id) {
-                    \App\Models\Product::where('id', $item->product_id)->update($productUpdate);
+                    \App\Models\Product::withoutGlobalScopes()->where('id', $item->product_id)->update($productUpdate);
                 }
 
                 // Update live sheet item product_details
@@ -1423,272 +1324,12 @@ class FinanceController extends Controller
 
         return back()->with('success', $msg);
     }
-    public function storeWspRevisionBAK(Request $request, \App\Models\LiveSheet $liveSheet)
-    {
-        $request->validate([
-            'vendor_wsp'      => 'required|numeric|min:0',
-            'effective_from'  => 'required|date',
-            'effective_to'    => 'nullable|date|after_or_equal:effective_from',
-            'product_id'      => 'nullable|exists:products,id',
-            'remarks'         => 'nullable|string|max:500',
-        ]);
-
-        $isBulk = $request->boolean('bulk');
-        // Close previous open revision (same scope: sheet-level or product-level)
-        $previousQuery = \App\Models\WspRevision::where('live_sheet_id', $liveSheet->id)
-            ->whereNull('effective_to')
-            ->latest('effective_from');
-        if ($isBulk) {
-            // Bulk: close ALL open revisions for this live sheet
-            \App\Models\WspRevision::where('live_sheet_id', $liveSheet->id)
-                ->whereNull('effective_to')
-                ->where('effective_from', '<', $request->effective_from)
-                ->update(['effective_to' => \Carbon\Carbon::parse($request->effective_from)->subDay()->toDateString()]);
-        } else {
-            if ($request->product_id) {
-                $previousQuery->where('product_id', $request->product_id);
-            } else {
-                $previousQuery->whereNull('product_id');
-            }
-
-            $previousOpen = $previousQuery->first();
-
-            if ($previousOpen && $previousOpen->effective_from < $request->effective_from) {
-                $previousOpen->update([
-                    'effective_to' => \Carbon\Carbon::parse($request->effective_from)->subDay()->toDateString(),
-                ]);
-            }
-        }
-        if ($isBulk) {
-            // Create one revision per product
-            foreach ($liveSheet->items as $item) {
-                $revision =  \App\Models\WspRevision::create([
-                    'live_sheet_id'  => $liveSheet->id,
-                    'live_sheet_item_id' => $item->id,
-                    'product_id'     => $item->product_id,
-                    'vendor_id'      => $liveSheet->vendor_id,
-                    'company_code'   => $liveSheet->company_code,
-                    'vendor_wsp'     => $request->vendor_wsp,
-                    'effective_from' => $request->effective_from,
-                    'effective_to'   => $request->effective_to,
-                    'remarks'        => $request->remarks ?? 'Bulk WSP update',
-                    'created_by'     => auth()->id(),
-                ]);
-
-                // Update product_details
-                $details = $item->product_details ?? [];
-                $details['vendor_wsp'] = floatval($request->vendor_wsp);
-                $details['wsp'] = floatval($request->vendor_wsp);
-                $item->update(['product_details' => $details]);
-
-
-                \App\Models\ActivityLog::log('created', 'wsp_revision', $revision, null, [
-                    'live_sheet'  => $liveSheet->live_sheet_number,
-                    'product_id'  => $request->product_id,
-                    'old_wsp'     => $previousOpen?->vendor_wsp,
-                    'new_wsp'     => $request->vendor_wsp,
-                    'from'        => $request->effective_from,
-                    'to'          => $request->effective_to,
-                ], "WSP revised: {$request->vendor_wsp} from {$request->effective_from} on {$liveSheet->live_sheet_number}");
-            }
-
-
-            $msg = "WSP {$request->vendor_wsp} applied to all {$liveSheet->items->count()} items";
-        } else {
-            $revision = \App\Models\WspRevision::create([
-                'live_sheet_id'      => $liveSheet->id,
-                'live_sheet_item_id' => $request->product_id
-                    ? \App\Models\LiveSheetItem::where('live_sheet_id', $liveSheet->id)->where('product_id', $request->product_id)->value('id')
-                    : null,
-                'product_id'         => $request->product_id,
-                'vendor_id'          => $liveSheet->vendor_id,
-                'company_code'       => $liveSheet->company_code,
-                'vendor_wsp'         => $request->vendor_wsp,
-                'effective_from'     => $request->effective_from,
-                'effective_to'       => $request->effective_to,
-                'remarks'            => $request->remarks,
-                'created_by'         => auth()->id(),
-            ]);
-
-            // Update live sheet items' product_details with latest WSP
-            if ($request->product_id) {
-                // Product-specific: update just that item
-                $item = \App\Models\LiveSheetItem::where('live_sheet_id', $liveSheet->id)
-                    ->where('product_id', $request->product_id)->first();
-                if ($item) {
-                    $details = $item->product_details ?? [];
-                    $details['vendor_wsp'] = floatval($request->vendor_wsp);
-                    $details['wsp'] = floatval($request->vendor_wsp);
-                    $item->update(['product_details' => $details]);
-                }
-            } else {
-                // Sheet-level: update all items
-                foreach ($liveSheet->items as $item) {
-                    $details = $item->product_details ?? [];
-                    $details['vendor_wsp'] = floatval($request->vendor_wsp);
-                    $details['wsp'] = floatval($request->vendor_wsp);
-                    $item->update(['product_details' => $details]);
-                }
-            }
-
-            // Update product master
-            if ($request->product_id) {
-                \App\Models\Product::withoutGlobalScopes()->where('id', $request->product_id)
-                    ->update(['vendor_wsp' => $request->vendor_wsp]);
-            }
-            $msg = "WSP {$request->vendor_wsp} applied";
-
-
-            \App\Models\ActivityLog::log('created', 'wsp_revision', $revision, null, [
-                'live_sheet'  => $liveSheet->live_sheet_number,
-                'product_id'  => $request->product_id,
-                'old_wsp'     => $previousOpen?->vendor_wsp,
-                'new_wsp'     => $request->vendor_wsp,
-                'from'        => $request->effective_from,
-                'to'          => $request->effective_to,
-            ], "WSP revised: {$request->vendor_wsp} from {$request->effective_from} on {$liveSheet->live_sheet_number}");
-        }
-
-
-        $productLabel = $request->product_id
-            ? (\App\Models\Product::find($request->product_id)?->sku ?? 'Product')
-            : 'All items';
-
-        if ($request->expectsJson()) {
-            // ... existing logic ...
-            // return response()->json(['success' => true, 'message' => "WSP saved"]);
-            return response()->json(['success' => true, 'message' => $msg]);
-        }
-
-        return back()->with('success', $msg);
-        // return back()->with('success', "WSP {$request->vendor_wsp} set for {$productLabel} effective from " . \Carbon\Carbon::parse($request->effective_from)->format('d M Y'));
-    }
-
     public function deleteWspRevision(\App\Models\WspRevision $revision)
     {
         $liveSheet = $revision->liveSheet;
         $revision->delete();
 
         return back()->with('success', 'WSP revision deleted.');
-    }
-
-    public function downloadPayoutOLD(\App\Models\VendorPayout $payout)
-    {
-        $snapshot = $payout->calculation_snapshot ?? [];
-        $lineItems = collect($snapshot['line_items'] ?? []);
-        $summary = $snapshot['summary'] ?? [];
-        $vendor = $payout->vendor;
-        $period = date('M-Y', mktime(0, 0, 0, $payout->payout_month, 1, $payout->payout_year));
-        $cs = match ($payout->company_code) {
-            '2200' => '€',
-            '2400' => '£',
-            default => '$'
-        };
-
-        $spreadsheet = new \PhpOffice\PhpSpreadsheet\Spreadsheet();
-        $sheet = $spreadsheet->getActiveSheet();
-        $sheet->setTitle('Payout');
-
-        // Header info
-        $sheet->setCellValue('A1', 'Vendor Payout — ' . ($vendor->company_name ?? ''));
-        $sheet->setCellValue('A2', 'Period: ' . $period);
-        $sheet->setCellValue('A3', 'Status: ' . ucfirst($payout->status));
-        $sheet->mergeCells('A1:K1');
-        $sheet->mergeCells('A2:K2');
-        $sheet->getStyle('A1')->getFont()->setBold(true)->setSize(14);
-
-        // Summary row
-        $sheet->setCellValue('A4', 'Total Sales');
-        $sheet->setCellValue('B4', $summary['total_sales'] ?? $payout->total_sales);
-        $sheet->setCellValue('C4', 'Commission');
-        $sheet->setCellValue('D4', $summary['total_commission'] ?? $payout->total_commission);
-        $sheet->setCellValue('E4', 'WH Charges');
-        $sheet->setCellValue('F4', $summary['total_warehouse_charges'] ?? $payout->total_warehouse_charges);
-        $sheet->setCellValue('G4', 'Chargebacks');
-        $sheet->setCellValue('H4', $summary['total_chargebacks'] ?? $payout->total_chargebacks);
-        $sheet->setCellValue('I4', 'Net Payout');
-        $sheet->setCellValue('J4', $payout->net_payout);
-        $sheet->getStyle('A4:J4')->getFont()->setBold(true);
-
-        // Table headers
-        $headers = ['#', 'Order #', 'Order Date', 'Channel', 'SKU', 'Shipped Qty', 'Vendor WSP', 'Sale Amount', 'Commission', 'Gross Payout', 'FIFO Detail'];
-        $row = 6;
-        foreach ($headers as $col => $h) {
-            $sheet->setCellValue([$col + 1, $row], $h);
-        }
-        $headerStyle = [
-            'font' => ['bold' => true, 'color' => ['rgb' => 'FFFFFF'], 'size' => 10],
-            'fill' => ['fillType' => \PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID, 'startColor' => ['rgb' => '1E3A5F']],
-        ];
-        $sheet->getStyle([1, $row, count($headers), $row])->applyFromArray($headerStyle);
-
-        // Data rows
-        $row = 7;
-        foreach ($lineItems as $idx => $item) {
-            $item = (object) $item;
-            $sheet->setCellValue([1, $row], $idx + 1);
-            $sheet->setCellValue([2, $row], $item->order_number ?? '');
-            $sheet->setCellValue([3, $row], $item->order_date ?? '');
-            $sheet->setCellValue([4, $row], $item->channel ?? '');
-            $sheet->setCellValue([5, $row], $item->sku ?? '');
-            $sheet->setCellValue([6, $row], $item->qty ?? 0);
-            $sheet->setCellValue([7, $row], $item->vendor_wsp ?? 0);
-            $sheet->setCellValue([8, $row], $item->sale_amount ?? 0);
-            $sheet->setCellValue([9, $row], $item->commission ?? 0);
-            $sheet->setCellValue([10, $row], $item->net_payout ?? 0);
-            $sheet->setCellValue([11, $row], $item->fifo_detail ?? '');
-            $row++;
-        }
-
-        // Totals row
-        $sheet->setCellValue([1, $row], '');
-        $sheet->setCellValue([5, $row], 'TOTAL');
-        $sheet->setCellValue([6, $row], $lineItems->sum('qty'));
-        $sheet->setCellValue([8, $row], $lineItems->sum('sale_amount'));
-        $sheet->setCellValue([9, $row], $lineItems->sum('commission'));
-        $sheet->setCellValue([10, $row], $lineItems->sum('net_payout'));
-        $sheet->getStyle([1, $row, 11, $row])->getFont()->setBold(true);
-
-        // Deductions section
-        $row += 2;
-        $sheet->setCellValue([1, $row], 'Deductions');
-        $sheet->getStyle([1, $row])->getFont()->setBold(true)->setSize(11);
-        $row++;
-
-        $sheet->setCellValue([1, $row], 'Warehouse Charges');
-        $sheet->setCellValue([2, $row], $summary['total_warehouse_charges'] ?? $payout->total_warehouse_charges);
-        $row++;
-        $sheet->setCellValue([1, $row], 'Chargebacks');
-        $sheet->setCellValue([2, $row], $summary['total_chargebacks'] ?? $payout->total_chargebacks);
-        $row += 2;
-        $sheet->setCellValue([1, $row], 'NET PAYOUT');
-        $sheet->setCellValue([2, $row], $payout->net_payout);
-        $row++;
-        $sheet->setCellValue([1, $row], 'PAID AMOUNT');
-        $sheet->setCellValue([2, $row], $payout->total_paid);
-        $row++;
-
-        $sheet->setCellValue([1, $row], 'BALANCE DUE');
-        $sheet->setCellValue([2, $row], $payout->balance_due);
-
-        $sheet->getStyle([1, $row, 2, $row])->getFont()->setBold(true)->setSize(12);
-
-        // Format number columns
-        foreach (range(7, $row) as $r) {
-            $sheet->getStyle([7, $r, 10, $r])->getNumberFormat()->setFormatCode('#,##0.00');
-        }
-
-        // Auto-size
-        foreach (range(1, 11) as $col) {
-            $sheet->getColumnDimensionByColumn($col)->setAutoSize(true);
-        }
-
-        $filename = "Payout-{$vendor->company_name}-{$period}.xlsx";
-        $path = storage_path("app/temp/{$filename}");
-        @mkdir(dirname($path), 0775, true);
-
-        (new \PhpOffice\PhpSpreadsheet\Writer\Xlsx($spreadsheet))->save($path);
-        return response()->download($path, $filename)->deleteFileAfterSend(true);
     }
 
     public function downloadPayout(\App\Models\VendorPayout $payout)

@@ -906,23 +906,61 @@ class AdminController extends Controller
             ->where(function ($query) use ($q) {
                 $query->where('sku', 'LIKE', "%{$q}%")
                     ->orWhere('name', 'LIKE', "%{$q}%")
-                    ->orWhere('barcode', 'LIKE', "%{$q}%");
+                    ->orWhere('barcode', 'LIKE', "%{$q}%")
+                    ->orWhere('sap_code', 'LIKE', "%{$q}%");
             })
             ->when($activeCompany, fn ($qr) => $qr->where('company_code', $activeCompany))
             ->with(['vendor:id,company_name'])
             ->limit(20)
-            ->get();
+            ->get()  ;
 
-            
+        /*
+              $results = $products->map(function ($product) use ($companyLabels) {
+                  // Get live sheets containing this product
+                  $liveSheetItems = \App\Models\LiveSheetItem::where('product_id', $product->id)
+                      ->with(['liveSheet' => fn ($q) => $q->withoutGlobalScopes()])
+                      ->get();
+
+                  $liveSheets = $liveSheetItems->map(function ($lsItem) {
+                      $ls = $lsItem->liveSheet;
+                      if (!$ls || $ls->company_code != session('active_company')) {
+                          return null;
+                      }
+
+                      return [
+                          'id'           => $ls->id,
+                          'number'       => $ls->live_sheet_number,
+                          'status'       => $ls->status ?? 'draft',
+                          'qty'          => $lsItem->quantity,
+                          'url'          => route('sourcing.live-sheets.show', $ls),
+                          'download_url' => route('sourcing.live-sheets.download', $ls),
+                      ];
+                  })->filter()->unique('id')->values();
+
+                  return [
+                      'id'          => $product->id,
+                      'sku'         => $product->sku,
+                      'name'        => $product->name ?? '—',
+                      'barcode'     => $product->barcode ?? '',
+                      'vendor'      => $product->vendor->company_name ?? '—',
+                      'company'     => $companyLabels[$product->company_code] ?? $product->company_code,
+                      'live_sheets' => $liveSheets,
+                  ];
+              });
+*/
+
         $results = $products->map(function ($product) use ($companyLabels) {
-            // Get live sheets containing this product
+            $activeCompany = session('active_company');
+
+            // Get live sheets containing this product — filtered by company
             $liveSheetItems = \App\Models\LiveSheetItem::where('product_id', $product->id)
+                ->whereHas('liveSheet', fn ($q) => $q->withoutGlobalScopes()->where('company_code', $activeCompany))
                 ->with(['liveSheet' => fn ($q) => $q->withoutGlobalScopes()])
                 ->get();
 
             $liveSheets = $liveSheetItems->map(function ($lsItem) {
                 $ls = $lsItem->liveSheet;
-                if (!$ls || $ls->company_code != session('active_company')) {
+                if (!$ls) {
                     return null;
                 }
 
@@ -946,7 +984,6 @@ class AdminController extends Controller
                 'live_sheets' => $liveSheets,
             ];
         });
-
         return response()->json(['results' => $results]);
     }
 }

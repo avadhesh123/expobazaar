@@ -3,7 +3,7 @@
 @section('page-title', 'My Inventory')
 
 @section('content')
-<div class="grid-kpi" style="grid-template-columns:repeat(4,1fr);">
+<!-- <div class="grid-kpi" style="grid-template-columns:repeat(4,1fr);">
     <div class="kpi-card">
         <div class="kpi-label">Total SKUs</div>
         <div class="kpi-value">{{ $stats['total_skus'] }}</div>
@@ -20,8 +20,38 @@
         <div class="kpi-label">Reserved</div>
         <div class="kpi-value" style="color:#e8a838;">{{ number_format($stats['reserved_qty']) }}</div>
     </div>
+</div> -->
+<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:.75rem;margin-bottom:1.25rem;">
+    <div class="kpi-card" style="border-left:3px solid #1e40af;">
+        <div class="kpi-label">Total SKUs</div>
+        <div class="kpi-value" style="color:#1e40af;">{{ $stats['total_skus'] }}</div>
+    </div>
+    <div class="kpi-card" style="border-left:3px solid #7c3aed;">
+        <div class="kpi-label">GRN Received</div>
+        <div class="kpi-value" style="color:#7c3aed;">{{ number_format($stats['grn_received']) }}</div>
+        <div style="font-size:.6rem;color:#94a3b8;">Good: {{ number_format($stats['grn_good']) }}</div>
+    </div>
+    <div class="kpi-card" style="border-left:3px solid #e8a838;">
+        <div class="kpi-label">Total Sold</div>
+        <div class="kpi-value" style="color:#e8a838;">{{ number_format($stats['total_sold']) }}</div>
+    </div>
+    <!-- <div class="kpi-card" style="border-left:3px solid #dc2626;">
+        <div class="kpi-label">Returned</div>
+        <div class="kpi-value" style="color:#dc2626;">{{ number_format($stats['total_returned']) }}</div>
+    </div> -->
+    <!-- <div class="kpi-card" style="border-left:3px solid #16a34a;">
+        <div class="kpi-label">Current Stock</div>
+        <div class="kpi-value" style="color:#16a34a;">{{ number_format($stats['total_qty']) }}</div>
+    </div> -->
+    <div class="kpi-card" style="border-left:3px solid #0d9488;">
+        <div class="kpi-label">Available</div>
+        <div class="kpi-value" style="color:#0d9488;">{{ number_format($stats['available_qty']) }}</div>
+    </div>
+    <div class="kpi-card" style="border-left:3px solid #94a3b8;">
+        <div class="kpi-label">Reserved</div>
+        <div class="kpi-value" style="color:#94a3b8;">{{ number_format($stats['reserved_qty']) }}</div>
+    </div>
 </div>
-
 {{-- Filters --}}
 <div class="card" style="margin-bottom:1.25rem;">
     <div class="card-body" style="padding:.85rem 1.4rem;">
@@ -50,9 +80,9 @@
                     <th>SKU</th>
                     <th>Product</th>
                     <th>Warehouse</th>
-                    <th>GRN</th>
-                    <th>Received</th>
-                    <th style="text-align:center;">Total Qty</th>
+                    <th width="190">GRN</th>
+                    <th style="text-align:center;">GRN Qty</th>
+                    <th style="text-align:center;">Sold Qty</th>
                     <th style="text-align:center;">Available</th>
                     <th style="text-align:center;">Reserved</th>
                     <th>Ageing</th>
@@ -60,7 +90,12 @@
             </thead>
             <tbody>
                 @forelse($inventory as $inv)
-                @php $age = $inv->getAgeingDays(); @endphp
+                @php $age = $inv->getAgeingDays();
+                $pid = $inv->product_id;
+                $grn = $grnTotals[$pid] ?? ['total_received' => 0, 'good_received' => 0, 'total_damaged' => 0];
+                $sold = intval($soldTotals[$pid] ?? 0);
+                $returned = intval($returnedTotals[$pid] ?? 0);
+                @endphp
                 <tr>
                     <td style="font-family:monospace;font-weight:600;font-size:.82rem;">{{ $inv->product->sku ?? '—' }}</td>
                     <td>
@@ -70,9 +105,17 @@
                     <td style="font-size:.78rem;">{{ $inv->warehouse->name ?? '—' }}
                         <div style="font-size:.62rem;color:#94a3b8;">{{ $inv->warehouse->location ?? '' }}</div>
                     </td>
-                    <td style="font-family:monospace;font-size:.72rem;color:#64748b;">{{ $inv->grn->grn_number ?? '—' }}</td>
-                    <td style="font-size:.78rem;">{{ $inv->received_date ? $inv->received_date->format('d M Y') : '—' }}</td>
-                    <td style="text-align:center;font-weight:700;">{{ $inv->quantity }}</td>
+                    <td>
+                        <span style="font-size:.78rem;">{{ $inv->grn->grn_number ?? '—' }}</span> <br>
+                       <span style="font-size:.62rem;color:#94a3b8">{{ $inv->received_date ? $inv->received_date->format('d M Y') : '—' }}</span>
+                    </td>
+                    <td style="text-align:center; ">
+                        <span style="font-weight:600;color:#7c3aed;">{{ $grn['total_received'] }}</span>
+                        @if($grn['total_damaged'] > 0)
+                        <span style="font-size:.6rem;color:#dc2626;">({{ $grn['total_damaged'] }} dmg)</span>
+                        @endif
+                    </td>
+                    <td style="text-align:center;font-weight:700;color:#e8a838;">{{ $sold }}</td>
                     <td style="text-align:center;font-weight:700;color:#16a34a;">{{ $inv->available_quantity }}</td>
                     <td style="text-align:center;font-weight:600;color:{{ $inv->reserved_quantity > 0 ? '#e8a838' : '#94a3b8' }};">{{ $inv->reserved_quantity }}</td>
                     <td>
