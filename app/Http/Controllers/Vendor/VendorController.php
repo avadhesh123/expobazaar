@@ -2878,22 +2878,35 @@ class VendorController extends Controller
 
         $inventory = \App\Models\Inventory::with('product', 'warehouse', 'grn')
             ->whereHas('product', fn ($q) => $q->where('vendor_id', $vendor->id))
-            ->when($request->warehouse_id, fn ($q, $v) => $q->where('warehouse_id', $v))
-            ->when(!$user->isAdmin() && !empty($activeCompany), function ($query) use ($activeCompany) {
-                $query->where('company_code', $activeCompany);
-            })
+            ->when($request->warehouse_id, fn ($q, $v) => $q->where('warehouse_id', $v))           
+            ->where('company_code', $activeCompany)
             ->latest('received_date')
             ->paginate(30);
 
         $warehouses = \App\Models\Warehouse::orderBy('name')->get(['id', 'name']);
 
         // Stats
-        $stats = [
-            'total_skus'     => \App\Models\Inventory::whereHas('product', fn ($q) => $q->where('vendor_id', $vendor->id))->distinct('product_id')->count('product_id'),
-            'total_qty'      => (int) \App\Models\Inventory::whereHas('product', fn ($q) => $q->where('vendor_id', $vendor->id))->sum('quantity'),
-            'available_qty'  => (int) \App\Models\Inventory::whereHas('product', fn ($q) => $q->where('vendor_id', $vendor->id))->sum('available_quantity'),
-            'reserved_qty'   => (int) \App\Models\Inventory::whereHas('product', fn ($q) => $q->where('vendor_id', $vendor->id))->sum('reserved_quantity'),
-        ];
+        // $stats = [
+        //     'total_skus'     => \App\Models\Inventory::whereHas('product', fn ($q) => $q->where('vendor_id', $vendor->id))->distinct('product_id')->count('product_id'),
+        //     'total_qty'      => (int) \App\Models\Inventory::whereHas('product', fn ($q) => $q->where('vendor_id', $vendor->id))->sum('quantity'),
+        //     'available_qty'  => (int) \App\Models\Inventory::whereHas('product', fn ($q) => $q->where('vendor_id', $vendor->id))->sum('available_quantity'),
+        //     'reserved_qty'   => (int) \App\Models\Inventory::whereHas('product', fn ($q) => $q->where('vendor_id', $vendor->id))->sum('reserved_quantity'),
+        // ];
+
+            $stats = [
+                'total_skus'    => \App\Models\Inventory::where('company_code', $activeCompany)
+                    ->whereHas('product', fn ($q) => $q->withoutGlobalScopes()->where('vendor_id', $vendor->id))
+                    ->distinct('product_id')->count('product_id'),
+                'total_qty'     => (int) \App\Models\Inventory::where('company_code', $activeCompany)
+                    ->whereHas('product', fn ($q) => $q->withoutGlobalScopes()->where('vendor_id', $vendor->id))
+                    ->sum('quantity'),
+                'available_qty' => (int) \App\Models\Inventory::where('company_code', $activeCompany)
+                    ->whereHas('product', fn ($q) => $q->withoutGlobalScopes()->where('vendor_id', $vendor->id))
+                    ->sum('available_quantity'),
+                'reserved_qty'  => (int) \App\Models\Inventory::where('company_code', $activeCompany)
+                    ->whereHas('product', fn ($q) => $q->withoutGlobalScopes()->where('vendor_id', $vendor->id))
+                    ->sum('reserved_quantity'),
+            ];
 
         return view('vendor.inventory.index', compact('inventory', 'vendor', 'warehouses', 'stats'));
     }

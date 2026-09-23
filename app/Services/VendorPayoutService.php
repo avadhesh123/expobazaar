@@ -33,6 +33,7 @@ class VendorPayoutService
                 'total_chargebacks'        => $data['summary']['total_chargebacks'],
                 'net_payout'               => $data['summary']['net_payout'],
                 'total_shipped_qty'        => $data['summary']['total_qty'],
+                'total_returns'            => $data['summary']['total_returns'],
                 'status'                   => 'calculated',
                 'calculation_snapshot'      => [
                     'line_items'        => $data['line_items'],
@@ -48,9 +49,11 @@ class VendorPayoutService
 
         ActivityLog::log('calculated', 'vendor_payout', $payout, null, [
             'vendor' => $vendor->company_name,
-            'month' => $month, 'year' => $year,
+            'month' => $month,
+            'year' => $year,
             'net_payout' => $data['summary']['net_payout'],
             'shipped_qty' => $data['summary']['total_qty'],
+            'total_returns' => $data['summary']['total_returns'],
         ], "Payout calculated: {$vendor->company_name} {$month}/{$year} = {$data['summary']['net_payout']}");
 
         return ['success' => true, 'payout' => $payout, 'data' => $data];
@@ -229,7 +232,7 @@ class VendorPayoutService
             ->where('status', 'approved')
             ->where(function ($q) {
                 $q->where('charge_status', 'active')
-                  ->orWhereNull('charge_status');
+                    ->orWhereNull('charge_status');
             })
             ->with('warehouse')
             ->get();
@@ -245,79 +248,48 @@ class VendorPayoutService
             ->with(['order' => fn ($q) => $q->withoutGlobalScopes()])
             ->get();
 
-
         $totalChargebacks = $chargebacks->sum('amount');
 
-        // ── 6b. Return Orders ──
-        /* $returnOrders = Order::withoutGlobalScopes()
-             ->where('company_code', $companyCode)
-             ->where('status', 'returned')
-             ->whereMonth('order_date', $month)
-             ->whereYear('order_date', $year)
-             ->whereHas('items', fn ($q) => $q->where('vendor_id', $vendorId))
-             ->with([
-                 'salesChannel',
-                 'items' => fn ($q) => $q->where('vendor_id', $vendorId)
-                     ->with(['product' => fn ($pq) => $pq->withoutGlobalScopes()])
-             ])
-             ->get();
-
-         $totalReturns = 0;
-         $returnsRaw = [];
-
-         foreach ($returnOrders as $ro) {
-             foreach ($ro->items as $item) {
-                 $qty = intval($item->shipped_qty > 0 ? $item->shipped_qty : $item->quantity);
-                 $wsp = floatval($item->unit_price ?? 0);
-                 $amount = round($wsp * $qty, 2);
-                 $totalReturns += $amount;
-
-                 $returnsRaw[] = [
-                     'order'   => $ro->order_number,
-                     'sku'     => $item->sku ?? $item->product->sku ?? '—',
-                     'product' => $item->product->name ?? '—',
-                     'qty'     => $qty,
-                     'wsp'     => $wsp,
-                     'amount'  => $amount,
-                     'channel' => $ro->salesChannel->name ?? '—',
-                     'date'    => $ro->order_date?->format('Y-m-d'),
-                     'reason'  => $ro->return_reason ?? $item->return_reason ?? '—',
-                 ];
-             }
-         }
-
-         $totalReturns = round($totalReturns, 2);
-
-*/
-
-        // ── 6b. Return Orders (WSP from revisions, same as orders) ──
-        $returnOrders = Order::withoutGlobalScopes()
+        // ── 6b. Return Orders (from order_returns table) ──
+        $returnOrders = \App\Models\OrderReturn::where('vendor_id', $vendorId)
             ->where('company_code', $companyCode)
-            ->whereIn('status', ['returned', 'partially_returned'])
-            ->whereMonth('order_date', $month)
-            ->whereYear('order_date', $year)
-            ->whereHas('items', fn ($q) => $q->where('vendor_id', $vendorId))
+//            ->whereIn('status', ['initiated', 'approved', 'received', 'completed'])
+            ->whereMonth('return_date', $month)
+            ->whereYear('return_date', $year)
             ->with([
-                'salesChannel',
-                'items' => fn ($q) => $q->where('vendor_id', $vendorId)
-                    ->with(['product' => fn ($pq) => $pq->withoutGlobalScopes()])
+                'order' => fn ($q) => $q->withoutGlobalScopes()->with('salesChannel'),
+                'items.product' => fn ($q) => $q->withoutGlobalScopes(),
             ])
             ->get();
 
+        // $sql = $returnOrders->toSql();
+        // foreach ($returnOrders->getBindings() as $binding) {
+        //     $value = is_numeric($binding) ? $binding : "'" . addslashes($binding) . "'";
+        //     $sql = preg_replace('/\?/', $value, $sql, 1);
+        // }
+        // dd($sql);
+        //dd($returnOrders->toSql(), $returnOrders->getBindings());
+        // print_r($returnOrders->toArray()); // Debugging line to inspect the return orders
+        //  exit; // Stop execution after printing the return orders for debugging
         $totalReturns = 0;
         $returnsRaw = [];
 
-        foreach ($returnOrders as $ro) {
-            $orderDate = $ro->order_date?->format('Y-m-d') ?? now()->toDateString();
+        foreach ($returnOrders as $ret) {
+            $order = $ret->order;
+            if (!$order) {
+                continue;
+            }
 
-            foreach ($ro->items as $item) {
-                $product = $item->product;
+            $orderDate = $order->order_date?->format('Y-m-d') ?? $ret->return_date?->format('Y-m-d') ?? now()->toDateString();
+
+            foreach ($ret->items as $retItem) {
+                $product = $retItem->product;
                 if (!$product) {
                     continue;
                 }
 
                 $pid = $product->id;
-                $returnQty = intval($item->returned_qty ?? $item->shipped_qty ?? $item->quantity);
+                $returnQty = intval($retItem->return_qty);
                 if ($returnQty <= 0) {
                     continue;
                 }
@@ -333,7 +305,6 @@ class VendorPayoutService
                             break;
                         }
 
-                        // WSP for this order's date
                         $batchWsp = $this->getWspForDate(
                             $batch['live_sheet_id'],
                             $pid,
@@ -341,60 +312,56 @@ class VendorPayoutService
                             $batch['vendor_wsp']
                         );
 
-                        // Commission for this order's date
                         $batchCommPercent = $this->getCommissionForDate(
                             $orderDate,
                             $batch['base_commission']
                         );
 
-                        $allocate = min($qtyToAllocate, abs($batch['remaining_qty']));
-                        if ($allocate <= 0) {
-                            // No remaining in FIFO — use WSP directly without deducting
-                            $allocate = $qtyToAllocate;
-                            $batchSale = round($batchWsp * $allocate, 2);
-                            $batchCommAmt = round(($batchCommPercent / 100) * $batchSale, 2);
-                            $itemReturnAmount += round($batchSale - $batchCommAmt, 2);
-                            $details[] = "{$allocate}u × {$batchWsp} @ {$batchCommPercent}%";
-                            $qtyToAllocate = 0;
-                            break;
-                        }
-
+                        $allocate = min($qtyToAllocate, max(1, $batch['remaining_qty']));
                         $batchSale = round($batchWsp * $allocate, 2);
                         $batchCommAmt = round(($batchCommPercent / 100) * $batchSale, 2);
                         $itemReturnAmount += round($batchSale - $batchCommAmt, 2);
                         $details[] = "{$allocate}u × {$batchWsp} @ {$batchCommPercent}%";
-
                         $qtyToAllocate -= $allocate;
+
+                        if ($batch['remaining_qty'] <= 0) {
+                            break;
+                        }
                     }
                     unset($batch);
                 }
 
-                // Unallocated — fallback WSP
+                // Fallback
                 if ($qtyToAllocate > 0) {
-                    $fallbackWsp = floatval($product->vendor_wsp ?? $product->fob_price ?? $item->unit_price ?? 0);
+                    $fallbackWsp = floatval($retItem->unit_price ?? $product->vendor_wsp ?? 0);
                     $itemReturnAmount += round($fallbackWsp * $qtyToAllocate, 2);
-                    $details[] = "{$qtyToAllocate}u × {$fallbackWsp} @ 0% (fallback)";
+                    $details[] = "{$qtyToAllocate}u × {$fallbackWsp} @ 0%";
                 }
 
                 $totalReturns += $itemReturnAmount;
 
                 $returnsRaw[] = [
-                    'order'       => $ro->order_number,
-                    'order_date'  => $orderDate,
-                    'sku'         => $item->sku ?? $product->sku ?? '—',
-                    'product'     => $product->name ?? '—',
-                    'qty'         => $returnQty,
-                    'amount'      => round($itemReturnAmount, 2),
-                    'channel'     => $ro->salesChannel->name ?? '—',
-                    'reason'      => $ro->return_reason ?? $item->return_reason ?? '—',
-                    'fifo_detail' => implode(' + ', $details),
+                    'return_number' => $ret->return_number,
+                    'order'         => $order->order_number,
+                    'order_date'    => $orderDate,
+                    'return_date'   => $ret->return_date?->format('Y-m-d'),
+                    'sku'           => $retItem->sku ?? $product->sku ?? '—',
+                    'product'       => $product->name ?? '—',
+                    'qty'           => $returnQty,
+                    'condition'     => $retItem->condition_status ?? '—',
+                    'amount'        => round($itemReturnAmount, 2),
+                    'channel'       => $order->salesChannel->name ?? '—',
+                    'reason'        => $ret->reason ?? '—',
+                    'reason_detail' => $ret->reason_detail ?? '',
+                    'status'        => $ret->status,
+                    'fifo_detail'   => implode(' + ', $details),
                 ];
             }
         }
 
         $totalReturns = round($totalReturns, 2);
 
-        // ── 7. Net payout ──
+         // ── 7. Net payout ──
         //        $netPayout = round($totalPayout - $totalWarehouseCharges - $totalChargebacks, 2);
 
         $netPayout = round($totalPayout - $totalWarehouseCharges - $totalChargebacks - $totalReturns, 2);

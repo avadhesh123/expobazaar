@@ -517,7 +517,8 @@ $isFullyPaid = $balanceDue <= 0.01 && $totalPaid> 0;
         {{-- Add to the deductions grid (next to Chargebacks card) --}}
 
         @php
-        $returnsRaw = $snapshot['returns_raw'] ?? [];
+
+        $ordReturnsRaw = $snapshot['returns_raw'] ?? $returnsRaw ?? [];
         $totalReturns = floatval($summary['total_returns'] ?? $payout->total_returns ?? 0);
         @endphp
 
@@ -528,24 +529,24 @@ $isFullyPaid = $balanceDue <= 0.01 && $totalPaid> 0;
                 <h3 style="font-size:.85rem;"><i class="fas fa-undo-alt" style="color:#7c3aed;margin-right:.3rem;"></i> Return Orders</h3>
             </div>
             <div class="card-body" style="padding:.5rem 1rem;">
-                @if(!empty($returnsRaw))
-                @foreach($returnsRaw as $ret)
+                @if(!empty($ordReturnsRaw))
+                @foreach($ordReturnsRaw as $ret)
                 <div style="display:flex;justify-content:space-between;padding:.3rem 0;border-bottom:1px solid #f1f5f9;font-size:.75rem;">
                     <div>
                         <div style="font-family:monospace;font-weight:600;">{{ $ret['order'] }}</div>
                         <div style="font-size:.65rem;color:#94a3b8;">
-                            {{ $ret['sku'] }} · {{ $ret['qty'] }} × {{ $cs }}{{ number_format($ret['wsp'], 2) }}
+                            {{ $ret['sku'] }} · {{ $ret['qty'] }} × {{ $activeCurrencySymbol }}{{ number_format($ret['amount'], 2) }}
                             @if($ret['reason'] !== '—')
                             <span style="color:#7c3aed;">· {{ \Str::limit($ret['reason'], 25) }}</span>
                             @endif
                         </div>
-                    </div>
-                    <span style="font-family:monospace;font-weight:600;color:#7c3aed;">{{ $cs }}{{ number_format($ret['amount'], 2) }}</span>
+                     </div>
+                    <span style="font-family:monospace;font-weight:600;color:#7c3aed;">{{ $activeCurrencySymbol }}{{ number_format($ret['amount'], 2) }}</span>
                 </div>
                 @endforeach
                 <div style="display:flex;justify-content:space-between;padding:.4rem 0;font-size:.82rem;font-weight:700;color:#7c3aed;">
                     <span>Total</span>
-                    <span style="font-family:monospace;">{{ $cs }}{{ number_format($totalReturns, 2) }}</span>
+                    <span style="font-family:monospace;">{{ $activeCurrencySymbol }}{{ number_format($totalReturns, 2) }}</span>
                 </div>
                 @else
                 <div style="text-align:center;padding:1rem;color:#94a3b8;font-size:.78rem;">No return orders</div>
@@ -560,9 +561,9 @@ $isFullyPaid = $balanceDue <= 0.01 && $totalPaid> 0;
     $totalWhCharges = $warehouseCharges->sum(fn($c) => floatval($c->total_charges ?? $c->amount ?? 0));
 
     $totalChargebacks = $chargebacks->sum('amount');
-    $netPayout = round($totalPayout - $totalWhCharges - $totalChargebacks + $totalWarehouseAdjustment, 2);
+    $netPayout = round($totalPayout - $totalWhCharges - $totalChargebacks - $totalReturns + $totalWarehouseAdjustment , 2);
 
-    $finalPayout = $payoutSummary['total_payout'] - $totalWhCharges - $totalChargebacks + $totalWarehouseAdjustment + $totalReturns;
+    $finalPayout = $payoutSummary['total_payout'] - $totalWhCharges - $totalChargebacks - $totalReturns + $totalWarehouseAdjustment;
 
     @endphp
     <div class="card">

@@ -4,10 +4,22 @@
 
 @section('content')
 <div class="grid-kpi" style="grid-template-columns:repeat(4,1fr);">
-    <div class="kpi-card"><div class="kpi-label">Total SKUs</div><div class="kpi-value">{{ $stats['total_skus'] }}</div></div>
-    <div class="kpi-card" style="border-left:3px solid #1e40af;"><div class="kpi-label">Total Quantity</div><div class="kpi-value" style="color:#1e40af;">{{ number_format($stats['total_qty']) }}</div></div>
-    <div class="kpi-card" style="border-left:3px solid #16a34a;"><div class="kpi-label">Available</div><div class="kpi-value" style="color:#16a34a;">{{ number_format($stats['available_qty']) }}</div></div>
-    <div class="kpi-card" style="border-left:3px solid #e8a838;"><div class="kpi-label">Reserved</div><div class="kpi-value" style="color:#e8a838;">{{ number_format($stats['reserved_qty']) }}</div></div>
+    <div class="kpi-card">
+        <div class="kpi-label">Total SKUs</div>
+        <div class="kpi-value">{{ $stats['total_skus'] }}</div>
+    </div>
+    <div class="kpi-card" style="border-left:3px solid #1e40af;">
+        <div class="kpi-label">Total Quantity</div>
+        <div class="kpi-value" style="color:#1e40af;">{{ number_format($stats['total_qty']) }}</div>
+    </div>
+    <div class="kpi-card" style="border-left:3px solid #16a34a;">
+        <div class="kpi-label">Available</div>
+        <div class="kpi-value" style="color:#16a34a;">{{ number_format($stats['available_qty']) }}</div>
+    </div>
+    <div class="kpi-card" style="border-left:3px solid #e8a838;">
+        <div class="kpi-label">Reserved</div>
+        <div class="kpi-value" style="color:#e8a838;">{{ number_format($stats['reserved_qty']) }}</div>
+    </div>
 </div>
 
 {{-- Filters --}}
@@ -28,10 +40,24 @@
 </div>
 
 <div class="card">
-    <div class="card-header"><h3><i class="fas fa-boxes" style="margin-right:.5rem;color:#1e3a5f;"></i> Inventory</h3><span style="font-size:.78rem;color:#64748b;">{{ $inventory->total() }} records</span></div>
+    <div class="card-header">
+        <h3><i class="fas fa-boxes" style="margin-right:.5rem;color:#1e3a5f;"></i> Inventory</h3><span style="font-size:.78rem;color:#64748b;">{{ $inventory->total() }} records</span>
+    </div>
     <div class="card-body" style="padding:0;overflow-x:auto;">
         <table class="data-table">
-            <thead><tr><th>SKU</th><th>Product</th><th>Warehouse</th><th>GRN</th><th>Received</th><th style="text-align:center;">Total Qty</th><th style="text-align:center;">Available</th><th style="text-align:center;">Reserved</th><th>Ageing</th></tr></thead>
+            <thead>
+                <tr>
+                    <th>SKU</th>
+                    <th>Product</th>
+                    <th>Warehouse</th>
+                    <th>GRN</th>
+                    <th>Received</th>
+                    <th style="text-align:center;">Total Qty</th>
+                    <th style="text-align:center;">Available</th>
+                    <th style="text-align:center;">Reserved</th>
+                    <th>Ageing</th>
+                </tr>
+            </thead>
             <tbody>
                 @forelse($inventory as $inv)
                 @php $age = $inv->getAgeingDays(); @endphp
@@ -41,7 +67,9 @@
                         <div style="font-size:.82rem;font-weight:500;">{{ Str::limit($inv->product->name ?? '—', 30) }}</div>
                         <div style="font-size:.62rem;color:#94a3b8;">{{ $inv->product->category->name ?? '' }}</div>
                     </td>
-                    <td style="font-size:.78rem;">{{ $inv->warehouse->name ?? '—' }}<div style="font-size:.62rem;color:#94a3b8;">{{ $inv->warehouse->location ?? '' }}</div></td>
+                    <td style="font-size:.78rem;">{{ $inv->warehouse->name ?? '—' }}
+                        <div style="font-size:.62rem;color:#94a3b8;">{{ $inv->warehouse->location ?? '' }}</div>
+                    </td>
                     <td style="font-family:monospace;font-size:.72rem;color:#64748b;">{{ $inv->grn->grn_number ?? '—' }}</td>
                     <td style="font-size:.78rem;">{{ $inv->received_date ? $inv->received_date->format('d M Y') : '—' }}</td>
                     <td style="text-align:center;font-weight:700;">{{ $inv->quantity }}</td>
@@ -59,7 +87,9 @@
                     </td>
                 </tr>
                 @empty
-                <tr><td colspan="9" style="text-align:center;padding:3rem;color:#94a3b8;"><i class="fas fa-boxes" style="font-size:2rem;display:block;margin-bottom:.5rem;"></i>No inventory found. Inventory appears after your shipments are received via GRN.</td></tr>
+                <tr>
+                    <td colspan="9" style="text-align:center;padding:3rem;color:#94a3b8;"><i class="fas fa-boxes" style="font-size:2rem;display:block;margin-bottom:.5rem;"></i>No inventory found. Inventory appears after your shipments are received via GRN.</td>
+                </tr>
                 @endforelse
             </tbody>
         </table>

@@ -339,10 +339,11 @@ class FinanceController extends Controller
         }
 
         $payout->load('vendor');
-
         // Use saved snapshot if available, otherwise recalculate
         $snapshot = $payout->calculation_snapshot;
-
+        $returnOrders = collect();
+        $returnsRaw = collect();
+        $summary = [];
         if (!empty($snapshot) && !request('recalculate')) {
             // ── Read from saved snapshot ──
             $lineItems = collect($snapshot['line_items'] ?? [])->map(fn ($i) => (object) $i);
@@ -354,6 +355,7 @@ class FinanceController extends Controller
                 'total_payout' => $lineItems->sum('net_payout'),
                 'total_warehouse_charges' => $payout->total_warehouse_charges ?? 0,
                 'total_chargebacks' => $payout->total_chargebacks ?? 0,
+                'total_returns' => $payout->total_returns ?? 0,
                 'net_payout' => $payout->net_payout ?? 0,
             ];
 
@@ -391,6 +393,11 @@ class FinanceController extends Controller
             $payoutSummary = $data['summary'];
             $warehouseCharges = $data['warehouse_charges'];
             $chargebacks = $data['chargebacks'];
+            $returnOrders = $data['return_orders'];
+            $returnsRaw = $data['returns_raw'];
+            $summary = $data['summary'];
+            // print_r($returnOrders->toArray());
+            // exit;
             $calculatedAt = null;
         }
 
@@ -402,14 +409,16 @@ class FinanceController extends Controller
             ->whereIn('status', ['shipped', 'delivered'])
             ->with('salesChannel')
             ->get();
-
-        return view('finance.payouts.show', compact(
+         return view('finance.payouts.show', compact(
             'payout',
             'orders',
             'lineItems',
             'payoutSummary',
             'warehouseCharges',
             'chargebacks',
+            'returnOrders',
+            'returnsRaw',
+            'summary',
             'calculatedAt'
         ));
     }
@@ -1690,6 +1699,8 @@ class FinanceController extends Controller
         $vendor = $payout->vendor;
         $period = date('M-Y', mktime(0, 0, 0, $payout->payout_month, 1, $payout->payout_year));
 
+        $returnOrders = collect();
+        $returnsRaw = collect();
 
         if (!empty($snapshot) && !request('recalculate')) {
             // ── Read from saved snapshot ──
@@ -1702,6 +1713,7 @@ class FinanceController extends Controller
                 'total_payout' => $lineItems->sum('net_payout'),
                 'total_warehouse_charges' => $payout->total_warehouse_charges ?? 0,
                 'total_chargebacks' => $payout->total_chargebacks ?? 0,
+                'total_returns' => $payout->total_returns ?? 0,
                 'net_payout' => $payout->net_payout ?? 0,
             ];
 
@@ -1738,7 +1750,9 @@ class FinanceController extends Controller
             $lineItems = collect($data['line_items'])->map(fn ($i) => (object) $i);
             $payoutSummary = $data['summary'];
             $warehouseCharges = $data['warehouse_charges'];
-            $chargebacks = $data['chargebacks'];
+            $chargebacks = $data['chargebacks'];            
+            $returnOrders = $data['return_orders'];
+            $returnsRaw = $data['returns_raw']; 
             $calculatedAt = null;
         }
 
@@ -1801,10 +1815,11 @@ class FinanceController extends Controller
         // ── Summary Box ──
         $totalSales = $summary['total_sales'] ?? $payout->total_sales;
         $commission = $summary['total_commission'] ?? $payout->total_commission;
+        $totalReturns = $summary['total_returns'] ?? $payout->total_returns;
         $grossPayout = $totalSales - $commission;//$summary['total_payout'] ?? $payout->gross_payout;
         // $whCharges = $summary['total_warehouse_charges'] ?? $payout->total_warehouse_charges;
         //$chargebacks = $summary['total_chargebacks'] ?? $payout->total_chargebacks;
-        $netPayout = $finalPayout;
+        $netPayout = $finalPayout - $totalReturns;
         $sheet->setCellValue('D3', 'Total Sales:');
         $sheet->setCellValue('E3', $totalSales);
         $sheet->setCellValue('D4', 'Commission:');
@@ -1813,14 +1828,18 @@ class FinanceController extends Controller
         $sheet->setCellValue('E5', $grossPayout);
         $sheet->setCellValue('D6', 'WH Charges:');
         $sheet->setCellValue('E6', $whCharges);
-        $sheet->setCellValue('D7', 'Chargebacks:');
-        $sheet->setCellValue('E7', $totalChargebacks);
-        $sheet->setCellValue('D8', 'Net Payout:');
-        $sheet->setCellValue('E8', $netPayout);
-        $sheet->getStyle('D3:D8')->applyFromArray($boldFont);
-        $sheet->getStyle('E3:E8')->getNumberFormat()->setFormatCode('#,##0.00');
-        $sheet->getStyle('E8')->getFont()->setBold(true)->setSize(12);
-        $sheet->getStyle('D8:E8')->applyFromArray($greenBg);
+        $sheet->setCellValue('D7', 'Return Orders:');
+        $sheet->setCellValue('E7', $totalReturns);
+
+        $sheet->setCellValue('D8', 'Chargebacks:');
+        $sheet->setCellValue('E8', $totalChargebacks);
+
+        $sheet->setCellValue('D9', 'Net Payout:');
+        $sheet->setCellValue('E9', $netPayout);
+        $sheet->getStyle('D3:D9')->applyFromArray($boldFont);
+        $sheet->getStyle('E3:E9')->getNumberFormat()->setFormatCode('#,##0.00');
+        $sheet->getStyle('E9')->getFont()->setBold(true)->setSize(12);
+        $sheet->getStyle('D9:E9')->applyFromArray($greenBg);
 
         // ── Payment Summary Box ──
         $sheet->setCellValue('G3', 'Total Paid:');
