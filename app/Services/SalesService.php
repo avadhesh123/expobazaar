@@ -385,7 +385,9 @@ class SalesService
             if (!isset($grouped[$poNumber])) {
                 $existing = \App\Models\Order::withoutGlobalScopes()
                     ->where('platform_order_id', $poNumber)
-                    ->where('company_code', $companyCode)->first();
+                    ->where('company_code', $companyCode)
+                    ->where('deleted', false)
+                    ->first();
                 if ($existing) {
                     $errors[] = "Row {$rowNum}: PO '{$poNumber}' already exists (Order #{$existing->order_number}).";
                     $skippedPOs[] = $poNumber;

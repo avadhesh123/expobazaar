@@ -10,7 +10,7 @@ class Shipment extends Model
 {
     use HasFactory;
     use \App\Traits\FiltersByCompany;
-    use SoftDeletes;
+    //use SoftDeletes;
 
     protected $fillable = [
         'shipment_code',
