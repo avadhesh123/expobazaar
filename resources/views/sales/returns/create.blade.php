@@ -61,7 +61,14 @@
         <div class="card" style="margin-bottom:1.25rem;">
             <div class="card-header"><h3><i class="fas fa-file-alt" style="margin-right:.5rem;color:#7c3aed;"></i> Return Details</h3></div>
             <div class="card-body">
-                <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:.75rem;margin-bottom:.75rem;">
+                <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr 1fr;gap:.75rem;margin-bottom:.75rem;">
+                   <div class="form-group" style="margin-bottom:0;">
+                        <label>Return Date *</label>
+                        <input type="date" 
+                            name="return_date" 
+                            value="{{ old('return_date', now()->toDateString()) }}" 
+                            required>                    
+                    </div>
                     <div class="form-group" style="margin-bottom:0;">
                         <label>Reason *</label>
                         <select name="reason" required>

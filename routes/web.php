@@ -342,6 +342,13 @@ Route::middleware(['auth'])->group(function () {
         Route::post('returns/{orderReturn}/update-status', [SalesController::class, 'updateReturnStatus'])->name('returns.update-status');
         Route::post('returns/{orderReturn}/restock', [SalesController::class, 'restockReturn'])->name('returns.restock');
         Route::delete('orders/{order}', [SalesController::class, 'deleteOrder'])->name('orders.delete');
+ 
+        Route::get('download-to-be-shipped', [SalesController::class, 'downloadToBeShipped'])->name('download-to-be-shipped');
+        Route::get('download-store-pickup', [SalesController::class, 'downloadStorePickup'])->name('download-store-pickup');
+
+        Route::post('orders/upload-to-be-shipped-csv', [SalesController::class, 'uploadToBeShippedCsv'])->name('orders.upload-to-be-shipped-csv');
+        Route::post('orders/upload-store-pickup-csv', [SalesController::class, 'uploadStorePickupCsv'])->name('orders.upload-store-pickup-csv');
+
 
     });
 

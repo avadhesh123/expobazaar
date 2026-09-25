@@ -14,8 +14,7 @@ class LogisticsController extends Controller
     public function __construct(
         protected DashboardService $dashboardService,
         protected LogisticsService $logisticsService
-    ) {
-    }
+    ) {}
 
     public function dashboard(Request $request)
     {
@@ -32,11 +31,11 @@ class LogisticsController extends Controller
         $activeCode = session('active_company');
 
         $consignments = Consignment::with('vendor', 'liveSheet')
-            ->whereIN('status', ['created', 'live_sheet_locked','planned'])
+            ->whereIN('status', ['created', 'live_sheet_locked', 'planned'])
             ->where('company_code', $activeCode)
             //  ->when($request->company_code, fn($q, $v) => $q->where('company_code', $v))
             ->whereDoesntHave('shipments')
-            ->when($request->company_code, fn ($q, $v) => $q->where('company_code', $v))
+            ->when($request->company_code, fn($q, $v) => $q->where('company_code', $v))
             ->get();
 
         $consignments->each(function ($con) {
@@ -45,10 +44,10 @@ class LogisticsController extends Controller
                 'total_skus'     => $items->unique('product_id')->count(),
                 'total_qty'      => $items->sum('quantity'),
                 'total_fob'      => $items->sum('total_price'),
-                'total_net_wt' => $items->sum(fn ($i) => (($i->product_details['weight'] ?? 0)) * ($i->product_details['final_qty'] ?? 0)),
-                'total_gross_wt' => $items->sum(fn ($i) => ($i->product_details['master_carton_weight'] ?? 0) * ($i->product_details['no_of_master_carton'] ?? 0)),
-                'total_master_cartons' => $items->sum(fn ($i) => ($i->product_details['no_of_master_carton'] ?? 0)),
-                'master_weight_kg' => $items->sum(fn ($i) => ($i->product_details['master_carton_weight'] ?? 0)),
+                'total_net_wt' => $items->sum(fn($i) => (($i->product_details['weight'] ?? 0)) * ($i->product_details['final_qty'] ?? 0)),
+                'total_gross_wt' => $items->sum(fn($i) => ($i->product_details['master_carton_weight'] ?? 0) * ($i->product_details['no_of_master_carton'] ?? 0)),
+                'total_master_cartons' => $items->sum(fn($i) => ($i->product_details['no_of_master_carton'] ?? 0)),
+                'master_weight_kg' => $items->sum(fn($i) => ($i->product_details['master_carton_weight'] ?? 0)),
                 'total_cbm'      => floatval($con->total_cbm ?? $items->sum('total_cbm')),
             ];
         });
@@ -87,12 +86,12 @@ class LogisticsController extends Controller
         $activeCode = session('active_company');
 
         $shipments = Shipment::with('consignments.vendor')
-            ->when($request->status, fn ($q, $v) => $q->where('status', $v))
+            ->when($request->status, fn($q, $v) => $q->where('status', $v))
             ->when(!$user->isAdmin() && !empty($activeCode), function ($q) use ($activeCode) {
                 return $q->where('company_code', $activeCode);
             })
-            ->when($request->company_code, fn ($q, $v) => $q->where('company_code', $v))
-            ->when($request->type, fn ($q, $v) => $q->where('shipment_type', $v))
+            ->when($request->company_code, fn($q, $v) => $q->where('company_code', $v))
+            ->when($request->type, fn($q, $v) => $q->where('shipment_type', $v))
             ->latest()->paginate(20);
         return view('logistics.shipments.index', compact('shipments'));
     }
@@ -182,9 +181,9 @@ class LogisticsController extends Controller
         $activeCompany = session('active_company');
 
         $grns = Grn::with('shipment', 'warehouse')
-            ->when($request->status, fn ($q, $v) => $q->where('status', $v))
+            ->when($request->status, fn($q, $v) => $q->where('status', $v))
             ->where('company_code', $activeCompany)
-            ->when($request->warehouse_id, fn ($q, $v) => $q->where('warehouse_id', $v))
+            ->when($request->warehouse_id, fn($q, $v) => $q->where('warehouse_id', $v))
             ->latest()->paginate(20);
 
         $pendingShipments = Shipment::whereIn('status', ['arrived', 'grn_pending', 'locked', 'asn_generated', 'in_transit', 'consolidated'])
@@ -230,7 +229,7 @@ class LogisticsController extends Controller
             'items.*.excess_quantity'   => 'nullable|integer|min:0',
         ]);
 
-        $data = $request->only(['warehouse_id', 'receipt_date', 'remarks','custom_date']);
+        $data = $request->only(['warehouse_id', 'receipt_date', 'remarks', 'custom_date']);
 
         if ($request->hasFile('grn_file')) {
             $data['grn_file'] = $request->file('grn_file')->store("grn/{$shipment->id}", FileStorage::disk());
@@ -334,10 +333,10 @@ class LogisticsController extends Controller
             ->when(!$user->isAdmin() && !empty($activeCode), function ($q) use ($activeCode) {
                 return $q->where('company_code', $activeCode);
             })
-            // ->whereHas('product', function ($pq) use ($activeCode) {
-            //     $pq->where('company_code', $activeCode);
-            // })
-                ->whereHas('product')
+            ->whereHas('product', function ($pq) use ($activeCode) {
+                $pq->where('company_code', $activeCode);
+            })
+            //     ->whereHas('product')
 
             ->whereHas('warehouse', function ($wq) use ($activeCode) {
                 $wq->where('company_code', $activeCode);
@@ -350,10 +349,19 @@ class LogisticsController extends Controller
                     $q->whereNull('consignment_id');
                 }
             })
-            ->when($request->company_code, fn ($q, $v) => $q->where('company_code', $v))
-            ->when($request->warehouse_id, fn ($q, $v) => $q->where('warehouse_id', $v))
-            ->when($request->vendor_id, fn ($q, $v) => $q->whereHas('product', fn ($pq) => $pq->where('vendor_id', $v)))
-            ->when($request->search, fn ($q, $v) => $q->whereHas('product', fn ($pq) => $pq->where('sku', 'like', "%{$v}%")->orWhere('name', 'like', "%{$v}%"))); //->where('quantity', '>', 0);
+            ->when($request->company_code, fn($q, $v) => $q->where('company_code', $v))
+            ->when($request->warehouse_id, fn($q, $v) => $q->where('warehouse_id', $v))
+            ->when($request->vendor_id, fn($q, $v) => $q->whereHas('product', fn($pq) => $pq->where('vendor_id', $v)))
+            ->when(
+                $request->search,
+                fn($q, $v) => $q->whereHas(
+                    'product',
+                    fn($pq) => $pq
+                        ->where('sku', 'like', "%{$v}%")
+                        ->orWhere('name', 'like', "%{$v}%")
+                        ->orWhere('sap_code', 'like', "%{$v}%")
+                )
+            ); //->where('quantity', '>', 0);
 
 
         //print_r($query->toSql());exit;
@@ -373,7 +381,7 @@ class LogisticsController extends Controller
                 return $q->where('company_code', $activeCode);
             })->orderBy('company_name')->get();
 
-        $baseQuery = Inventory::when($activeCode, fn ($q) => $q->where('inventory.company_code', $activeCode))
+        $baseQuery = Inventory::when($activeCode, fn($q) => $q->where('inventory.company_code', $activeCode))
             ->when($request->inventory_type, function ($q, $v) {
                 if ($v === 'grn_inventory') {
                     $q->whereNotNull('grn_id');
@@ -388,7 +396,7 @@ class LogisticsController extends Controller
             'available'   => (clone $baseQuery)->sum('available_quantity'),
             'reserved'    => (clone $baseQuery)->sum('reserved_quantity'),
             'total_sales' => OrderItem::whereHas('order', function ($q) use ($activeCode) {
-                $q->when($activeCode, fn ($q2) => $q2->where('orders.company_code', $activeCode))
+                $q->when($activeCode, fn($q2) => $q2->where('orders.company_code', $activeCode))
                     ->whereNotIn('status', ['cancelled']);
             })->sum(\DB::raw('quantity')),
         ];
@@ -432,8 +440,8 @@ class LogisticsController extends Controller
             ->when(!$request->user()->isAdmin() && !empty($activeCode), function ($q) use ($activeCode) {
                 return $q->where('company_code', $activeCode);
             })
-            ->when($request->company_code, fn ($q, $v) => $q->where('company_code', $v))
-            ->when($request->warehouse_id, fn ($q, $v) => $q->where('warehouse_id', $v))
+            ->when($request->company_code, fn($q, $v) => $q->where('company_code', $v))
+            ->when($request->warehouse_id, fn($q, $v) => $q->where('warehouse_id', $v))
             ->where('quantity', '>', 0)->get();
 
         $csv = "SKU,Product Name,Category,Vendor,Warehouse,Company,Quantity,Available,Reserved,Received Date,Ageing (Days)\n";
@@ -463,7 +471,7 @@ class LogisticsController extends Controller
         $activeCode = $companyCode = session('active_company');
 
         // Build flat ageing summary for KPI cards
-        $allInventory = Inventory::when($activeCode, fn ($q, $v) => $q->where('company_code', $v))
+        $allInventory = Inventory::when($activeCode, fn($q, $v) => $q->where('company_code', $v))
             ->where('quantity', '>', 0)
             ->whereNotNull('received_date')
             ->get()
@@ -482,7 +490,7 @@ class LogisticsController extends Controller
 
         // Ageing by warehouse
         $byWarehouse = Inventory::with('warehouse')
-            ->when($activeCode, fn ($q, $v) => $q->where('company_code', $v))
+            ->when($activeCode, fn($q, $v) => $q->where('company_code', $v))
             ->where('quantity', '>', 0)
             ->whereNotNull('received_date')
             ->get()
@@ -503,7 +511,7 @@ class LogisticsController extends Controller
 
         // GRN ageing
         $grnAgeing = Grn::with('shipment', 'warehouse')
-            ->when($activeCode, fn ($q, $v) => $q->where('company_code', $v))
+            ->when($activeCode, fn($q, $v) => $q->where('company_code', $v))
             ->latest()->get()->map(function ($grn) {
                 $grn->ageing_days = $grn->receipt_date ? now()->diffInDays($grn->receipt_date) : 0;
                 return $grn;
@@ -517,10 +525,10 @@ class LogisticsController extends Controller
         $activeCode = session('active_company');
 
         $inventoryByWarehouse = Warehouse::active()
-            ->when($activeCode, fn ($q, $v) => $q->where('company_code', $v))
-            ->withCount(['inventory' => fn ($q) => $q->where('quantity', '>', 0)])
-            ->withSum(['inventory' => fn ($q) => $q->where('quantity', '>', 0)], 'quantity')
-            ->withSum(['inventory' => fn ($q) => $q->where('quantity', '>', 0)], 'available_quantity')
+            ->when($activeCode, fn($q, $v) => $q->where('company_code', $v))
+            ->withCount(['inventory' => fn($q) => $q->where('quantity', '>', 0)])
+            ->withSum(['inventory' => fn($q) => $q->where('quantity', '>', 0)], 'quantity')
+            ->withSum(['inventory' => fn($q) => $q->where('quantity', '>', 0)], 'available_quantity')
             ->with(['subWarehouses', 'subLocations'])
             ->get();
 
@@ -633,8 +641,8 @@ class LogisticsController extends Controller
                 }
 
                 $product = \App\Models\Product::withoutGlobalScopes()
-                ->where(['sku' => $sku, 'company_code' => $companyCode])
-                ->first();
+                    ->where(['sku' => $sku, 'company_code' => $companyCode])
+                    ->first();
                 if (!$product) {
                     $errors[] = "Row {$rowNum}: SKU '{$sku}' not found for company {$companyCode}.";
                     continue;
@@ -642,7 +650,7 @@ class LogisticsController extends Controller
 
                 $availableStock = \App\Models\Inventory::where('product_id', $product->id)
                     ->where('warehouse_id', $fromWarehouseId)
-                    ->when($companyCode, fn ($q) => $q->where('company_code', $companyCode))
+                    ->when($companyCode, fn($q) => $q->where('company_code', $companyCode))
                     ->sum('available_quantity');
 
                 if ($availableStock < $qty) {
@@ -764,9 +772,9 @@ class LogisticsController extends Controller
         $charges = WarehouseCharge::with('warehouse', 'vendor', 'items')
             ->byMonth($month, $year)
             ->where('company_code', $activeCode)
-            ->when($category, fn ($q, $v) => $q->where('charge_category', $v))
-            ->when($request->warehouse_id, fn ($q, $v) => $q->where('warehouse_id', $v))
-            ->when($request->vendor_id, fn ($q, $v) => $q->where('vendor_id', $v))
+            ->when($category, fn($q, $v) => $q->where('charge_category', $v))
+            ->when($request->warehouse_id, fn($q, $v) => $q->where('warehouse_id', $v))
+            ->when($request->vendor_id, fn($q, $v) => $q->where('vendor_id', $v))
             ->latest()
             ->paginate(30)->withQueryString();
 
@@ -822,7 +830,7 @@ class LogisticsController extends Controller
             ->where('quantity', '>', 0)
             ->get();
 
-        $vendorGroups = $inventoryItems->groupBy(fn ($inv) => $inv->product->vendor_id ?? 0);
+        $vendorGroups = $inventoryItems->groupBy(fn($inv) => $inv->product->vendor_id ?? 0);
         $created = 0;
 
         try {
@@ -888,7 +896,7 @@ class LogisticsController extends Controller
                 }
 
                 $vendorRates = \App\Models\VendorRateCard::where('vendor_id', $vendorId)
-                    ->where(fn ($q) => $q->where('warehouse_id', $warehouse->id)->orWhereNull('warehouse_id'))
+                    ->where(fn($q) => $q->where('warehouse_id', $warehouse->id)->orWhereNull('warehouse_id'))
                     ->active()->effectiveOn(now()->startOfMonth()->toDateString())
                     ->get()->keyBy('charge_key');
 
@@ -1004,7 +1012,7 @@ class LogisticsController extends Controller
             ->when(!$user->isAdmin() && !empty($activeCode), function ($q) use ($activeCode) {
                 return $q->where('company_code', $activeCode);
             })
-            ->when($request->company_code, fn ($q, $v) => $q->where('company_code', $v))
+            ->when($request->company_code, fn($q, $v) => $q->where('company_code', $v))
             ->orderBy('warehouse_id')
             ->get();
 
@@ -1013,8 +1021,8 @@ class LogisticsController extends Controller
             ->when(!$user->isAdmin() && !empty($activeCode), function ($q) use ($activeCode) {
                 return $q->where('company_code', $activeCode);
             })
-            ->when($request->company_code, fn ($q, $v) => $q->where('company_code', $v))
-            ->when($request->vendor_id, fn ($q, $v) => $q->where('vendor_id', $v))
+            ->when($request->company_code, fn($q, $v) => $q->where('company_code', $v))
+            ->when($request->vendor_id, fn($q, $v) => $q->where('vendor_id', $v))
             ->orderByDesc('created_at')
             ->paginate(30)->withQueryString();
 
@@ -1022,7 +1030,7 @@ class LogisticsController extends Controller
             ->when(!$user->isAdmin() && !empty($activeCode), function ($q) use ($activeCode) {
                 return $q->where('company_code', $activeCode);
             })
-            ->when($request->company_code, fn ($q, $v) => $q->where('company_code', $v))
+            ->when($request->company_code, fn($q, $v) => $q->where('company_code', $v))
             ->get();
         $warehouses = Warehouse::active()->orderBy('name')->get();
 
@@ -1125,7 +1133,7 @@ class LogisticsController extends Controller
         $charges = WarehouseCharge::with('vendor', 'warehouse')
             ->where('charge_month', $month)
             ->where('charge_year', $year)
-            ->when($companyCode, fn ($q, $v) => $q->where('company_code', $v))
+            ->when($companyCode, fn($q, $v) => $q->where('company_code', $v))
             ->get();
 
         $allocations = $charges->groupBy('vendor_id')->map(function ($group) {
@@ -1202,7 +1210,7 @@ class LogisticsController extends Controller
         $activeCode = session('active_company');
 
         $rateCards = \App\Models\WarehouseRateCard::with('warehouse', 'creator', 'approver')
-            ->when($request->warehouse_id, fn ($q, $v) => $q->where('warehouse_id', $v))
+            ->when($request->warehouse_id, fn($q, $v) => $q->where('warehouse_id', $v))
             // ->when(!$user->isAdmin() && !empty($activeCode), function ($q) use ($activeCode) {
             //     return $q->where('company_code', $activeCode);
             // })
@@ -1304,7 +1312,7 @@ class LogisticsController extends Controller
             ->get();
 
         $warehouses = Warehouse::active()
-            ->when($activeCode, fn ($q) => $q->where('company_code', $activeCode))
+            ->when($activeCode, fn($q) => $q->where('company_code', $activeCode))
             ->orderBy('name')->get();
 
         // Charge heads vary by strategy — pass to view
@@ -1499,7 +1507,7 @@ class LogisticsController extends Controller
         $charges = \App\Models\WarehouseMonthlyCharge::with([
             'warehouse',
             'rateCard',
-            'grnDetails.grn' => fn ($q) => $q->where('company_code', $activeCode),
+            'grnDetails.grn' => fn($q) => $q->where('company_code', $activeCode),
         ])
             ->where('company_code', $activeCode)
             ->byMonth($month, $year)
@@ -1507,7 +1515,7 @@ class LogisticsController extends Controller
             ->get();
 
         $warehouses = Warehouse::active()
-            ->when($activeCode, fn ($q) => $q->where('company_code', $activeCode))
+            ->when($activeCode, fn($q) => $q->where('company_code', $activeCode))
             ->orderBy('name')->get();
 
         //  $warehouses = Warehouse::active()->orderBy('name')->get();
@@ -1589,7 +1597,7 @@ class LogisticsController extends Controller
 
         $companyCode =  session('active_company');
 
-        $warehouses = Warehouse::when($companyCode, fn ($q, $v) => $q->where('company_code', $v))
+        $warehouses = Warehouse::when($companyCode, fn($q, $v) => $q->where('company_code', $v))
             ->where('is_active', true)
             ->get();
 
@@ -1632,7 +1640,7 @@ class LogisticsController extends Controller
         if (is_string($currentRates)) {
             $currentRates = json_decode($currentRates, true) ?? [];
         }
-        $newRates = array_merge($currentRates, array_filter($request->rates, fn ($v) => $v !== null && $v !== ''));
+        $newRates = array_merge($currentRates, array_filter($request->rates, fn($v) => $v !== null && $v !== ''));
 
         $warehouse->update(['rate_card' => $newRates]);
 
@@ -1874,28 +1882,28 @@ class LogisticsController extends Controller
             ]);
         }
 
-        $warehouses = \App\Models\Warehouse::when($activeCode, fn ($q) => $q->where('company_code', $activeCode))
+        $warehouses = \App\Models\Warehouse::when($activeCode, fn($q) => $q->where('company_code', $activeCode))
             ->orderBy('name')->get();
 
         $logs = \App\Models\WarehousePalletLog::with('warehouse', 'creator')
-            ->when($activeCode, fn ($q) => $q->where('company_code', $activeCode))
-            ->when($request->warehouse_id, fn ($q, $v) => $q->where('warehouse_id', $v))
-            ->when($request->date_from, fn ($q, $v) => $q->where('entry_date', '>=', $v))
-            ->when($request->date_to, fn ($q, $v) => $q->where('entry_date', '<=', $v))
+            ->when($activeCode, fn($q) => $q->where('company_code', $activeCode))
+            ->when($request->warehouse_id, fn($q, $v) => $q->where('warehouse_id', $v))
+            ->when($request->date_from, fn($q, $v) => $q->where('entry_date', '>=', $v))
+            ->when($request->date_to, fn($q, $v) => $q->where('entry_date', '<=', $v))
             ->latest('entry_date')
             ->paginate(30)
             ->withQueryString();
 
         // Today's entries
         $todayEntries = \App\Models\WarehousePalletLog::where('entry_date', today())
-            ->when($activeCode, fn ($q) => $q->where('company_code', $activeCode))
+            ->when($activeCode, fn($q) => $q->where('company_code', $activeCode))
             ->with('warehouse')
             ->get()
             ->keyBy('warehouse_id');
 
         // Stats
         $stats = [
-            'total_entries'    => \App\Models\WarehousePalletLog::when($activeCode, fn ($q) => $q->where('company_code', $activeCode))->count(),
+            'total_entries'    => \App\Models\WarehousePalletLog::when($activeCode, fn($q) => $q->where('company_code', $activeCode))->count(),
             'today_entries'    => $todayEntries->count(),
             'today_pallets'    => $todayEntries->sum('no_of_pallets'),
             'warehouses_count' => $warehouses->count(),
@@ -1989,7 +1997,7 @@ class LogisticsController extends Controller
     }
 
     /**
-      *
+     *
      * Routes (logistics group):
      *   Route::post('grn/{grn}/adjust', [LogisticsController::class, 'adjustGrnQty'])->name('grn.adjust');
      */
@@ -2112,7 +2120,6 @@ class LogisticsController extends Controller
             \DB::commit();
 
             return back()->with('success', "{$updated} item(s) adjusted in {$grn->grn_number}. Inventory updated.");
-
         } catch (\Exception $e) {
             \DB::rollBack();
             \Log::error("[GRN Adjust] Failed: {$e->getMessage()}");
@@ -2143,9 +2150,9 @@ class LogisticsController extends Controller
     }
 
     /**
- * Cancel shipment — move back to container planning
- * Route: POST logistics/shipments/{shipment}/cancel
- */
+     * Cancel shipment — move back to container planning
+     * Route: POST logistics/shipments/{shipment}/cancel
+     */
     public function cancelShipment(Request $request, \App\Models\Shipment $shipment)
     {
         $request->validate([
@@ -2169,7 +2176,7 @@ class LogisticsController extends Controller
             $consignmentIds = \DB::table('shipment_consignments')
                 ->where('shipment_id', $shipment->id)
                 ->pluck('consignment_id');
-            
+
             $consignmentCount = $consignmentIds->count();
 
             if ($consignmentIds->isNotEmpty()) {

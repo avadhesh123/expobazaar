@@ -147,81 +147,6 @@ class SalesController extends Controller
             'Content-Disposition' => "attachment; filename=\"{$filename}\"",
         ]);
     }
-    public function downloadOrdersBAK(Request $request)
-    {
-        $activeCompany = session('active_company');
-        $orders = Order::with('salesChannel', 'items.product.vendor', 'warehouse')
-            ->when($activeCompany, fn ($q, $v) => $q->where('company_code', $v))
-            ->when($request->status, fn ($q, $v) => $q->where('status', $v))
-            ->when($request->sales_channel_id, fn ($q, $v) => $q->where('sales_channel_id', $v))
-            ->when($request->search, fn ($q, $v) => $q->where(function ($q2) use ($v) {
-                $q2->where('order_number', 'like', "%{$v}%")
-                    ->orWhere('platform_order_id', 'like', "%{$v}%")
-                    ->orWhere('customer_name', 'like', "%{$v}%");
-            }))
-            ->latest('order_date')
-            ->get();
-
-        $csv = "Order Number,PO Number,Invoice Number,Order Date,Sales Channel,SKU,SAP Code,Product Name,Vendor Name,Vendor Type,Warehouse id number,Qty,Unit Price,Order Amount,Vendor Payout Price,Payout Total,Warehouse,Shipping Method,Shipped Qty,Shipped Amount,Tracking ID,Carrier,Shipping Cost,Ship Date,Current Status,Delivery Date,Customer Type,Customer Name,Company Name,Email,Phone,Address,City,State,Zip,Country,Currency,Status\n";
-
-        foreach ($orders as $o) {
-            $firstItem = $o->items->first();
-            $product = $firstItem?->product;
-            $vendor = $product?->vendor;
-
-            $shipMethods = ['1' => 'Store Pickup', '2' => 'Marketplace Label', '3' => 'Seller Label'];
-            $qty = $firstItem?->quantity ?? 0;
-            $payoutPrice = $product?->vendor_payout_price ?? 0;
-
-            $csv .= implode(',', [
-                '"' . ($o->order_number ?? '') . '"',
-                '"' . ($o->platform_order_id ?? '') . '"',
-                '"' . ($o->invoice_number ?? '') . '"',
-                $o->order_date?->format('Y-m-d') ?? '',
-                '"' . ($o->salesChannel?->name ?? '') . '"',
-                '"' . ($firstItem?->sku ?? $product?->sku ?? '') . '"',
-                '"' . ($product?->sap_code ?? '') . '"',
-                '"' . str_replace('"', '""', $product?->name ?? '') . '"',
-                '"' . str_replace('"', '""', $vendor?->company_name ?? '') . '"',
-                '"' . ($vendor?->vendor_type ?? '') . '"',
-                '"' . ($o->warehouse_id_number ?? '') . '"',
-                $qty,
-                number_format(floatval($firstItem?->unit_price ?? 0), 2, '.', ''),
-                number_format(floatval($o->total_amount ?? 0), 2, '.', ''),
-                number_format(floatval($payoutPrice), 2, '.', ''),
-                number_format($payoutPrice * $qty, 2, '.', ''),
-                '"' . ($o->warehouse?->name ?? '') . '"',
-                '"' . (strtoupper($o->shipping_method ?? '')) . '"',
-                $o->shipped_qty ?? '',
-                number_format(floatval($o->shipped_amount ?? 0), 2, '.', ''),
-                '"' . ($o->tracking_id ?? '') . '"',
-                '"' . ($o->carrier ?? '') . '"',
-                number_format(floatval($o->shipping_cost ?? 0), 2, '.', ''),
-                $o->ship_date?->format('Y-m-d') ?? '',
-                '"' . ($o->current_status ?? '') . '"',
-                $o->delivery_date?->format('Y-m-d') ?? '',
-                '"' . ($o->customer_type ?? '') . '"',
-                '"' . str_replace('"', '""', $o->customer_name ?? '') . '"',
-                '"' . str_replace('"', '""', $o->company_name ?? '') . '"',
-                '"' . ($o->customer_email ?? '') . '"',
-                '"' . ($o->customer_phone ?? '') . '"',
-                '"' . str_replace('"', '""', $o->shipping_address ?? '') . '"',
-                '"' . ($o->shipping_city ?? '') . '"',
-                '"' . ($o->shipping_state ?? '') . '"',
-                '"' . ($o->shipping_pincode ?? '') . '"',
-                '"' . ($o->shipping_country ?? '') . '"',
-                $o->currency ?? 'NA',
-                '"' . ($o->status ?? '') . '"',
-            ]) . "\n";
-        }
-
-        $filename = 'Sales-Orders-' . now()->format('Y-m-d') . '.csv';
-        return response($csv, 200, [
-            'Content-Type' => 'text/csv',
-            'Content-Disposition' => "attachment; filename=\"{$filename}\"",
-        ]);
-    }
-
     // ═══ UPLOAD (FILE) ═══
 
     public function uploadSales(Request $request)
@@ -264,10 +189,7 @@ class SalesController extends Controller
     public function downloadTemplate()
     {
         // $csv = "Order Date,PO Number / Order ID,Invoice Number,Sales Channel,Vendor Name,Vendor Type,SAP Code,Style Code / SKU,Per Unit Sales Price,Order Qty,Order Amount,Warehouse ID,Warehouse Name,Shipping Method,Customer Type,Customer Name,Company Name,Shipping Address,City,State / Province,Zip / Postal Code,Country,Phone Number,Email,Notes\n";
-
         // Sample Data Row
-
-
         $headers = [
             'Order Date',
             'PO Number / Order ID',
@@ -461,41 +383,9 @@ class SalesController extends Controller
         return redirect()->route('sales.orders')->with($result['created'] > 0 ? 'success' : 'error', $msg);
     }
 
-    public function storeManualOrders1(Request $request)
-    {
-        $request->validate([
-            'company_code'                      => 'required|in:2000,2100,,2400',
-            'orders'                            => 'required|array|min:1',
-            'orders.*.platform_order_id'        => 'required|string',
-            'orders.*.order_date'               => 'required|date',
-            'orders.*.total_amount'             => 'required|numeric|min:0.01',
-            'orders.*.items'                    => 'required|array|min:1',
-            'orders.*.items.*.sku'              => 'required|string',
-            'orders.*.items.*.quantity'          => 'required|integer|min:1',
-            'orders.*.items.*.unit_price'        => 'required|numeric|min:0',
-        ]);
-
-        $result = $this->salesService->processManualOrders($request->orders, $request->company_code);
-
-        \App\Models\ActivityLog::log('created', 'order', auth()->user(), null, [
-            'company_code' => $request->company_code,
-            'created' => $result['created'],
-            'errors' => count($result['errors']),
-        ], "Manual sales entry: {$result['created']} orders created");
-
-        $msg = "{$result['created']} order(s) created.";
-        if (!empty($result['errors'])) {
-            $msg .= ' ' . count($result['errors']) . ' error(s): ' . implode('; ', array_slice($result['errors'], 0, 5));
-        }
-        if ($result['created'] > 0) {
-            return redirect()->route('sales.orders')->with($result['created'] > 0 ? 'success' : 'error', $msg);
-        }
-        return back()->with($result['created'] > 0 ? 'success' : 'error', $msg);
-
-        //return redirect('/sales/orders')->with($result['created'] > 0 ? 'success' : 'error', $msg);
-    }
-
     // ═══ TO BE SHIPPED ═══
+
+    //Two types of orders(mpl and ebl) will show under "To Be Shipped".
 
     public function toBeShipped(Request $request)
     {
@@ -531,6 +421,7 @@ class SalesController extends Controller
 
         return view('sales.to-be-shipped', compact('orders', 'channels', 'stats'));
     }
+
     public function updateShipping(Request $request, Order $order)
     {
         $request->validate([
@@ -546,25 +437,6 @@ class SalesController extends Controller
         $this->salesService->shipOrder(
             $order,
             $itemQtys,
-            $request->tracking_id,
-            $request->shipping_cost ? floatval($request->shipping_cost) : null,
-            $request->carrier
-        );
-
-        return back()->with('success', "Order {$order->order_number} marked as shipped. Tracking: {$request->tracking_id}");
-    }
-    public function updateShipping1(Request $request, Order $order)
-    {
-        $request->validate([
-            'shipped_qty'   => 'required|integer|min:1',
-            'tracking_id'   => 'required|string|max:250',
-            'shipping_cost' => 'nullable|numeric|min:0',
-            'carrier'       => 'required|in:Fedex,UPS,USPS,LTL,Other',
-        ]);
-
-        $this->salesService->shipOrder(
-            $order,
-            intval($request->shipped_qty),
             $request->tracking_id,
             $request->shipping_cost ? floatval($request->shipping_cost) : null,
             $request->carrier
@@ -669,6 +541,7 @@ class SalesController extends Controller
         $this->salesService->updateTracking($order, $request->tracking_id, $request->tracking_url, $request->shipping_provider);
         return back()->with('success', 'Tracking updated.');
     }
+
     public function storeTracking(Request $request, Order $order)
     {
         $request->validate([
@@ -887,6 +760,7 @@ class SalesController extends Controller
             'items.*.product_id'       => 'required|exists:products,id',
             'items.*.return_qty'       => 'nullable|integer|min:0',
             'items.*.condition_status' => 'nullable|in:good,damaged,defective,unsellable',
+            'return_date'              => 'nullable|date',
         ]);
 
         $order = Order::withoutGlobalScopes()->with(['items.product' => fn ($q) => $q->withoutGlobalScopes()])->findOrFail($request->order_id);
@@ -941,7 +815,7 @@ class SalesController extends Controller
                 'order_id'           => $order->id,
                 'company_code'       => $activeCode,
                 'vendor_id'          => $vendorId,
-                'return_date'        => now()->toDateString(),
+                'return_date'        => $request->return_date ?? now()->toDateString(),
                 'reason'             => $request->reason,
                 'reason_detail'      => $request->reason_detail,
                 'status'             => 'initiated',
@@ -1067,101 +941,6 @@ class SalesController extends Controller
             return back()->with('error', 'Failed: ' . $e->getMessage())->withInput();
         }
     }
-    public function storeReturn22092026(Request $request)
-    {
-        $request->validate([
-            'order_id'              => 'required|exists:orders,id',
-            'reason'                => 'required|in:damaged,wrong_item,missing_item,quality_issue,customer_request,short_shipment,other',
-            'reason_detail'         => 'nullable|string|max:1000',
-            'warehouse_id'          => 'nullable|exists:warehouses,id',
-            'tracking_id'           => 'nullable|string|max:100',
-            'carrier'               => 'nullable|string|max:50',
-            'items'                 => 'required|array|min:1',
-            'items.*.product_id'    => 'required|exists:products,id',
-            'items.*.return_qty'       => 'required|integer|min:0',
-            'items.*.condition_status' => 'nullable|in:good,damaged,defective,unsellable',
-        ]);
-
-        $order = Order::with('items')->findOrFail($request->order_id);
-        $activeCode = session('active_company') ?? $order->company_code;
-
-        try {
-            \DB::beginTransaction();
-
-            $totalReturnAmount = 0;
-            $vendorId = null;
-
-            // Validate quantities
-            foreach ($request->items as $itemData) {
-                $orderItem = $order->items->firstWhere('product_id', $itemData['product_id']);
-                if (!$orderItem) {
-                    continue;
-                }
-                $maxReturn = $orderItem->shipped_qty ?? $orderItem->quantity;
-                if ($itemData['return_qty'] > $maxReturn) {
-                    return back()->with('error', "Return qty for SKU {$orderItem->sku} exceeds shipped qty ({$maxReturn}).")->withInput();
-                }
-                if (!$vendorId) {
-                    $vendorId = $orderItem->vendor_id;
-                }
-            }
-
-            $orderReturn = \App\Models\OrderReturn::create([
-                'return_number'      => \App\Models\OrderReturn::generateNumber($activeCode),
-                'order_id'           => $order->id,
-                'company_code'       => $activeCode,
-                'vendor_id'          => $vendorId,
-                'return_date'        => now()->toDateString(),
-                'reason'             => $request->reason,
-                'reason_detail'      => $request->reason_detail,
-                'status'             => 'initiated',
-                'warehouse_id'       => $request->warehouse_id,
-                'tracking_id'        => $request->tracking_id,
-                'carrier'            => $request->carrier,
-                'created_by'         => auth()->id(),
-            ]);
-
-            foreach ($request->items as $itemData) {
-                $orderItem = $order->items->firstWhere('product_id', $itemData['product_id']);
-                if (!$orderItem) {
-                    continue;
-                }
-
-                $returnQty = intval($itemData['return_qty']);
-                $unitPrice = floatval($orderItem->unit_price);
-                $returnAmount = round($unitPrice * $returnQty, 2);
-                $totalReturnAmount += $returnAmount;
-
-                \App\Models\OrderReturnItem::create([
-                    'order_return_id' => $orderReturn->id,
-                    'order_item_id'   => $orderItem->id,
-                    'product_id'      => $itemData['product_id'],
-                    'sku'             => $orderItem->sku ?? $orderItem->product->sku ?? '',
-                    'return_qty'      => $returnQty,
-                    'unit_price'      => $unitPrice,
-                    'return_amount'   => $returnAmount,
-                    'condition_status' => $itemData['condition_status'] ?? 'good',
-                ]);
-            }
-
-            $orderReturn->update(['total_return_amount' => $totalReturnAmount]);
-
-            \App\Models\ActivityLog::log('created', 'order_return', $orderReturn, null, [
-                'order_number' => $order->order_number,
-                'items_count'  => count($request->items),
-                'total_amount' => $totalReturnAmount,
-            ], "Return {$orderReturn->return_number} initiated for order {$order->order_number}");
-
-            \DB::commit();
-
-            return redirect()->route('sales.returns.show', $orderReturn)
-                ->with('success', "Return {$orderReturn->return_number} created. Amount: " . config('app.active_currency_symbol', '$') . number_format($totalReturnAmount, 2));
-        } catch (\Exception $e) {
-            \DB::rollBack();
-            \Log::error('Return creation failed: ' . $e->getMessage());
-            return back()->with('error', 'Failed: ' . $e->getMessage())->withInput();
-        }
-    }
 
     public function showReturn(\App\Models\OrderReturn $orderReturn)
     {
@@ -1270,42 +1049,7 @@ class SalesController extends Controller
         }
     }
 
-    public function deleteOrderOLD(\App\Models\Order $order)
-    {
-        if (!auth()->user()->isAdmin() && !\App\Services\PermissionService::can(auth()->user(), 'sales.orders.delete')) {
-            abort(403, 'You do not have permission to delete orders.');
-        }
 
-        $orderNumber = $order->order_number;
-        $itemCount = $order->items()->count();
-
-        \DB::transaction(function () use ($order) {
-            // Restore inventory for shipped items
-            foreach ($order->items as $item) {
-                $qty = intval($item->shipped_qty > 0 ? $item->shipped_qty : $item->quantity);
-                if ($qty > 0 && $item->product_id) {
-                    $inventory = \App\Models\Inventory::where('product_id', $item->product_id)
-                        ->where('warehouse_id', $order->warehouse_id)
-                        ->first();
-                    if ($inventory) {
-                        $inventory->increment('quantity', $qty);
-                        $inventory->increment('available_quantity', $qty);
-                    }
-                }
-            }
-
-            $order->items()->delete();
-            $order->delete();
-        });
-
-        \App\Models\ActivityLog::log('deleted', 'order', $order, null, [
-            'order_number' => $orderNumber,
-            'items_deleted' => $itemCount,
-            'deleted_by'    => auth()->user()->name,
-        ], "Order {$orderNumber} deleted with {$itemCount} items, inventory restored — by " . auth()->user()->name);
-
-        return back()->with('success', "Order {$orderNumber} deleted. {$itemCount} item(s) removed, inventory restored.");
-    }
     /**
      * Delete order, restore inventory, log everything
      * Route: DELETE sales/orders/{order}
@@ -1409,5 +1153,458 @@ class SalesController extends Controller
         ], "Order {$orderNumber} deleted — {$itemCount} items, inventory restored for " . count($restoredItems) . " SKUs — by " . auth()->user()->name);
 
         return back()->with('success', "Order {$orderNumber} deleted. Inventory restored for " . count($restoredItems) . " item(s).");
+    }
+
+    public function downloadToBeShipped(Request $request)
+    {
+        //Two types of orders(mpl and ebl) in a CSV file for download.
+        $activeCompany = session('active_company');
+        $orders = \App\Models\Order::with('items.product')
+            ->where('company_code', $activeCompany)
+            ->where(function ($q) {
+                $q->whereNull('shipping_method')->orWhere('shipping_method', '!=', 'sp');
+            })
+            ->where(function ($q) {
+                $q->whereNull('tracking_id')->orWhere('tracking_id', '');
+            })
+            // add your existing filters if needed
+            ->when($request->channel_id, fn ($q, $v) => $q->where('sales_channel_id', $v))
+            ->when($request->status, fn ($q, $v) => $q->where('status', $v))
+            ->when($request->search, function ($q, $v) {
+                $q->where(function ($q2) use ($v) {
+                    $q2->where('platform_order_id', 'like', "%{$v}%")
+                        ->orWhere('order_number', 'like', "%{$v}%");
+                });
+            })
+            ->latest('order_date')
+            ->get();
+
+
+        $filename = 'to-be-shipped-' . date('Y-m-d-His') . '.csv';
+
+        $headers = [
+            'Content-Type'        => 'text/csv',
+            'Content-Disposition' => "attachment; filename=\"{$filename}\"",
+        ];
+
+        $callback = function () use ($orders) {
+            $file = fopen('php://output', 'w');
+
+            // Header row
+
+            fputcsv($file, [
+                'Order Pack Type: palletize or non_palletize',
+            ]);
+
+            fputcsv($file, [
+                'Carrier: any of the following: Fedex, UPS, USPS, LTL, Other',
+            ]);
+
+            fputcsv($file, [
+                'Order No',
+                'Platform Order ID',
+                'Style Code',
+                'Order Qty',
+                'Shipped Qty',
+                'Tracking ID',
+                'Ship Cost',
+                'Order Pack Type',
+                'Carrier',
+            ]);
+
+
+            foreach ($orders as $order) {
+                foreach ($order->items as $item) {
+                    fputcsv($file, [
+                        $order->order_number ?? $order->id,
+                        $order->platform_order_id ?? '',
+                        $item->product->sku ?? $item->sku ?? '',
+                        $item->quantity ?? 0,
+                        $item->shipped_qty ?? 0,
+                        $order->tracking_id ?? '',
+                        $order->shipping_cost ?? 0,
+                        $order->order_pack_type ?? '',
+                        $order->carrier ?? '',
+                    ]);
+                }
+            }
+
+            fclose($file);
+        };
+
+        return response()->stream($callback, 200, $headers);
+    }
+
+    public function downloadStorePickup(Request $request)
+    {
+        // Download orders store pickup orders. Using Order Management tab.
+        $activeCompany = session('active_company');
+        $orders = \App\Models\Order::with('items.product')
+            ->where('company_code', $activeCompany)
+            ->where('shipping_method', 'sp')            
+            // add your existing filters if needed
+            ->when($request->channel_id, fn ($q, $v) => $q->where('sales_channel_id', $v))
+            ->when($request->status, fn ($q, $v) => $q->where('status', $v))
+            ->when($request->search, function ($q, $v) {
+                $q->where(function ($q2) use ($v) {
+                    $q2->where('platform_order_id', 'like', "%{$v}%")
+                        ->orWhere('order_number', 'like', "%{$v}%");
+                });
+            })
+            ->latest('order_date')
+            ->get();
+
+        $filename = 'store-pickup-' . date('Y-m-d-His') . '.csv';
+
+        $headers = [
+            'Content-Type'        => 'text/csv',
+            'Content-Disposition' => "attachment; filename=\"{$filename}\"",
+        ];
+
+        $callback = function () use ($orders) {
+            $file = fopen('php://output', 'w');
+
+            // Header row
+
+            fputcsv($file, [
+                'Current Status: any of the following: in_transit, out_for_delivery, delivered, returned, exception',
+            ]);
+
+            fputcsv($file, [
+                'Order No',
+                'Platform Order ID',
+                'Style Code',
+                'Order Qty',
+                'Shipped Qty',
+                'Ship Date',
+                'Current Status',
+                'Delivery Date',
+                'Material Cost',
+                'Processing Cost',
+                'Shipping Cost',
+                'Remarks'
+            ]);
+
+            foreach ($orders as $order) {
+                foreach ($order->items as $item) {
+                    fputcsv($file, [
+                        $order->order_number ?? $order->id,
+                        $order->platform_order_id ?? '',
+                        $item->product->sku ?? $item->sku ?? '',
+                        $item->quantity ?? 0,
+                        $item->shipped_qty ?? 0,
+                        $order->ship_date?->format('Y-m-d') ?? now()->toDateString(),
+                        $order->current_status ?? $order->status ?? 'unknown',
+                        $order->delivery_date?->format('Y-m-d') ?? now()->toDateString(),
+                        $order->material_cost ?? 0,
+                        $order->processing_cost ?? 0,
+                        $order->shipping_cost ?? 0,
+                        $order->remarks ?? '',
+                    ]);
+                }
+            }
+
+            fclose($file);
+        };
+
+        return response()->stream($callback, 200, $headers);
+    }
+
+    public function uploadToBeShippedCsv(Request $request)
+    {
+        $request->validate([
+            'csv_file' => 'required|file|mimes:csv,txt|max:5120',
+        ]);
+
+        $file   = $request->file('csv_file');
+        $handle = fopen($file->getRealPath(), 'r');
+
+        $rowsByOrder = [];   // order_no => [ items + shipping info ]
+        $rowNumber   = 0;
+        $headerFound = false;
+
+        while (($row = fgetcsv($handle)) !== false) {
+            $rowNumber++;
+
+            if (empty(array_filter($row))) {
+                continue;
+            }
+
+            // Skip instruction rows
+            $first = strtolower(trim($row[0] ?? ''));
+            if (str_contains($first, 'order pack type') || str_contains($first, 'carrier:')) {
+                continue;
+            }
+
+            // Skip header
+            if (!$headerFound) {
+                if (str_contains($first, 'order no') || str_contains($first, 'order_no')) {
+                    $headerFound = true;
+                    continue;
+                }
+            }
+
+            // Columns:
+            // 0 Order No | 1 Platform Order ID | 2 Style Code | 3 Order Qty
+            // 4 Shipped Qty | 5 Tracking ID | 6 Ship Cost | 7 Order Pack Type | 8 Carrier
+            $orderNo    = trim($row[0] ?? '');
+            $styleCode  = trim($row[2] ?? '');
+            $shippedQty = (int) trim($row[4] ?? 0);
+            $trackingId = trim($row[5] ?? '');
+            $shipCost   = trim($row[6] ?? '');
+            $packType   = trim($row[7] ?? '');
+            $carrier    = trim($row[8] ?? '');
+
+            if (!$orderNo || !$styleCode || $shippedQty <= 0) {
+                continue;
+            }
+
+            if (!isset($rowsByOrder[$orderNo])) {
+                $rowsByOrder[$orderNo] = [
+                    'items'        => [],          // style_code => shipped_qty
+                    'tracking_id'  => $trackingId,
+                    'ship_cost'    => $shipCost !== '' ? (float) $shipCost : null,
+                    'carrier'      => $carrier ?: 'Other',
+                    'pack_type'    => $packType,
+                ];
+            } else {
+                // Keep first non-empty tracking / cost / carrier
+                if ($trackingId && empty($rowsByOrder[$orderNo]['tracking_id'])) {
+                    $rowsByOrder[$orderNo]['tracking_id'] = $trackingId;
+                }
+                if ($shipCost !== '' && $rowsByOrder[$orderNo]['ship_cost'] === null) {
+                    $rowsByOrder[$orderNo]['ship_cost'] = (float) $shipCost;
+                }
+                if ($carrier && $rowsByOrder[$orderNo]['carrier'] === 'Other') {
+                    $rowsByOrder[$orderNo]['carrier'] = $carrier;
+                }
+            }
+
+            // Sum qty if same style appears multiple times
+            if (!isset($rowsByOrder[$orderNo]['items'][$styleCode])) {
+                $rowsByOrder[$orderNo]['items'][$styleCode] = 0;
+            }
+            $rowsByOrder[$orderNo]['items'][$styleCode] += $shippedQty;
+        }
+
+        fclose($handle);
+
+        $updated = 0;
+        $skipped = 0;
+        $errors  = [];
+
+        foreach ($rowsByOrder as $orderNo => $data) {
+            // Find order
+            $order = \App\Models\Order::where('order_number', $orderNo)
+                ->orWhere('platform_order_id', $orderNo)
+                ->first();
+
+            if (!$order) {
+                $errors[] = "Order not found: {$orderNo}";
+                $skipped++;
+                continue;
+            }
+
+            // Already shipped? skip (optional)
+            if ($order->status === 'shipped' && $order->tracking_id) {
+                $errors[] = "Already shipped: {$orderNo}";
+                $skipped++;
+                continue;
+            }
+
+            // Build itemShippedQtys: [ item_id => qty ]
+            $itemShippedQtys = [];
+
+            foreach ($data['items'] as $styleCode => $qty) {
+                $item = $order->items()
+                    ->where(function ($q) use ($styleCode) {
+                        $q->where('sku', $styleCode)
+                            ->orWhereHas('product', fn ($p) => $p->where('sku', $styleCode));
+                    })
+                    ->first();
+
+                if (!$item) {
+                    $errors[] = "Style {$styleCode} not found in order {$orderNo}";
+                    continue;
+                }
+
+                $itemShippedQtys[$item->id] = $qty;
+            }
+
+            if (empty($itemShippedQtys)) {
+                $skipped++;
+                continue;
+            }
+
+            if (empty($data['tracking_id'])) {
+                $errors[] = "Missing Tracking ID for order {$orderNo}";
+                $skipped++;
+                continue;
+            }
+
+            try {
+                // ✅ Reuse existing service method
+                $this->salesService->shipOrder(
+                    $order,
+                    $itemShippedQtys,
+                    $data['tracking_id'],
+                    $data['ship_cost'],
+                    $data['carrier']
+                );
+
+                // Update pack type if your shipOrder doesn't handle it
+                if (!empty($data['pack_type'])) {
+                    $order->update(['order_pack_type' => $data['pack_type']]);
+                }
+
+                $updated++;
+            } catch (\Throwable $e) {
+                $errors[] = "Failed {$orderNo}: " . $e->getMessage();
+                $skipped++;
+            }
+        }
+
+        $message = "CSV processed. Orders updated: {$updated}, Skipped: {$skipped}";
+        if ($errors) {
+            $message .= ' | ' . implode(' | ', array_slice($errors, 0, 8));
+        }
+
+        return back()->with($updated > 0 ? 'success' : 'error', $message);
+    }
+
+    public function uploadStorePickupCsv(Request $request)
+    {
+        $request->validate([
+            'csv_file' => 'required|file|mimes:csv,txt|max:5120',
+        ]);
+
+        $file   = $request->file('csv_file');
+        $handle = fopen($file->getRealPath(), 'r');
+
+        $rowsByOrder = [];
+        $headerFound = false;
+
+        while (($row = fgetcsv($handle)) !== false) {
+            if (empty(array_filter($row))) {
+                continue;
+            }
+
+            $first = strtolower(trim($row[0] ?? ''));
+
+            // Skip instruction row
+            if (str_contains($first, 'current status')) {
+                continue;
+            }
+
+            // Skip header
+            if (!$headerFound) {
+                if (str_contains($first, 'order no') || str_contains($first, 'order_no')) {
+                    $headerFound = true;
+                    continue;
+                }
+            }
+
+            // Columns:
+            // 0 Order No | 1 Platform Order ID | 2 Style Code | 3 Order Qty | 4 Shipped Qty
+            // 5 Ship Date | 6 Current Status | 7 Delivery Date
+            // 8 Material Cost | 9 Processing Cost | 10 Shipping Cost | 11 Remarks
+
+            $orderNo         = trim($row[0] ?? '');
+            $shipDate        = trim($row[5] ?? '');
+            $currentStatus   = trim($row[6] ?? '');
+            $deliveryDate    = trim($row[7] ?? '');
+            $materialCost    = trim($row[8] ?? '');
+            $processingCost  = trim($row[9] ?? '');
+            $shippingCost    = trim($row[10] ?? '');
+            $remarks         = trim($row[11] ?? '');
+
+            if (!$orderNo) {
+                continue;
+            }
+
+            // Keep first non-empty values per order
+            if (!isset($rowsByOrder[$orderNo])) {
+                $rowsByOrder[$orderNo] = [
+                    'ship_date'                => $shipDate ?: null,
+                    'current_status'           => $currentStatus ?: null,
+                    'delivery_date'            => $deliveryDate ?: null,
+                    'material_cost'            => $materialCost !== '' ? (float) $materialCost : null,
+                    'order_processing_charges' => $processingCost !== '' ? (float) $processingCost : null,
+                    'shipping_cost'            => $shippingCost !== '' ? (float) $shippingCost : null,
+                    'remarks'                  => $remarks ?: null,
+                ];
+            } else {
+                $existing = &$rowsByOrder[$orderNo];
+
+                if ($shipDate && empty($existing['ship_date'])) {
+                    $existing['ship_date'] = $shipDate;
+                }
+                if ($currentStatus && empty($existing['current_status'])) {
+                    $existing['current_status'] = $currentStatus;
+                }
+                if ($deliveryDate && empty($existing['delivery_date'])) {
+                    $existing['delivery_date'] = $deliveryDate;
+                }
+                if ($materialCost !== '' && $existing['material_cost'] === null) {
+                    $existing['material_cost'] = (float) $materialCost;
+                }
+                if ($processingCost !== '' && $existing['order_processing_charges'] === null) {
+                    $existing['order_processing_charges'] = (float) $processingCost;
+                }
+                if ($shippingCost !== '' && $existing['shipping_cost'] === null) {
+                    $existing['shipping_cost'] = (float) $shippingCost;
+                }
+                if ($remarks && empty($existing['remarks'])) {
+                    $existing['remarks'] = $remarks;
+                }
+            }
+        }
+
+        fclose($handle);
+
+        $updated = 0;
+        $skipped = 0;
+        $errors  = [];
+
+        foreach ($rowsByOrder as $orderNo => $data) {
+            $order = \App\Models\Order::where('order_number', $orderNo)
+                ->orWhere('platform_order_id', $orderNo)
+                ->first();
+
+            if (!$order) {
+                $errors[] = "Order not found: {$orderNo}";
+                $skipped++;
+                continue;
+            }
+
+            // Skip if nothing to update
+            $hasData = collect($data)->filter(fn ($v) => $v !== null && $v !== '')->isNotEmpty();
+            if (!$hasData) {
+                $skipped++;
+                continue;
+            }
+
+            try {
+                // ✅ Reuse existing service method
+                $this->salesService->updateOrderManagement($order, $data);
+
+                // shipping_cost is not in updateOrderManagement – update separately if needed
+                if ($data['shipping_cost'] !== null) {
+                    $order->update(['shipping_cost' => $data['shipping_cost']]);
+                }
+
+                $updated++;
+            } catch (\Throwable $e) {
+                $errors[] = "Failed {$orderNo}: " . $e->getMessage();
+                $skipped++;
+            }
+        }
+
+        $message = "CSV processed. Orders updated: {$updated}, Skipped: {$skipped}";
+        if ($errors) {
+            $message .= ' | ' . implode(' | ', array_slice($errors, 0, 8));
+        }
+
+        return back()->with($updated > 0 ? 'success' : 'error', $message);
     }
 }

@@ -28,13 +28,36 @@
 {{-- Filters --}}
 <div class="card" style="margin-bottom:1.25rem;">
     <div class="card-body" style="padding:.85rem 1.4rem;">
-        <form method="GET" action="{{ route('sales.to-be-shipped') }}" style="display:flex;flex-wrap:wrap;gap:.75rem;align-items:flex-end;">
-            <div style="min-width:140px;"><label style="font-size:.7rem;font-weight:600;color:#64748b;display:block;margin-bottom:.25rem;">Channel</label><select name="channel_id" style="width:100%;padding:.4rem .5rem;border:1px solid #d1d5db;border-radius:8px;font-size:.82rem;">
+                        <div style="display:grid;grid-template-columns:2fr 2fr ;gap:1rem;margin-bottom:.75rem;">
+
+        <form method="GET" action="{{ route('sales.to-be-shipped') }}" style="display:flex;flex-wrap:wrap;gap:.75rem;align-items:flex-end;border-right:1px solid #fff;padding-bottom:.75rem;margin-bottom:.75rem;">
+            <div style="min-width:140px;">
+                <label style="font-size:.7rem;font-weight:600;color:#64748b;display:block;margin-bottom:.25rem;">Channel</label>
+                    <select name="channel_id" style="width:100%;padding:.4rem .5rem;border:1px solid #d1d5db;border-radius:8px;font-size:.82rem;">
                     <option value="">All</option>@foreach($channels as $ch)<option value="{{ $ch->id }}" {{ request('channel_id')==(string)$ch->id?'selected':'' }}>{{ $ch->name }}</option>@endforeach
-                </select></div>
+                </select>
+            </div>
             <button type="submit" class="btn btn-primary btn-sm"><i class="fas fa-filter"></i></button>
             <a href="{{ route('sales.to-be-shipped') }}" class="btn btn-outline btn-sm"><i class="fas fa-times"></i></a>
+
+            <a href="{{ route('sales.download-to-be-shipped') }}"
+                class="btn btn-success btn-sm">
+                <i class="fas fa-download"></i> Download CSV
+            </a>
             <a href="{{ route('sales.orders') }}" class="btn btn-outline btn-sm" style="margin-left:auto;"><i class="fas fa-arrow-left"></i> All Orders</a>
+        </form>
+    
+        <form action="{{ route('sales.orders.upload-to-be-shipped-csv') }}"
+            method="POST"
+            enctype="multipart/form-data"
+            style="display:inline-flex;gap:.5rem;align-items:center; background:#f8fafc;padding:.5rem .75rem;border-radius:6px;">
+            @csrf
+            <input type="file" name="csv_file" accept=".csv" required
+                style="font-size:.78rem;">
+            <button type="submit" class="btn btn-primary btn-sm"
+                onclick="return confirm('Upload and update shipping data?')">
+                <i class="fas fa-upload"></i> Upload CSV
+            </button>
         </form>
     </div>
 </div>
@@ -49,7 +72,7 @@
             <thead>
                 <tr style="background:#f0f4f8;">
                     <th style="min-width:85px;">Order Date</th>
-                    <th style="min-width:90px;">PO Number</th>
+                    <th style="min-width:90px;">Order No # / Platform Order Id</th>
                     <th style="min-width:100px;">Invoice #</th>
                     <th>Channel</th>
                     <th style="min-width:70px;">Style Code</th>
@@ -78,7 +101,10 @@
                     <tr style="{{ $o->is_overdue ? 'background:#fef2f2;' : '' }}">
                         @if($loop->first)
                         <td rowspan="{{ $o->items->count() }}" style="font-size:.78rem;">{{ $o->order_date?->format('d M Y') }}</td>
-                        <td rowspan="{{ $o->items->count() }}" style="font-family:monospace;font-weight:600;">{{ $o->platform_order_id ?? '—' }}</td>
+                        <td rowspan="{{ $o->items->count() }}" style="font-family:monospace;font-weight:600;">
+                            <span>{{ $o->order_number  ?? '—' }}</span>
+                            <span style="display:block;font-size:.65rem;color:#64748b;">{{ $o->platform_order_id ?? '—' }}</span>
+                        </td>
                         <td rowspan="{{ $o->items->count() }}" style="font-family:monospace;font-size:.72rem;">{{ $o->invoice_number ?? '—' }}</td>
                         <td rowspan="{{ $o->items->count() }}" style="font-size:.72rem;">{{ $o->salesChannel->name ?? '—' }}</td>
                         @endif

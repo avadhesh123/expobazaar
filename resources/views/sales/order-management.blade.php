@@ -25,7 +25,7 @@
 
 {{-- Filters --}}
 <div class="card" style="margin-bottom:1.25rem;">
-    <div class="card-body" style="padding:.85rem 1.4rem;">
+    <div class="card-body" style="padding:.85rem 1.4rem; border: 1px solid #ccc; border-radius: 6px; display: flex; gap: 1rem; align-items: center;">
         <form method="GET" action="{{ route('sales.order-management') }}" style="display:flex;flex-wrap:wrap;gap:.75rem;align-items:flex-end;">
             <!-- <div style="min-width:110px;"><label style="font-size:.7rem;font-weight:600;color:#64748b;display:block;margin-bottom:.25rem;">Company</label><select name="company_code" style="width:100%;padding:.4rem .5rem;border:1px solid #d1d5db;border-radius:8px;font-size:.82rem;">
                     <option value="">All</option>
@@ -49,12 +49,30 @@
                     <option value="lost_in_transit" {{ request('status')==='lost_in_transit'?'selected':'' }}>Lost in transit</option>
 
                 </select></div>
-            <div style="flex:1;min-width:150px;"><label style="font-size:.7rem;font-weight:600;color:#64748b;display:block;margin-bottom:.25rem;">Search</label><input type="text" name="search" value="{{ request('search') }}" placeholder="PO, Tracking, Invoice..." style="width:100%;padding:.4rem .5rem;border:1px solid #d1d5db;border-radius:8px;font-size:.82rem;"></div>
+            <div style="flex:1;min-width:170px;"><label style="font-size:.7rem;font-weight:600;color:#64748b;display:block;margin-bottom:.25rem;">Search</label><input type="text" name="search" value="{{ request('search') }}" placeholder="PO, Tracking, Invoice..." style="width:100%;padding:.4rem .5rem;border:1px solid #d1d5db;border-radius:8px;font-size:.82rem;"></div>
             <button type="submit" class="btn btn-primary btn-sm"><i class="fas fa-filter"></i></button>
             <a href="{{ route('sales.order-management') }}" class="btn btn-outline btn-sm"><i class="fas fa-times"></i></a>
             <a href="{{ route('sales.orders') }}" class="btn btn-outline btn-sm" style="margin-left:auto;"><i class="fas fa-arrow-left"></i> All Orders</a>
             <a href="{{ route('sales.to-be-shipped') }}" class="btn btn-outline btn-sm"><i class="fas fa-shipping-fast"></i> To Be Shipped</a>
         </form>
+    </div>
+</div>
+<div class="card" style="margin-bottom:1.25rem;">
+    <div class="card-body" style="padding:.85rem 1.4rem; border: 1px solid #ccc; border-radius: 6px; display: flex; gap: 1rem; align-items: center;">
+        <form action="{{ route('sales.orders.upload-store-pickup-csv') }}"
+            method="POST"
+            enctype="multipart/form-data"
+            style="display:inline-flex;gap:.5rem;align-items:center; background:#f8fafc;padding:.5rem .75rem;border-radius:6px;">
+            @csrf
+            <input type="file" name="csv_file" accept=".csv" required
+                style="font-size:.78rem;">
+            <button type="submit" class="btn btn-primary btn-sm"
+                onclick="return confirm('Upload and update order data?')">
+                <i class="fas fa-upload"></i> Upload CSV
+            </button>
+        </form>
+        <a href="{{ route('sales.download-store-pickup') }}" class="btn btn-success btn-sm"><i class="fas fa-download"></i> Download CSV</a>
+
     </div>
 </div>
 
@@ -67,9 +85,8 @@
         <table class="data-table" style="font-size:.72rem;">
             <thead>
                 <tr style="background:#f0f4f8;">
-                    <th style="min-width:78px;">Order Date</th>
-                    <th style="min-width:85px;">PO Number</th>
-                    <th style="min-width:90px;">Invoice #</th>
+                    <th style="min-width:90px;">Order Date <br>Invoice #</th>
+                    <th style="min-width:90px;">Order No # / Platform Order Id</th>
                     <th>Channel</th>
                     <th>SKU</th>
                     <th style="text-align:right;">Unit Price</th>
@@ -102,7 +119,7 @@
                 $shipMethods = ['1'=>'Store Pickup','2'=>'Mktplace','3'=>'Seller'];
                 $statusColors = [
                 'in_transit'=>'#e8a838','out_for_delivery'=>'#1e40af',
-                'delivered'=>'#16a34a','returned'=>'#dc2626','exception'=>'#7c2d12',
+                'delivered'=>'#16a34a','returned'=>'#dc2626','exception'=>'#eea48b',
                 'shipped'=>'#e8a838',
                 ];
 
@@ -111,7 +128,7 @@
                 'out_for_delivery' => '#1e40af',
                 'delivered' => '#adf4c3',
                 'returned' => '#dc2626',
-                'exception' => '#7c2d12',
+                'exception' => '#eea48b',
                 'shipped' => '#e8a838',
                 'cancelled' => '#f1f5f9',
                 ];
@@ -121,9 +138,14 @@
                 <form method="POST" action="{{ route('sales.order-management.update', $o) }}">
                     @csrf
                     <tr style="{{ isset($statusBg[$status]) ? 'background:' . $statusBg[$status] . ';' : '' }}"> {{-- Cols 1-10: Read-only from Sales Data --}}
-                        <td style="font-size:.72rem;">{{ $o->order_date?->format('d M y') ?? '—' }}</td>
-                        <td style="font-family:monospace;font-weight:600;font-size:.72rem;">{{ $o->platform_order_id ?? '—' }}</td>
-                        <td style="font-family:monospace;font-size:.68rem;">{{ $o->invoice_number ?? '—' }}</td>
+                        <td style="font-size:.72rem;">
+                            <span>{{ $o->order_date?->format('d M y') ?? '—' }}</span>
+                            <span style="display:block;font-size:.65rem;color:#64748b;">{{ $o->invoice_number ?? '—' }}</span>
+                        </td>
+                        <td style="font-family:monospace;font-weight:600;">
+                            <span>{{ $o->order_number  ?? '—' }}</span>
+                            <span style="display:block;font-size:.65rem;color:#64748b;">{{ $o->platform_order_id ?? '—' }}</span>
+                        </td>
                         <td style="font-size:.68rem;">{{ $o->salesChannel->name ?? '—' }}</td>
                         <td style="font-family:monospace;font-size:.72rem;">{{ $sku }}</td>
                         <td style="text-align:right;font-family:monospace;">{{$activeCurrencySymbol}}{{ number_format($unitPrice, 2) }}</td>
