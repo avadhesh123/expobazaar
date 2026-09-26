@@ -318,7 +318,7 @@ $disabled = $liveSheet->is_locked ? 'disabled' : '';
                         <td style="text-align:center;position:sticky;left:0;background:{{ ($item->is_selected ?? 1) ? '#f0fdf4' : '#fef2f2' }};z-index:1;">
                             <input type="hidden" name="items[{{ $idx }}][is_selected]" value="0">
                             <input type="checkbox" name="items[{{ $idx }}][is_selected]" value="1" {{ ($item->is_selected ?? 1) ? 'checked' : '' }} onchange="toggleRowSelected({{ $idx }}, this.checked)" class="ls-select" style="width:16px;height:16px;accent-color:#16a34a;">
-                        </td>
+                         </td>
                         <td style="text-align:center;position:sticky;left:40px;background:#fff;z-index:1;">{{ $d['sno'] ?? $loop->iteration }}</td>
                         <td style="font-family:monospace;font-weight:600;position:sticky;left:70px;background:#fff;z-index:1;">
                             <input type="hidden" name="items[{{ $idx }}][item_id]" value="{{ $item->id }}">
@@ -429,7 +429,7 @@ $disabled = $liveSheet->is_locked ? 'disabled' : '';
                         <td style="text-align:center;font-family:monospace;">{{ $masterH ?: '—' }}</td>
                         <td style="text-align:center;font-family:monospace;">{{ $d['master_carton_weight'] ?? $d['master_weight_kg'] ?? '—' }}</td>
                         <td style="text-align:center;">{{ $item->quantity }}</td>
-                        <td style="font-family:monospace;">{{$activeCurrencySymbol}}{{ number_format($d['vendor_fob'] ?? 0, 2) }}</td>
+                        <td style="font-family:monospace;">{{$activeCurrencySymbol}}{{ number_format($d['vendor_fob'] ?? $item->unit_price ?? 0 , 2) }}</td>
                         {{-- EDITABLE: Target FOB --}}
                         <td style="background:#eff6ff;"><input {{$disabled }} type="number" step="0.01" name="items[{{ $idx }}][target_fob]" value="{{ $d['target_fob'] ?? '' }}" placeholder="0.00" style="width:70px;" class="edit-input"></td>
                         {{-- EDITABLE: Final Qty --}}

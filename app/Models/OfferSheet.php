@@ -8,7 +8,8 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 
 class OfferSheet extends Model
 {
-    use HasFactory,\App\Traits\FiltersByCompany;//, SoftDeletes;
+    use HasFactory;
+    use \App\Traits\FiltersByCompany;//, SoftDeletes;
 
     protected $fillable = [
         'offer_sheet_number', 'vendor_id', 'company_code', 'status',
@@ -17,14 +18,49 @@ class OfferSheet extends Model
 
     protected $casts = ['reviewed_at' => 'datetime'];
 
-    public function vendor() { return $this->belongsTo(Vendor::class); }
-    public function items() { return $this->hasMany(OfferSheetItem::class); }
-    public function reviewer() { return $this->belongsTo(User::class, 'reviewed_by'); }
-    public function consignment() { return $this->hasOne(Consignment::class); }
+    public function vendor()
+    {
+        return $this->belongsTo(Vendor::class);
+    }
+    public function items()
+    {
+        return $this->hasMany(OfferSheetItem::class);
+    }
+    public function reviewer()
+    {
+        return $this->belongsTo(User::class, 'reviewed_by');
+    }
+    public function consignment()
+    {
+        return $this->hasOne(Consignment::class);
+    }
 
-    public function selectedItems() { return $this->items()->where('is_selected', true); }
+    public function selectedItems()
+    {
+        return $this->items()->where('is_selected', true);
+    }
 
     public static function generateNumber(string $companyCode): string
+    {
+        $prefix = 'OS-' . $companyCode . '-';
+
+        $lastNum = (int) static::withoutGlobalScopes()
+            ->where('offer_sheet_number', 'like', $prefix . '%')
+            ->selectRaw("MAX(CAST(REPLACE(offer_sheet_number, '{$prefix}', '') AS UNSIGNED)) as max_num")
+            ->value('max_num');
+
+        $next = $lastNum + 1;
+        $number = $prefix . str_pad($next, 5, '0', STR_PAD_LEFT);
+
+        // Safety check
+        while (static::withoutGlobalScopes()->where('offer_sheet_number', $number)->exists()) {
+            $next++;
+            $number = $prefix . str_pad($next, 5, '0', STR_PAD_LEFT);
+        }
+
+        return $number;
+    }
+    public static function generateNumberBAK(string $companyCode): string
     {
         $prefix = 'OS-' . $companyCode . '-';
         $last = self::where('offer_sheet_number', 'like', $prefix . '%')->orderBy('id', 'desc')->first();

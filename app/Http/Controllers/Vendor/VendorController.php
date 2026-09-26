@@ -255,37 +255,7 @@ class VendorController extends Controller
 
         return view('vendor.dashboard', compact('data', 'vendor', 'orderLineItems', 'bestSelling', 'dateFrom', 'dateTo'));
     }
-    public function dashboardBAK()
-    {
-        $vendor = auth()->user()->vendor;
-        if (!$vendor) {
-            return redirect()->route('vendor.kyc');
-        }
-
-        $activeCompany = session('active_company');
-
-        $data = $this->dashboardService->getVendorDashboard($vendor->id);
-
-        $data['stats'] = [
-            'offer_sheets'  => OfferSheet::where('vendor_id', $vendor->id)->where('company_code', $activeCompany)->count(),
-            'consignments'  => Consignment::where('vendor_id', $vendor->id)->where('company_code', $activeCompany)->count(),
-            'total_sales'   => Order::whereHas('items', fn ($q) => $q->where('vendor_id', $vendor->id))->where('company_code', $activeCompany)->sum('total_amount'),
-            'chargebacks'   => Chargeback::where('vendor_id', $vendor->id)->where('company_code', $activeCompany)->where('status', 'confirmed')->sum('amount'),
-            'pending_payout' => VendorPayout::where('vendor_id', $vendor->id)->where('company_code', $activeCompany)->whereIn('status', ['calculated', 'approved'])->sum('net_payout'),
-        ];
-
-        $data['recent_orders'] = Order::whereHas('items', fn ($q) => $q->where('vendor_id', $vendor->id))
-            ->where('company_code', $activeCompany)
-            ->with('salesChannel')->latest('order_date')->take(5)->get();
-
-        $data['active_consignments'] = Consignment::where('vendor_id', $vendor->id)
-            ->where('company_code', $activeCompany)
-            ->whereNotIn('status', ['delivered', 'cancelled'])->with('liveSheet')->latest()->take(5)->get();
-
-        return view('vendor.dashboard', compact('data', 'vendor'));
-    }
-
-    // =====================================================================
+   // =====================================================================
     //  KYC
     // =====================================================================
 
@@ -1479,45 +1449,7 @@ class VendorController extends Controller
         return redirect()->route('vendor.live-sheets')
             ->with('success', 'Live sheet submitted for Sourcing approval.');
     }
-    public function submitLiveSheet27072026(Request $request, LiveSheet $liveSheet)
-    {
-        $request->validate([
-            'items'                    => 'required|array|min:1',
-            'items.*.product_id'       => 'required|exists:products,id',
-            'items.*.quantity'         => 'required|integer|min:1',
-            //  'items.*.unit_price'       => 'required|numeric|min:0',
-            //'items.*.cbm_per_unit'     => 'required|numeric|min:0',
-            //  'items.*.weight_per_unit'  => 'nullable|numeric|min:0',
-        ]);
-
-        // Track changes before submitting
-        try {
-            foreach ($request->items as $row) {
-                $item = \App\Models\LiveSheetItem::where('live_sheet_id', $liveSheet->id)
-                    ->where('product_id', $row['product_id'])->first();
-                if (!$item) {
-                    continue;
-                }
-
-                $newDetails = [
-                    'vendor_fob' => $row['unit_price'],
-                    'final_qty'  => $row['quantity'],
-                ];
-                \App\Models\LiveSheetItemChange::trackChanges(
-                    $item,
-                    $newDetails,
-                    auth()->user(),
-                    'vendor',
-                    $request->change_reason
-                );
-            }
-        } catch (\Exception $e) {
-            \Log::warning('Vendor submit tracking failed: ' . $e->getMessage());
-        }
-
-        $this->sourcingService->submitLiveSheet($liveSheet, $request->items, 'vendor');
-        return redirect()->route('vendor.live-sheets')->with('success', 'Live sheet submitted for Sourcing approval.');
-    }
+     
 
     /**
      * Vendor creates consignment after both dates are set
