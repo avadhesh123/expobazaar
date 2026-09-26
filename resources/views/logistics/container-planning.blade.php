@@ -42,6 +42,14 @@
             <div class="kpi-icon" style="background:#ede9fe;color:#7c3aed;"><i class="fas fa-boxes"></i></div>
         </div>
     </div>
+    <!-- <form method="POST" action="{{ route('logistics.consignments.update-values') }}" style="display:inline;"
+    onsubmit="return confirm('Recalculate total value for all consignments?')">
+    @csrf
+    <button type="submit" class="btn btn-primary btn-sm">
+        <i class="fas fa-sync" style="margin-right:.2rem;"></i> Recalculate All Values
+    </button>
+</form> -->
+
 </div>
 
 <form method="POST" action="{{ route('logistics.shipments.create') }}" id="shipmentForm" onsubmit="return validateShipment()">

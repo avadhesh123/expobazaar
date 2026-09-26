@@ -22,7 +22,7 @@ class VendorController extends Controller
     ) {
     }
 
-    public function dashboard()
+    public function dashboard(Request $request)
     {
         // phpinfo();
         $vendor = auth()->user()->vendor;
@@ -119,6 +119,37 @@ class VendorController extends Controller
             //echo  "Total Payout: $totalPayout,finalPayout: $finalPayout, Warehouse Charges: $totalWhCharges, Chargebacks: $totalChargebacks\n";
 
         }
+        //Best selling SKUs
+
+        $dateFrom = $request->date_from ?? now()->startOfMonth()->toDateString();
+        $dateTo = $request->date_to ?? now()->toDateString();
+
+        // Top 20 Best Selling SKUs
+        $bestSelling = \App\Models\OrderItem::withoutGlobalScopes()
+            ->where('vendor_id', $vendor->id)
+            ->where('shipped_qty', '>', 0)
+            ->whereHas(
+                'order',
+                fn ($q) => $q->withoutGlobalScopes()
+                ->where('company_code', $activeCompany)
+                ->whereIn('status', ['shipped', 'delivered'])              
+                ->when($request->date_from, fn ($q, $v) => $q->where('order_date', '>=', $v))
+                ->when($request->date_to, fn ($q, $v) => $q->where('order_date', '<=', $v))
+            )
+            ->select(
+                'product_id',
+                \DB::raw('SUM(shipped_qty) as total_qty'),
+                \DB::raw('SUM(unit_price * shipped_qty) as total_sales'),
+                \DB::raw('COUNT(DISTINCT order_id) as total_orders'),
+                \DB::raw('AVG(unit_price) as avg_price')
+            )
+            ->groupBy('product_id')
+            ->with(['product' => fn ($q) => $q->withoutGlobalScopes()])
+            ->orderByDesc('total_sales')
+            ->limit(20)
+            ->get();
+
+        //return view('vendor.dashboard', compact(/* existing vars */, 'bestSelling', 'dateFrom', 'dateTo'));
 
         $data['stats'] = [
             'offer_sheets'   => OfferSheet::where('vendor_id', $vendor->id)->where('company_code', $activeCompany)->count(),
@@ -222,7 +253,7 @@ class VendorController extends Controller
             ];
         }
 
-        return view('vendor.dashboard', compact('data', 'vendor', 'orderLineItems'));
+        return view('vendor.dashboard', compact('data', 'vendor', 'orderLineItems', 'bestSelling', 'dateFrom', 'dateTo'));
     }
     public function dashboardBAK()
     {
@@ -2888,28 +2919,28 @@ class VendorController extends Controller
 
         // Get GRN totals per product (total ever received)
 
-$grnTotals = \DB::table('grn_items')
-    ->join('grn', 'grn_items.grn_id', '=', 'grn.id')
-    ->join('products', function ($j) use ($vendor) {
-        $j->on('grn_items.product_id', '=', 'products.id')
-          ->where('products.vendor_id', $vendor->id);
-    })
-    ->where('grn.company_code', $activeCompany)
-    ->select(
-        'grn_items.product_id',
-        \DB::raw('SUM(grn_items.received_quantity) as total_received'),
-        \DB::raw('SUM(COALESCE(grn_items.damaged_quantity, 0)) as total_damaged'),
-        \DB::raw('SUM(COALESCE(grn_items.excess_quantity, 0)) as total_excess')
-    )
-    ->groupBy('grn_items.product_id')
-    ->get()
-    ->keyBy('product_id')
-    ->map(fn ($row) => [
-        'total_received' => intval($row->total_received ?? 0),
-        'total_damaged'  => intval($row->total_damaged ?? 0),
-        'total_excess'   => intval($row->total_excess ?? 0),
-        'good_received'  => intval(($row->total_received ?? 0) - ($row->total_damaged ?? 0)),
-    ]);
+        $grnTotals = \DB::table('grn_items')
+            ->join('grn', 'grn_items.grn_id', '=', 'grn.id')
+            ->join('products', function ($j) use ($vendor) {
+                $j->on('grn_items.product_id', '=', 'products.id')
+                  ->where('products.vendor_id', $vendor->id);
+            })
+            ->where('grn.company_code', $activeCompany)
+            ->select(
+                'grn_items.product_id',
+                \DB::raw('SUM(grn_items.received_quantity) as total_received'),
+                \DB::raw('SUM(COALESCE(grn_items.damaged_quantity, 0)) as total_damaged'),
+                \DB::raw('SUM(COALESCE(grn_items.excess_quantity, 0)) as total_excess')
+            )
+            ->groupBy('grn_items.product_id')
+            ->get()
+            ->keyBy('product_id')
+            ->map(fn ($row) => [
+                'total_received' => intval($row->total_received ?? 0),
+                'total_damaged'  => intval($row->total_damaged ?? 0),
+                'total_excess'   => intval($row->total_excess ?? 0),
+                'good_received'  => intval(($row->total_received ?? 0) - ($row->total_damaged ?? 0)),
+            ]);
 
 
         // Sold qty per product

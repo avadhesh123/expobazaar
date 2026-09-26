@@ -291,6 +291,8 @@ Route::middleware(['auth'])->group(function () {
             Route::post('container-planning/{consignment}/remarks', [LogisticsController::class, 'updateConsignmentRemarks'])->name('container-planning.remarks');
             Route::post('shipments/{shipment}/cancel', [LogisticsController::class, 'cancelShipment'])->name('shipments.cancel');
 
+            Route::post('consignments/update-values', [LogisticsController::class, 'bulkUpdateConsignmentValues'])->name('consignments.update-values');
+
         });
 
 

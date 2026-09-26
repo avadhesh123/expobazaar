@@ -27,12 +27,37 @@ class SalesController extends Controller
     // ═══ DASHBOARD ═══
     public function dashboard(Request $request)
     {
+        $activeCompany = session('active_company');
         $data = $this->dashboardService->getSalesDashboard(
-            session('active_company'),
+            $activeCompany,
             $request->date_from,
             $request->date_to
         );
-        return view('sales.dashboard', compact('data'));
+        // Sales by Vendor
+        $salesByVendor = \App\Models\OrderItem::withoutGlobalScopes()
+            ->where('shipped_qty', '>', 0)
+            ->whereHas(
+                'order',
+                fn ($q) => $q->withoutGlobalScopes()
+                ->where('company_code', $activeCompany)
+                ->whereIn('status', ['shipped', 'delivered'])
+                ->when($request->date_from, fn ($q, $v) => $q->where('order_date', '>=', $v))
+                ->when($request->date_to, fn ($q, $v) => $q->where('order_date', '<=', $v))
+            )
+            ->select(
+                'vendor_id',
+                \DB::raw('COUNT(DISTINCT order_id) as total_orders'),
+                \DB::raw('SUM(shipped_qty) as total_qty'),
+                \DB::raw('SUM(unit_price * shipped_qty) as total_sales'),
+                \DB::raw('COUNT(DISTINCT product_id) as total_skus')
+            )
+            ->groupBy('vendor_id')
+            ->with(['vendor:id,company_name,vendor_code'])
+            ->orderByDesc('total_sales')
+            ->get();
+
+
+        return view('sales.dashboard', compact('data', 'salesByVendor'));
     }
 
     // ═══ ORDERS LIST ═══
@@ -450,13 +475,31 @@ class SalesController extends Controller
     public function orderManagement(Request $request)
     {
         $activeCompany = session('active_company');
+        // $orders = Order::with('items.product', 'salesChannel', 'warehouse')
+        //     ->where(function ($q) {
+        //         $q->whereNotNull('tracking_id')->where('tracking_id', '!=', '');
+        //     })
+        //     ->where('company_code', $activeCompany)
+        //     ->when($request->channel_id, fn ($q, $v) => $q->where('sales_channel_id', $v))
+        //     ->when($request->status, fn ($q, $v) => $q->where('status', $v))
+        //     ->when($request->search, fn ($q, $v) => $q->where(function ($q2) use ($v) {
+        //         $q2->where('platform_order_id', 'like', "%{$v}%")
+        //             ->orWhere('tracking_id', 'like', "%{$v}%")
+        //             ->orWhere('invoice_number', 'like', "%{$v}%");
+        //     }))
+        //     ->latest('ship_date')->latest('shipped_date')
+        //     ->paginate(30)->withQueryString();
         $orders = Order::with('items.product', 'salesChannel', 'warehouse')
             ->where(function ($q) {
                 $q->whereNotNull('tracking_id')->where('tracking_id', '!=', '');
             })
             ->where('company_code', $activeCompany)
+            ->when(
+                $request->status,
+                fn ($q, $v) => $q->where('status', $v),
+                fn ($q) => $q->where('status', '!=', 'delivered')
+            )
             ->when($request->channel_id, fn ($q, $v) => $q->where('sales_channel_id', $v))
-            ->when($request->status, fn ($q, $v) => $q->where('current_status', $v))
             ->when($request->search, fn ($q, $v) => $q->where(function ($q2) use ($v) {
                 $q2->where('platform_order_id', 'like', "%{$v}%")
                     ->orWhere('tracking_id', 'like', "%{$v}%")
@@ -1241,7 +1284,7 @@ class SalesController extends Controller
         $activeCompany = session('active_company');
         $orders = \App\Models\Order::with('items.product')
             ->where('company_code', $activeCompany)
-            ->where('shipping_method', 'sp')            
+            ->where('shipping_method', 'sp')
             // add your existing filters if needed
             ->when($request->channel_id, fn ($q, $v) => $q->where('sales_channel_id', $v))
             ->when($request->status, fn ($q, $v) => $q->where('status', $v))

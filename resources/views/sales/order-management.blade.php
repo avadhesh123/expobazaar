@@ -39,6 +39,7 @@
             <div style="min-width:120px;"><label style="font-size:.7rem;font-weight:600;color:#64748b;display:block;margin-bottom:.25rem;">Status</label><select name="status" style="width:100%;padding:.4rem .5rem;border:1px solid #d1d5db;border-radius:8px;font-size:.82rem;">
                     <option value="">All</option>
                     <option value="open" {{ request('status')==='open'?'selected':'' }}>In Open</option>
+                    <option value="pending" {{ request('status')==='pending'?'selected':'' }}>Pending</option>
                     <option value="label_created" {{ request('status')==='label_created'?'selected':'' }}>Label Created</option>
                     <option value="cancelled" {{ request('status')==='cancelled'?'selected':'' }}>Cancelled</option>
                     <option value="shipped" {{ request('status')==='shipped'?'selected':'' }}>Shipped</option>
@@ -124,15 +125,15 @@
                 ];
 
                 $statusBg = [
-                'in_transit' => '#e8a838',
-                'out_for_delivery' => '#1e40af',
+                'in_transit' => '#fff',
+                'out_for_delivery' => '#fff',
                 'delivered' => '#adf4c3',
                 'returned' => '#dc2626',
-                'exception' => '#eea48b',
-                'shipped' => '#e8a838',
-                'cancelled' => '#f1f5f9',
+                'exception' => '#fff',
+                'shipped' => '#fff',
+                'cancelled' => '#dc2626',
                 ];
-                $status = $o->current_status ?? $o->status;
+                $status =  $o->status;
 
                 @endphp
                 <form method="POST" action="{{ route('sales.order-management.update', $o) }}">
@@ -165,10 +166,10 @@
                                 style="width:100%;padding:.2rem .25rem;border:1px solid #c7d2fe;border-radius:4px;font-size:.72rem;">
                         </td>
                         <td style="background:#eef2ff;">
-                            <select name="current_status" style="width:100%;padding:.2rem .25rem;border:1px solid #c7d2fe;border-radius:4px;font-size:.72rem;">
+                            <select name="status" style="width:100%;padding:.2rem .25rem;border:1px solid #c7d2fe;border-radius:4px;font-size:.72rem;">
                                 <option value="">—</option>
-                                @foreach(['in_transit'=>'In Transit','out_for_delivery'=>'Out for Delivery','delivered'=>'Delivered','returned'=>'Returned','exception'=>'Exception'] as $val => $label)
-                                <option value="{{ $val }}" {{ ($o->current_status ?? '') === $val ? 'selected' : '' }}>{{ $label }}</option>
+                                @foreach(['open'=>'Open','pending'=>'Pending','label_created'=>'Label Created','processing'=>'Processing','shipped'=>'Shipped','delivered'=>'Delivered','cancelled'=>'Cancelled','returned'=>'Returned','exception'=>'Exception','lost_in_transit'=>'Lost in Transit','partially_returned'=>'Partially Returned'] as $val => $label)
+                                <option value="{{ $val }}" {{ ($o->status ?? '') === $val ? 'selected' : '' }}>{{ $label }}</option>
                                 @endforeach
                             </select>
                         </td>

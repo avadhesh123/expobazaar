@@ -322,8 +322,8 @@ class DashboardService
         return [
             'kpis' => [
                 'daily_sales'      => (clone $orderQuery)->whereDate('order_date', today())->sum('total_amount'),
-                                'current_month_sales'      => (clone $orderQuery)->whereYear('order_date', now()->year)->whereMonth('order_date', $currentMonth)->sum('total_amount'),
-'period_sales'     => (clone $orderQuery)->whereBetween('order_date', [$dateFrom, $dateTo])->sum('total_amount'),
+                'current_month_sales'      => (clone $orderQuery)->whereYear('order_date', now()->year)->whereMonth('order_date', $currentMonth)->sum('total_amount'),
+                'period_sales'     => (clone $orderQuery)->whereBetween('order_date', [$dateFrom, $dateTo])->sum('total_amount'),
                 'orders_received'  => (clone $orderQuery)->whereBetween('order_date', [$dateFrom, $dateTo])->count(),
                 'pending_shipment' => (clone $orderQuery)->where(function ($q) {
                     $q->whereNull('shipment_status')->orWhere('shipment_status', 'pending');
@@ -336,6 +336,7 @@ class DashboardService
                 ->whereBetween('order_date', [$dateFrom, $dateTo])
                 ->groupBy('sales_channel_id')
                 ->with('salesChannel')
+                 ->orderByDesc('total')
                 ->get(),
             'pending_shipment' => (clone $orderQuery)->where(function ($q) {
                 $q->whereNull('shipment_status')->orWhere('shipment_status', 'pending');

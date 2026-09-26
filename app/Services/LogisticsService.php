@@ -494,4 +494,37 @@ class LogisticsService
 
         return $charges;
     }
+
+    /**
+ * Add to LogisticsController or a Service class
+ * 
+ * Updates consignment total_value = SUM(final_qty × final_fob) from live sheet items
+ */
+public function updateConsignmentValue(string $consignmentNumber): float
+{
+    $consignment = \App\Models\Consignment::where('consignment_number', $consignmentNumber)->firstOrFail();
+
+    $liveSheet = $consignment->liveSheet;
+    if (!$liveSheet) {
+        throw new \Exception("No live sheet linked to consignment {$consignmentNumber}");
+    }
+
+    $totalValue = $liveSheet->items->sum(function ($item) {
+        $d = $item->product_details ?? [];
+        $finalQty = floatval($d['final_qty'] ?? $item->quantity ?? 0);
+        $finalFob = floatval($d['final_fob'] ?? $d['vendor_fob'] ?? $item->unit_price ?? 0);
+        return round($finalQty * $finalFob, 2);
+    });
+
+    $totalValue = round($totalValue, 2);
+
+    $consignment->update(['total_value' => $totalValue]);
+
+    \App\Models\ActivityLog::log('updated', 'consignment', $consignment, null, [
+        'total_value' => $totalValue,
+        'items_count' => $liveSheet->items->count(),
+    ], "Consignment {$consignmentNumber} total value updated to {$totalValue}");
+
+    return $totalValue;
+}
 }

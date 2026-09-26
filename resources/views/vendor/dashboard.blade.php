@@ -68,7 +68,105 @@
         </div>
     </div>
 </div>
+{{-- Top 20 Best Selling SKUs --}}
+@php $cs = $activeCurrencySymbol ?? '$'; @endphp
 
+<div class="card" style="margin-top:1.25rem;">
+    <div class="card-header">
+        <h3><i class="fas fa-trophy" style="margin-right:.5rem;color:#e8a838;"></i> Top 20 Best Selling SKUs</h3>
+        <form method="GET" style="display:flex;gap:.4rem;align-items:flex-end;">
+            <div>
+                <label style="font-size:.6rem;font-weight:600;color:#64748b;display:block;margin-bottom:.15rem;">From</label>
+                <input type="date" name="date_from" value="{{ $dateFrom }}"
+                    style="padding:.3rem .4rem;border:1px solid #d1d5db;border-radius:6px;font-size:.78rem;">
+            </div>
+            <div>
+                <label style="font-size:.6rem;font-weight:600;color:#64748b;display:block;margin-bottom:.15rem;">To</label>
+                <input type="date" name="date_to" value="{{ $dateTo }}"
+                    style="padding:.3rem .4rem;border:1px solid #d1d5db;border-radius:6px;font-size:.78rem;">
+            </div>
+            <button type="submit" class="btn btn-primary btn-sm"><i class="fas fa-filter"></i></button>
+            <a href="{{ route('vendor.dashboard') }}" class="btn btn-outline btn-sm"><i class="fas fa-times"></i></a>
+        </form>
+    </div>
+
+    <div style="padding:.4rem 1.25rem;background:#fefce8;border-bottom:1px solid #fde68a;font-size:.72rem;color:#854d0e;">
+        <i class="fas fa-calendar" style="margin-right:.2rem;"></i>
+        {{ \Carbon\Carbon::parse($dateFrom)->format('d M Y') }} — {{ \Carbon\Carbon::parse($dateTo)->format('d M Y') }}
+        · {{ $bestSelling->sum('total_qty') }} units sold · {{ $cs }}{{ number_format($bestSelling->sum('total_sales'), 2) }} total
+    </div>
+
+    <div class="card-body" style="padding:0;overflow-x:auto;">
+        <table class="data-table" style="font-size:.78rem;margin:0;">
+            <thead>
+                <tr style="background:#f0f4f8;">
+                    <th style="width:30px;">#</th>
+                    <th>SKU</th>
+                    <th>Product Name</th>
+                    <th style="text-align:center;">Orders</th>
+                    <th style="text-align:center;">Shipped Qty</th>
+                    <th style="text-align:right;">Avg Price</th>
+                    <th style="text-align:right;">Total Sales</th>
+                    <th style="text-align:right;">% Share</th>
+                    <th style="width:150px;">Sales Distribution</th>
+                </tr>
+            </thead>
+            <tbody>
+                @php $grandTotal = $bestSelling->sum('total_sales'); @endphp
+                @forelse($bestSelling as $idx => $item)
+                @php
+                    $product = $item->product;
+                    $pct = $grandTotal > 0 ? round(($item->total_sales / $grandTotal) * 100, 1) : 0;
+                    $medals = ['🥇', '🥈', '🥉'];
+                    $barColors = ['#e8a838', '#94a3b8', '#b45309', '#1e40af', '#16a34a', '#7c3aed', '#dc2626', '#0d9488'];
+                    $barColor = $barColors[$idx % count($barColors)];
+                @endphp
+                <tr style="{{ $idx < 3 ? 'background:#fffef5;' : '' }}">
+                    <td style="text-align:center;">
+                        @if($idx < 3)
+                        <span style="font-size:1rem;">{{ $medals[$idx] }}</span>
+                        @else
+                        <span style="color:#94a3b8;">{{ $idx + 1 }}</span>
+                        @endif
+                    </td>
+                    <td style="font-family:monospace;font-weight:600;">{{ $product->sku ?? '—' }}</td>
+                    <td style="font-size:.75rem;">{{ \Str::limit($product->name ?? '—', 35) }}</td>
+                    <td style="text-align:center;font-weight:600;">{{ $item->total_orders }}</td>
+                    <td style="text-align:center;font-weight:700;color:#1e40af;">{{ number_format($item->total_qty) }}</td>
+                    <td style="text-align:right;font-family:monospace;color:#64748b;">{{ $cs }}{{ number_format($item->avg_price, 2) }}</td>
+                    <td style="text-align:right;font-family:monospace;font-weight:700;color:#166534;">{{ $cs }}{{ number_format($item->total_sales, 2) }}</td>
+                    <td style="text-align:right;font-family:monospace;font-weight:600;color:{{ $barColor }};">{{ $pct }}%</td>
+                    <td>
+                        <div style="display:flex;align-items:center;gap:.3rem;">
+                            <div style="flex:1;height:8px;background:#e2e8f0;border-radius:4px;overflow:hidden;">
+                                <div style="height:100%;width:{{ $pct }}%;background:{{ $barColor }};border-radius:4px;"></div>
+                            </div>
+                        </div>
+                    </td>
+                </tr>
+                @empty
+                <tr><td colspan="9" style="text-align:center;padding:2rem;color:#94a3b8;">
+                    <i class="fas fa-chart-bar" style="font-size:1.5rem;display:block;margin-bottom:.3rem;"></i>
+                    No sales data for this period.
+                </td></tr>
+                @endforelse
+            </tbody>
+            @if($bestSelling->isNotEmpty())
+            <tfoot>
+                <tr style="background:#f0f4f8;font-weight:700;">
+                    <td colspan="3">TOP 20 TOTAL</td>
+                    <td style="text-align:center;">{{ $bestSelling->sum('total_orders') }}</td>
+                    <td style="text-align:center;">{{ number_format($bestSelling->sum('total_qty')) }}</td>
+                    <td></td>
+                    <td style="text-align:right;font-family:monospace;color:#166534;">{{ $cs }}{{ number_format($grandTotal, 2) }}</td>
+                    <td style="text-align:right;">100%</td>
+                    <td></td>
+                </tr>
+            </tfoot>
+            @endif
+        </table>
+    </div>
+</div>
 <div class="grid-2">
     <div class="card">
         <div class="card-header">
@@ -103,6 +201,8 @@
             </table>
         </div>
     </div>
+
+    
     <div class="card">
         <div class="card-header">
             <h3><i class="fas fa-box" style="margin-right:.5rem;color:#2d6a4f;"></i> Active Consignments</h3><a href="{{ route('vendor.consignments') }}" class="btn btn-outline btn-sm">View All</a>

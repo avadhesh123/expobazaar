@@ -20,6 +20,19 @@ class SalesService
         $clean = preg_replace('/[\r\n\t\s]+/', '', trim($value));
         return is_numeric($clean) ? $clean : $value;
     }
+    private function sanitizeString(?string $value): ?string
+    {
+        if ($value === null) {
+            return null;
+        }
+        // Try to convert to proper UTF-8
+        if (!mb_check_encoding($value, 'UTF-8')) {
+            $value = mb_convert_encoding($value, 'UTF-8', 'Windows-1252');
+        }
+        // Remove any remaining invalid UTF-8 bytes
+        $value = mb_convert_encoding($value, 'UTF-8', 'UTF-8');
+        return $value;
+    }
     // ═══════════════════════════════════════════════════════
     //  SHARED HELPERS
     // ═══════════════════════════════════════════════════════
@@ -124,15 +137,16 @@ class SalesService
                 'tax_amount'        => $orderData['tax_amount'] ?? 0,
                 'discount_amount'   => $orderData['discount_amount'] ?? 0,
                 'currency'          => $orderData['currency'] ?? $currency,
-                'customer_name'     => $orderData['customer_name'] ?? null,
+              //  'customer_name'     => $orderData['customer_name'] ?? null,
+                'customer_name'    => $this->sanitizeString($orderData['customer_name'] ?? null),
                 'customer_email'    => $orderData['customer_email'] ?? null,
                 'customer_phone'    => $orderData['customer_phone'] ?? null,
                 'customer_type'     => $orderData['customer_type'] ?? null,
-                'company_name'      => $orderData['company_name'] ?? null,
-                'shipping_address'  => $orderData['shipping_address'] ?? null,
-                'shipping_city'     => $orderData['shipping_city'] ?? null,
-                'shipping_state'    => $orderData['shipping_state'] ?? null,
-                'shipping_country'  => $orderData['shipping_country'] ?? null,
+                'company_name'      => $this->sanitizeString($orderData['company_name'] ?? null),
+                'shipping_address'  => $this->sanitizeString($orderData['shipping_address'] ?? null),
+                'shipping_city'     => $this->sanitizeString($orderData['shipping_city'] ?? null),
+                'shipping_state'    => $this->sanitizeString($orderData['shipping_state'] ?? null),
+                'shipping_country'  => $this->sanitizeString($orderData['shipping_country'] ?? null),
                 'shipping_pincode'  => $orderData['shipping_pincode'] ?? null,
                 'shipping_method'   => $shipMethod ?? null,
                 'warehouse_id'      => $orderData['warehouse_id'] ?? null,
@@ -386,7 +400,6 @@ class SalesService
                 $existing = \App\Models\Order::withoutGlobalScopes()
                     ->where('platform_order_id', $poNumber)
                     ->where('company_code', $companyCode)
-                    ->where('deleted', false)
                     ->first();
                 if ($existing) {
                     $errors[] = "Row {$rowNum}: PO '{$poNumber}' already exists (Order #{$existing->order_number}).";
@@ -468,7 +481,7 @@ class SalesService
 
         return ['created' => $created, 'errors' => $errors, 'total_rows' => $totalRows];
     }
-   
+
     // ═══════════════════════════════════════════════════════
     //  MANUAL ENTRY
     // ═══════════════════════════════════════════════════════
@@ -696,7 +709,7 @@ class SalesService
             return $order;
         });
     }
-    
+
     /**
      * Update order management fields (status, delivery, costs)
      */
