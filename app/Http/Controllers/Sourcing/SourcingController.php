@@ -164,18 +164,17 @@ class SourcingController extends Controller
             LiveSheetItem::create([
                 'live_sheet_id'   => $liveSheet->id,
                 'product_id'      => $product->id,
-                'quantity'        => 1,
+                'quantity'        => 0,
                 'unit_price'      => $item->vendor_price ?? 0,
                 'total_price'     => $item->vendor_price ?? 0,
                 'cbm_per_unit'    => 0,
                 'total_cbm'       => 0,
-                'weight_per_unit' => isset($d['weight_grams']) ? round($d['weight_grams'] / 1000, 2) : 0,
-                'total_weight'    => isset($d['weight_grams']) ? round($d['weight_grams'] / 1000, 2) : 0,
+                'weight_per_unit' => $d['weight_grams'] ?? 0,
+                'total_weight'    => $d['weight_grams'] ?? 0,
                 'product_details' => $d,
             ]);
         }
-
-        $offerSheet->update(['status' => 'live_sheet_created']);
+         $offerSheet->update(['status' => 'live_sheet_created']);
 
         \App\Models\ActivityLog::log('created', 'live_sheet', $liveSheet, null, null, 'Live sheet created from offer sheet');
 
