@@ -490,9 +490,9 @@ class SalesController extends Controller
         //     ->latest('ship_date')->latest('shipped_date')
         //     ->paginate(30)->withQueryString();
         $orders = Order::with('items.product', 'salesChannel', 'warehouse')
-            ->where(function ($q) {
-                $q->whereNotNull('tracking_id')->where('tracking_id', '!=', '');
-            })
+            // ->where(function ($q) {
+            //     $q->whereNotNull('tracking_id')->where('tracking_id', '!=', '');
+            // })
             ->where('company_code', $activeCompany)
             ->when(
                 $request->status,
@@ -542,11 +542,8 @@ class SalesController extends Controller
             'total_shipped'  => $orders->getCollection()->whereNotNull('tracking_id')->where('tracking_id', '!=', '')->count(),
             'critical'     => $orders->getCollection()->filter(fn ($o) => $o->ageing_label === 'CRITICAL')->count(),
             'total'      => $orders->total(),
-            'in_transit'  => Order::where('company_code', $activeCompany)->whereNotNull('tracking_id')->where('tracking_id', '!=', '')
-                ->where(function ($q) {
-                    $q->whereIn('current_status', ['in_transit', 'shipped'])->orWhereNull('current_status');
-                })->count(),
-            'delivered'   => Order::where('company_code', $activeCompany)->where('current_status', 'delivered')->count(),
+            'open'  => Order::where('company_code', $activeCompany)->where('status', 'open') ->count(),
+            'delivered'   => Order::where('company_code', $activeCompany)->where('status', 'delivered')->count(),
             'overdue'     => $orders->getCollection()->filter(fn ($o) => in_array($o->ageing_label, ['OVERDUE', 'CRITICAL']))->count(),
         ];
 
@@ -557,7 +554,7 @@ class SalesController extends Controller
     {
         $request->validate([
             'ship_date'                => 'nullable|date',
-            'current_status'           => 'nullable|in:in_transit,out_for_delivery,delivered,returned,exception',
+            'status'           => 'nullable|in:in_transit,out_for_delivery,delivered,returned,exception',
             'delivery_date'            => 'nullable|date',
             'material_cost'            => 'nullable|numeric|min:0',
             'order_processing_charges' => 'nullable|numeric|min:0',
@@ -566,7 +563,7 @@ class SalesController extends Controller
 
         $this->salesService->updateOrderManagement($order, $request->only([
             'ship_date',
-            'current_status',
+            'status',
             'delivery_date',
             'material_cost',
             'order_processing_charges',
@@ -1649,5 +1646,32 @@ class SalesController extends Controller
         }
 
         return back()->with($updated > 0 ? 'success' : 'error', $message);
+    }
+
+    /**
+ * Pull Amazon orders
+ * Route: POST sales/amazon/pull
+ */
+    public function pullAmazonOrders(Request $request)
+    {
+        $request->validate([
+            'date_from' => 'required|date',
+            'date_to'   => 'required|date|after_or_equal:date_from',
+        ]);
+
+        $activeCompany = session('active_company');
+        $service = new \App\Services\AmazonOrderService($activeCompany);
+
+        $result = $service->pullOrders(
+            \Carbon\Carbon::parse($request->date_from)->toISOString(),
+            \Carbon\Carbon::parse($request->date_to)->toISOString()
+        );
+ print_r( $result );exit;
+        $msg = "{$result['created']} order(s) imported, {$result['skipped']} skipped.";
+        if (!empty($result['errors'])) {
+            $msg .= ' ' . count($result['errors']) . ' error(s).';
+        }
+
+        return back()->with($result['created'] > 0 ? 'success' : 'warning', $msg);
     }
 }

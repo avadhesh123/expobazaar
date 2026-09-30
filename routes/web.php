@@ -45,8 +45,23 @@ Route::middleware(['auth'])->group(function () {
     Route::get('change-password', [AuthController::class, 'showChangePassword'])->name('auth.change-password');
     Route::post('change-password', [AuthController::class, 'changePassword'])->name('auth.change-password.update');
 
-
     Route::get('admin/stop-impersonating', [AdminController::class, 'stopImpersonating'])->name('admin.stop-impersonating');
+    // Vendor Access — available to admin + authorized users
+    Route::middleware(['user.type:internal,admin'])->group(function () {
+        Route::get('admin/vendor-access', [AdminController::class, 'vendorAccess'])->name('admin.vendor-access');
+        Route::get('admin/vendors/{vendor}/impersonate', [AdminController::class, 'impersonateVendor'])->name('admin.vendors.impersonate');
+
+        // ── Masters ──
+        Route::get('admin/categories', [AdminController::class, 'categories'])->name('admin.categories');
+        Route::post('admin/categories', [AdminController::class, 'storeCategory'])->name('admin.categories.store');
+        Route::get('admin/sales-channels', [AdminController::class, 'salesChannels'])->name('admin.sales-channels');
+        Route::post('admin/sales-channels', [AdminController::class, 'storeSalesChannel'])->name('admin.sales-channels.store');
+        Route::put('admin/sales-channels/{salesChannel}', [AdminController::class, 'updateSalesChannel'])->name('admin.sales-channels.update');
+        Route::get('admin/warehouses', [AdminController::class, 'warehouses'])->name('admin.warehouses');
+        Route::post('admin/warehouses', [AdminController::class, 'storeWarehouse'])->name('admin.warehouses.store');
+
+
+    });
 
     // ADMIN
     Route::prefix('admin')->name('admin.')->middleware('user.type:admin')->group(function () {
@@ -85,14 +100,6 @@ Route::middleware(['auth'])->group(function () {
         Route::put('roles/{role}', [AdminController::class, 'updateRole'])->name('roles.update');
         Route::delete('roles/{role}', [AdminController::class, 'deleteRole'])->name('roles.delete');
 
-        // ── Masters ──
-        Route::get('categories', [AdminController::class, 'categories'])->name('categories');
-        Route::post('categories', [AdminController::class, 'storeCategory'])->name('categories.store');
-        Route::get('sales-channels', [AdminController::class, 'salesChannels'])->name('sales-channels');
-        Route::post('sales-channels', [AdminController::class, 'storeSalesChannel'])->name('sales-channels.store');
-        Route::put('sales-channels/{salesChannel}', [AdminController::class, 'updateSalesChannel'])->name('sales-channels.update');
-        Route::get('warehouses', [AdminController::class, 'warehouses'])->name('warehouses');
-        Route::post('warehouses', [AdminController::class, 'storeWarehouse'])->name('warehouses.store');
 
         // ── System ──
         Route::post('live-sheets/{liveSheet}/unlock', [AdminController::class, 'unlockLiveSheet'])->name('live-sheets.unlock');
@@ -104,8 +111,8 @@ Route::middleware(['auth'])->group(function () {
         Route::put('profile', [AdminController::class, 'updateProfile'])->name('profile.update');
 
 
-        Route::get('vendor-access', [AdminController::class, 'vendorAccess'])->name('vendor-access');
-        Route::get('vendors/{vendor}/impersonate', [AdminController::class, 'impersonateVendor'])->name('vendors.impersonate');
+        //Route::get('vendor-access', [AdminController::class, 'vendorAccess'])->name('vendor-access');
+        //Route::get('vendors/{vendor}/impersonate', [AdminController::class, 'impersonateVendor'])->name('vendors.impersonate');
 
     });
 
@@ -160,6 +167,8 @@ Route::middleware(['auth'])->group(function () {
 
             Route::post('offer-sheets/{offerSheet}/update-items', [VendorController::class, 'updateOfferSheetItems'])->name('offer-sheets.update-items');
             Route::get('payouts/{payout}/download', [VendorController::class, 'downloadPayout'])->name('payouts.download');
+
+            Route::get('dashboard/sales-chart', [VendorController::class, 'salesChartData'])->name('dashboard.sales-chart');
 
         });
     });
@@ -344,12 +353,14 @@ Route::middleware(['auth'])->group(function () {
         Route::post('returns/{orderReturn}/update-status', [SalesController::class, 'updateReturnStatus'])->name('returns.update-status');
         Route::post('returns/{orderReturn}/restock', [SalesController::class, 'restockReturn'])->name('returns.restock');
         Route::delete('orders/{order}', [SalesController::class, 'deleteOrder'])->name('orders.delete');
- 
+
         Route::get('download-to-be-shipped', [SalesController::class, 'downloadToBeShipped'])->name('download-to-be-shipped');
         Route::get('download-store-pickup', [SalesController::class, 'downloadStorePickup'])->name('download-store-pickup');
 
         Route::post('orders/upload-to-be-shipped-csv', [SalesController::class, 'uploadToBeShippedCsv'])->name('orders.upload-to-be-shipped-csv');
         Route::post('orders/upload-store-pickup-csv', [SalesController::class, 'uploadStorePickupCsv'])->name('orders.upload-store-pickup-csv');
+
+        Route::post('amazon/pull', [SalesController::class, 'pullAmazonOrders'])->name('amazon.pull');
 
 
     });

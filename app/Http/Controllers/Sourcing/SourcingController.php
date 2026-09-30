@@ -48,24 +48,41 @@ class SourcingController extends Controller
         $this->vendorService->createVendorRequest($request->all(), auth()->user());
         return redirect()->route('sourcing.dashboard')->with('success', 'Vendor request submitted to admin.');
     }
-
+    
     public function vendors(Request $request)
     {
         $user = auth()->user();
-        // User's allowed company codes
-        $userCompanyCodes = $user->company_codes ?? [];
-        if (is_string($userCompanyCodes)) {
-            $userCompanyCodes = json_decode($userCompanyCodes, true) ?? [];
-        }
-        $userCompanyCodes = array_filter(array_map('strval', $userCompanyCodes));
+        $activeCompany = session('active_company');
+        $isShow = ($user->user_type == 'internal' && $user->department == 'hod') || $user->isAdmin(); 
 
-        $vendors = Vendor::with('user')
-            ->when(!$user->isAdmin() && !empty($userCompanyCodes), fn ($q) => $q->whereIn('company_code', $userCompanyCodes))
-            ->when($request->company_code, fn ($q, $v) => $q->where('company_code', $v))
-            ->when($request->status, fn ($q, $v) => $q->where('status', $v))
-            //     ->when($request->company_code, fn($q, $v) => $q->where('company_code', $v))
-            ->latest()->paginate(25);
-        return view('sourcing.vendors.index', compact('vendors'));
+        $companyFilter = $isShow && $request->filled('company_code')
+               ? $request->company_code
+               : $activeCompany;
+
+        $query = Vendor::with('user')
+              ->whereHas('user', function ($q) use ($companyFilter) {
+                  $q->whereRaw(
+                      'JSON_VALID(company_codes)
+                 AND JSON_CONTAINS(
+                     CAST(company_codes AS JSON),
+                     ?
+                 )',
+                      ['"' . $companyFilter . '"']
+                  );
+              })
+              ->when($request->status, function ($q, $status) {
+                  $q->where('status', $status);
+              })
+              ->when($request->search, function ($q, $search) {
+                  $q->where(function ($q2) use ($search) {
+                      $q2->where('vendor_code', 'like', "%{$search}%");
+                  });
+              }); 
+        $vendors = $query->latest()
+                    ->paginate(30)
+                    ->withQueryString(); 
+
+        return view('sourcing.vendors.index', compact('vendors', 'companyFilter'));
     }
 
     public function showVendor(Vendor $vendor)
@@ -174,7 +191,7 @@ class SourcingController extends Controller
                 'product_details' => $d,
             ]);
         }
-         $offerSheet->update(['status' => 'live_sheet_created']);
+        $offerSheet->update(['status' => 'live_sheet_created']);
 
         \App\Models\ActivityLog::log('created', 'live_sheet', $liveSheet, null, null, 'Live sheet created from offer sheet');
 

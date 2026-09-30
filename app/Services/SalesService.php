@@ -717,24 +717,42 @@ class SalesService
     {
         $updateData = array_filter([
             'ship_date'                => $data['ship_date'] ?? null,
-            'current_status'           => $data['current_status'] ?? null,
+            'status'                   => $data['status'] ?? null,
             'material_cost'            => $data['material_cost'] ?? null,
             'order_processing_charges' => $data['order_processing_charges'] ?? null,
             'remarks'                  => $data['remarks'] ?? null,
         ], fn ($v) => $v !== null && $v !== '');
 
         // Auto-set delivery date when delivered
-        if (($data['current_status'] ?? '') === 'delivered' && !$order->delivery_date) {
+        if (($data['status'] ?? '') === 'delivered' && !$order->delivery_date) {
             $updateData['delivery_date'] = $data['delivery_date'] ?? now()->toDateString();
-            $updateData['status'] = 'delivered';
+            $updateData['status'] = 'delivered';            
+            $updateData['current_status'] = 'delivered';
+
         } elseif (!empty($data['delivery_date'])) {
-            $updateData['delivery_date'] = $data['delivery_date'];
+            $updateData['delivery_date'] = $data['delivery_date'];    
+            $updateData['current_status'] = 'delivered';
+
         }
 
-        if (($data['current_status'] ?? '') === 'returned') {
+        if ($order->current_status === 'returned') {
             $updateData['status'] = 'returned';
         }
 
+        // If ship_date is null/empty → status = open
+        // (introduced 27-Sep-2026 – recommendation Mr. Umang)
+        $shipDate = array_key_exists('ship_date', $data)
+            ? $data['ship_date']
+            : $order->ship_date;
+
+        if (empty($shipDate)
+            && ($data['status'] ?? null) !== 'delivered'
+            && ($data['status'] ?? null) !== 'returned'
+        ) {
+            $updateData['status'] = 'open';
+        }
+
+        //END
         $order->update($updateData);
 
         ActivityLog::log('updated', 'order', $order, null, $updateData, "Order {$order->order_number} management updated");

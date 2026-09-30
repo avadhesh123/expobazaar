@@ -124,7 +124,7 @@ class VendorService
                 'kyc_status' => 'approved',
                 'kyc_approved_at' => now(),
                 'kyc_approved_by' => $approver->id,
-                'status' => 'pending_contract',
+                'status' => 'active',
             ]);
 
             ActivityLog::log('approved', 'vendor_kyc', $vendor, null, null, 'KYC approved by finance');
@@ -159,7 +159,9 @@ class VendorService
     {
         // DocuSign integration placeholder
         $vendor->update([
-            'contract_status' => 'sent',
+            //'contract_status' => 'sent',
+            'contract_status' => 'signed',
+            'contract_signed_at' =>  now(),
         ]);
 
         $vendor->user->notify(new VendorContractSent($vendor));

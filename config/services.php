@@ -34,5 +34,15 @@ return [
             'channel' => env('SLACK_BOT_USER_DEFAULT_CHANNEL'),
         ],
     ],
+    // config/services.php — add:
+    'amazon' => [
+        'client_id'      => env('AMAZON_CLIENT_ID'),
+        'client_secret'  => env('AMAZON_CLIENT_SECRET'),
+        'refresh_token'  => env('AMAZON_REFRESH_TOKEN'),
+        'aws_access_key' => env('AMAZON_AWS_ACCESS_KEY'),
+        'aws_secret_key' => env('AMAZON_AWS_SECRET_KEY'),
+        'role_arn'       => env('AMAZON_ROLE_ARN'),
+        'marketplace_id' => env('AMAZON_MARKETPLACE_ID', 'ATVPDKIKX0DER'),
+    ],
 
 ];

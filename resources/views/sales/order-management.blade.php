@@ -10,8 +10,8 @@
         <div class="kpi-value" style="color:#1e40af;">{{ $stats['total_shipped'] }}</div>
     </div>
     <div class="kpi-card" style="flex:1;border-left:3px solid #e8a838;">
-        <div class="kpi-label">In Transit</div>
-        <div class="kpi-value" style="color:#e8a838;">{{ $stats['in_transit'] }}</div>
+        <div class="kpi-label">In Open</div>
+        <div class="kpi-value" style="color:#e8a838;">{{ $stats['open'] }}</div>
     </div>
     <div class="kpi-card" style="flex:1;border-left:3px solid #16a34a;">
         <div class="kpi-label">Delivered</div>

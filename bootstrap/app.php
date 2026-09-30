@@ -93,7 +93,7 @@ return Application::configure(basePath: dirname(__DIR__))
                     return response()->json(['message' => 'Forbidden.'], 403);
                 }
                 return redirect()->back()
-                    ->with('error', 'You do not have permission to perform this action.');
+                    ->with('error', 'You do not have permission to perform this action..');
             }
         });
     })->create();

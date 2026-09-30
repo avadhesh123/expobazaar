@@ -119,22 +119,22 @@ class VendorController extends Controller
             //echo  "Total Payout: $totalPayout,finalPayout: $finalPayout, Warehouse Charges: $totalWhCharges, Chargebacks: $totalChargebacks\n";
 
         }
-        //Best selling SKUs
 
+        //Best selling SKUs
         $dateFrom = $request->date_from ?? now()->startOfMonth()->toDateString();
         $dateTo = $request->date_to ?? now()->toDateString();
 
-        // Top 20 Best Selling SKUs
-        $bestSelling = \App\Models\OrderItem::withoutGlobalScopes()
+        // Get ALL SKU sales for the period (no limit)
+        $allSkuSales = \App\Models\OrderItem::withoutGlobalScopes()
             ->where('vendor_id', $vendor->id)
             ->where('shipped_qty', '>', 0)
             ->whereHas(
                 'order',
                 fn ($q) => $q->withoutGlobalScopes()
                 ->where('company_code', $activeCompany)
-                ->whereIn('status', ['shipped', 'delivered'])              
-                ->when($request->date_from, fn ($q, $v) => $q->where('order_date', '>=', $v))
-                ->when($request->date_to, fn ($q, $v) => $q->where('order_date', '<=', $v))
+                ->whereIn('status', ['shipped', 'delivered'])
+                ->when($dateFrom, fn ($q, $v) => $q->where('order_date', '>=', $v))
+                ->when($dateTo, fn ($q, $v) => $q->where('order_date', '<=', $v))
             )
             ->select(
                 'product_id',
@@ -146,10 +146,63 @@ class VendorController extends Controller
             ->groupBy('product_id')
             ->with(['product' => fn ($q) => $q->withoutGlobalScopes()])
             ->orderByDesc('total_sales')
-            ->limit(20)
             ->get();
 
-        //return view('vendor.dashboard', compact(/* existing vars */, 'bestSelling', 'dateFrom', 'dateTo'));
+        // Calculate 50% threshold
+        $grandTotal = $allSkuSales->sum('total_sales');
+        $halfTotal = $grandTotal / 2;
+
+        // Find SKUs contributing to 50% of sales
+        $runningTotal = 0;
+        $topSkuIds = [];
+        foreach ($allSkuSales as $item) {
+            $topSkuIds[] = $item->product_id;
+            $runningTotal += floatval($item->total_sales);
+            if ($runningTotal >= $halfTotal) {
+                break;
+            }
+        }
+
+        // Paginated query for top SKUs
+        $bestSelling = \App\Models\OrderItem::withoutGlobalScopes()
+            ->where('vendor_id', $vendor->id)
+            ->where('shipped_qty', '>', 0)
+            ->whereIn('product_id', $topSkuIds)
+            ->whereHas(
+                'order',
+                fn ($q) => $q->withoutGlobalScopes()
+                ->where('company_code', $activeCompany)
+                ->whereIn('status', ['shipped', 'delivered'])
+                ->when($dateFrom, fn ($q, $v) => $q->where('order_date', '>=', $v))
+                ->when($dateTo, fn ($q, $v) => $q->where('order_date', '<=', $v))
+            )
+            ->select(
+                'product_id',
+                \DB::raw('SUM(shipped_qty) as total_qty'),
+                \DB::raw('SUM(unit_price * shipped_qty) as total_sales'),
+                \DB::raw('COUNT(DISTINCT order_id) as total_orders'),
+                \DB::raw('AVG(unit_price) as avg_price')
+            )
+            ->groupBy('product_id')
+            ->orderByDesc('total_sales')
+            ->paginate(5, ['*'], 'top_sku_page')
+            ->withQueryString();
+
+        // Stats
+        $topSkuCount = count($topSkuIds);
+        $topSkuSales = $runningTotal;
+        $topSkuPct = $grandTotal > 0 ? round(($topSkuSales / $grandTotal) * 100, 1) : 0;
+
+        // return view('vendor.dashboard', compact(
+        //     /* existing vars */
+        //     'bestSelling',
+        //     'grandTotal',
+        //     'topSkuCount',
+        //     'topSkuSales',
+        //     'topSkuPct',
+        //     'dateFrom',
+        //     'dateTo'
+        // ));
 
         $data['stats'] = [
             'offer_sheets'   => OfferSheet::where('vendor_id', $vendor->id)->where('company_code', $activeCompany)->count(),
@@ -253,9 +306,69 @@ class VendorController extends Controller
             ];
         }
 
-        return view('vendor.dashboard', compact('data', 'vendor', 'orderLineItems', 'bestSelling', 'dateFrom', 'dateTo'));
+
+        return view('vendor.dashboard', compact(
+            'data',
+            'vendor',
+            'orderLineItems',
+            'bestSelling',
+            'grandTotal',
+            'topSkuCount',
+            'topSkuSales',
+            'topSkuPct',
+            'dateFrom',
+            'dateTo',
+        ));
     }
-   // =====================================================================
+
+    public function salesChartData(Request $request)
+    {
+        $vendor = auth()->user()->vendor;
+        if (!$vendor) {
+            return redirect()->route('vendor.kyc');
+        }
+        $activeCompany = session('active_company');
+        $dateFrom = $request->from ?? now()->startOfMonth()->toDateString();
+        $dateTo = $request->to ?? now()->toDateString();
+
+        // $sales = Order::withoutGlobalScopes()
+        //         ->where('company_code', $activeCompany)
+        //         ->whereIn('status', ['shipped', 'delivered'])
+        //         ->whereBetween('order_date', [$dateFrom, $dateTo])
+        //         ->selectRaw('DATE(order_date) as date, SUM(total_amount) as total, COUNT(*) as orders')
+        //         ->whereHas('items', fn ($q) => $q->where('vendor_id', $vendor->id)->where('shipped_qty', '>', 0))
+        //         ->with(['salesChannel', 'items' => fn ($q) => $q->where('vendor_id', $vendor->id)])
+        //         ->groupBy('date')->orderBy('date')
+        //         ->get();
+
+        $sales = Order::withoutGlobalScopes()
+                ->where('company_code', $activeCompany)
+                ->whereIn('status', ['shipped', 'delivered'])
+                ->whereBetween('order_date', [$dateFrom, $dateTo])
+                ->whereHas('items', fn ($q) => $q->where('vendor_id', $vendor->id)->where('shipped_qty', '>', 0))
+                ->selectRaw("
+                    DATE_FORMAT(order_date, '%Y-%m') as month,
+                    SUM(total_amount) as total,
+                    COUNT(*) as orders
+                ")
+                ->groupBy('month')
+                ->orderBy('month')
+                ->get();
+
+        // Optional: format labels as "Jan 2026"
+        $labels = $sales->pluck('month')->map(function ($m) {
+            return \Carbon\Carbon::createFromFormat('Y-m', $m)->format('M Y');
+        });
+
+        return response()->json([
+                //'labels' => $sales->pluck('date'),
+                'labels' => $labels,
+                'totals' => $sales->pluck('total'),
+                'orders' => $sales->pluck('orders'),
+            ]);
+    }
+
+    // =====================================================================
     //  KYC
     // =====================================================================
 
@@ -1449,7 +1562,7 @@ class VendorController extends Controller
         return redirect()->route('vendor.live-sheets')
             ->with('success', 'Live sheet submitted for Sourcing approval.');
     }
-     
+
 
     /**
      * Vendor creates consignment after both dates are set

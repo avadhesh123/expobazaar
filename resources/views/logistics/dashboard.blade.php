@@ -35,7 +35,7 @@
     <div class="kpi-card">
         <div style="display:flex;justify-content:space-between;align-items:start;">
             <div>
-                <div class="kpi-label">Received This Month</div>
+                <div class="kpi-label">GRN Received This Month</div>
                 <div class="kpi-value" style="color:#166534;">{{ $data['kpis']['received_this_month'] ?? 0 }}</div>
             </div>
             <div class="kpi-icon" style="background:#dcfce7;color:#166534;"><i class="fas fa-check-circle"></i></div>

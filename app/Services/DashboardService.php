@@ -211,7 +211,7 @@ class DashboardService
                 'containers_planned' => Shipment::whereIn('status', ['planning', 'shipment','grn_completed'])->when($activeCode, fn ($q) => $q->byCompanyCode($activeCode))->count(),
                 'in_transit' => Shipment::inTransit()->when($activeCode, fn ($q) => $q->byCompanyCode($activeCode))->count(),
                 'grn_pending' => Shipment::where('status', 'grn_pending')->when($activeCode, fn ($q) => $q->byCompanyCode($activeCode))->count(),
-                'received_this_month' => Grn::where('company_code', $activeCode)->whereMonth('receipt_date', now()->month)->count(),
+                'received_this_month' => Grn::where('company_code', $activeCode)->whereMonth('receipt_date', now()->month)->whereYear('receipt_date', now()->year)->count(),
             ],
             'container_planning' => [
                 'live_sheets_ready' => LiveSheet::locked()->with('consignment')->where('company_code', $activeCode)->get(),

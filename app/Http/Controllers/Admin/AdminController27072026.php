@@ -13,12 +13,11 @@ class AdminController extends Controller
     public function __construct(
         protected DashboardService $dashboardService,
         protected VendorService $vendorService
-    ) {
-    }
+    ) {}
 
     public function dashboard(Request $request)
     {
-        //  $companyCode = $request->get('company_code');
+      //  $companyCode = $request->get('company_code');
         $companyCode = session('active_company');
         $data = $this->dashboardService->getAdminDashboard($companyCode);
         return view('admin.dashboard', compact('data', 'companyCode'));
@@ -44,10 +43,10 @@ class AdminController extends Controller
             });
         }
 
-        $query->when($request->type, fn ($q, $v) => $q->where('user_type', $v));
-        $query->when($request->department, fn ($q, $v) => $q->where('department', $v));
-        $query->when($request->status, fn ($q, $v) => $q->where('status', $v));
-        $query->when($request->company_code, fn ($q, $v) => $q->whereJsonContains('company_codes', $v));
+        $query->when($request->type, fn($q, $v) => $q->where('user_type', $v));
+        $query->when($request->department, fn($q, $v) => $q->where('department', $v));
+        $query->when($request->status, fn($q, $v) => $q->where('status', $v));
+        $query->when($request->company_code, fn($q, $v) => $q->whereJsonContains('company_codes', $v));
 
         $sortField = in_array($request->sort, ['name', 'email', 'user_type', 'department', 'status', 'created_at', 'last_login_at'])
             ? $request->sort : 'created_at';
@@ -112,7 +111,6 @@ class AdminController extends Controller
             'company_codes'     => $validated['company_codes'],
             'status'            => $validated['status'] ?? 'active',
             'email_verified_at' => now(),
-            'password'          => \Illuminate\Support\Facades\Hash::make('Noida@2026'),
         ]);
 
         if (!empty($validated['roles'])) {
@@ -131,87 +129,8 @@ class AdminController extends Controller
         $userRoleIds = $user->roles->pluck('id')->toArray();
         return view('admin.users.edit', compact('user', 'roles', 'userRoleIds'));
     }
+
     public function updateUser(Request $request, User $user)
-    {
-        $validated = $request->validate([
-            'name'            => 'required|string|max:255',
-            'email'           => 'required|email|unique:users,email,' . $user->id,
-            'phone'           => 'nullable|string|max:20',
-            'user_type'       => 'required|in:internal,admin,external',
-            'department'      => 'nullable|required_if:user_type,internal|in:sourcing,logistics,cataloguing,sales,finance,hod',
-            'company_codes'   => 'required|array|min:1',
-            'company_codes.*' => 'in:2000,2100,2200,2400',
-            'roles'           => 'nullable|array',
-            'roles.*'         => 'exists:roles,id',
-            'status'          => 'required|in:active,inactive,suspended',
-        ]);
-
-        // Capture BEFORE state (including roles)
-        $beforeRoles = $user->roles()->pluck('name', 'id')->toArray();
-        $before = [
-            'user_type'     => $user->user_type,
-            'department'    => $user->department,
-            'status'        => $user->status,
-            'company_codes' => $user->company_codes ?? [],
-            'roles'         => $beforeRoles,
-        ];
-
-        $oldValues = $user->toArray();
-
-        $user->update([
-            'name'          => $validated['name'],
-            'email'         => $validated['email'],
-            'phone'         => $validated['phone'] ?? $user->phone,
-            'user_type'     => $validated['user_type'],
-            'department'    => $validated['user_type'] === 'internal' ? $validated['department'] : null,
-            'company_codes' => $validated['company_codes'],
-            'status'        => $validated['status'],
-        ]);
-
-        $user->roles()->sync($validated['roles'] ?? []);
-
-        // Capture AFTER state (reload roles)
-        $user->load('roles');
-        $afterRoles = $user->roles->pluck('name', 'id')->toArray();
-        $after = [
-            'user_type'     => $user->user_type,
-            'department'    => $user->department,
-            'status'        => $user->status,
-            'company_codes' => $user->company_codes ?? [],
-            'roles'         => $afterRoles,
-        ];
-
-        // Log if anything changed
-        if ($before !== $after) {
-            // Build human-readable change summary
-            $changes = [];
-            if ($before['roles'] !== $after['roles']) {
-                $added = array_diff($afterRoles, $beforeRoles);
-                $removed = array_diff($beforeRoles, $afterRoles);
-                if ($added) {
-                    $changes[] = 'Roles added: ' . implode(', ', $added);
-                }
-                if ($removed) {
-                    $changes[] = 'Roles removed: ' . implode(', ', $removed);
-                }
-            }
-            if ($before['user_type'] !== $after['user_type']) {
-                $changes[] = "Type: {$before['user_type']} → {$after['user_type']}";
-            }
-            if ($before['department'] !== $after['department']) {
-                $changes[] = "Dept: {$before['department']} → {$after['department']}";
-            }
-            if ($before['status'] !== $after['status']) {
-                $changes[] = "Status: {$before['status']} → {$after['status']}";
-            }
-
-            $this->logPermissionChange($user, 'user_updated', $before, $after, implode(' | ', $changes));
-        }
-
-        \App\Models\ActivityLog::log('updated', 'users', $user, $oldValues, $user->fresh()->toArray(), "User '{$user->name}' updated");
-        return redirect()->route('admin.users')->with('success', "User '{$user->name}' updated successfully.");
-    }
-    public function updateUser11082026(Request $request, User $user)
     {
         $validated = $request->validate([
             'name'            => 'required|string|max:255',
@@ -225,12 +144,7 @@ class AdminController extends Controller
             'roles.*'         => 'exists:roles,id',
             'status'          => 'required|in:active,inactive,suspended',
         ]);
-        $before = [
-                'user_type'   => $user->user_type,
-                'department'  => $user->department,
-                'permissions' => $user->permissions ?? [],
-                'status'      => $user->status,
-            ];
+
         $oldValues = $user->toArray();
         // print_r($validated);exit;
         $user->update([
@@ -245,18 +159,6 @@ class AdminController extends Controller
 
         $user->roles()->sync($validated['roles'] ?? []);
 
-
-        $after = [
-            'user_type'   => $user->user_type,
-            'department'  => $user->department,
-            'permissions' => $user->permissions ?? [],
-            'status'      => $user->status,
-        ];
-        // Log only if something changed
-        if ($before !== $after) {
-            $this->logPermissionChange($user, 'role_updated', $before, $after, $request->reason);
-        }
-
         \App\Models\ActivityLog::log('updated', 'users', $user, $oldValues, $user->fresh()->toArray(), "User '{$user->name}' updated");
 
         return redirect()->route('admin.users')->with('success', "User '{$user->name}' updated successfully.");
@@ -269,7 +171,6 @@ class AdminController extends Controller
         ]);
 
         $user->update(['password' => \Illuminate\Support\Facades\Hash::make($request->password)]);
-        $this->logPermissionChange($user, 'password_reset', ['reset_by' => auth()->user()->name], ['new_password' => $request->password]);
 
         \App\Models\ActivityLog::log('reset_password', 'user', $user, null, [
             'reset_by' => auth()->user()->name,
@@ -298,7 +199,7 @@ class AdminController extends Controller
         $userDirectPermissionIds = $user->permissions->pluck('id')->toArray();
 
         // IDs of permissions the user gets via their roles (read-only, shown grayed out)
-        $rolePermissionIds = $user->roles->flatMap(fn ($role) => $role->permissions->pluck('id'))->unique()->toArray();
+        $rolePermissionIds = $user->roles->flatMap(fn($role) => $role->permissions->pluck('id'))->unique()->toArray();
 
         return view('admin.users.permissions', compact(
             'user',
@@ -333,8 +234,6 @@ class AdminController extends Controller
 
         $newRoles = $user->fresh()->roles->pluck('name')->toArray();
         $newPerms = $user->fresh()->permissions->pluck('name')->toArray();
-        $this->logPermissionChange($user, 'role_updated', $oldRoles, $newRoles);
-        $this->logPermissionChange($user, 'permissions_updated', $oldPerms, $newPerms);
 
         \App\Models\ActivityLog::log(
             'permissions_updated',
@@ -364,7 +263,6 @@ class AdminController extends Controller
 
         $oldStatus = $user->status;
         $user->update(['status' => $status]);
-        $this->logPermissionChange($user, 'status_changed', $oldStatus, $status);
 
         \App\Models\ActivityLog::log(
             'status_changed',
@@ -423,7 +321,7 @@ class AdminController extends Controller
             'user_ids.*'  => 'exists:users,id',
         ]);
 
-        $userIds = collect($request->user_ids)->reject(fn ($id) => (int)$id === auth()->id());
+        $userIds = collect($request->user_ids)->reject(fn($id) => (int)$id === auth()->id());
         if ($userIds->isEmpty()) {
             return back()->with('error', 'No valid users selected.');
         }
@@ -457,9 +355,9 @@ class AdminController extends Controller
     public function exportUsers(Request $request)
     {
         $users = User::with('roles')
-            ->when($request->type, fn ($q, $v) => $q->where('user_type', $v))
-            ->when($request->department, fn ($q, $v) => $q->where('department', $v))
-            ->when($request->status, fn ($q, $v) => $q->where('status', $v))
+            ->when($request->type, fn($q, $v) => $q->where('user_type', $v))
+            ->when($request->department, fn($q, $v) => $q->where('department', $v))
+            ->when($request->status, fn($q, $v) => $q->where('status', $v))
             ->orderBy('name')->get();
 
         $csv = "ID,Name,Email,Phone,Type,Department,Company Codes,Status,Roles,Created,Last Login\n";
@@ -738,11 +636,11 @@ class AdminController extends Controller
     public function activityLog(Request $request)
     {
         $logs = \App\Models\ActivityLog::with('user')
-            ->when($request->module, fn ($q, $v) => $q->where('module', $v))
-            ->when($request->action, fn ($q, $v) => $q->where('action', $v))
-            ->when($request->user_id, fn ($q, $v) => $q->where('user_id', $v))
-            ->when($request->date_from, fn ($q, $v) => $q->whereDate('created_at', '>=', $v))
-            ->when($request->date_to, fn ($q, $v) => $q->whereDate('created_at', '<=', $v))
+            ->when($request->module, fn($q, $v) => $q->where('module', $v))
+            ->when($request->action, fn($q, $v) => $q->where('action', $v))
+            ->when($request->user_id, fn($q, $v) => $q->where('user_id', $v))
+            ->when($request->date_from, fn($q, $v) => $q->whereDate('created_at', '>=', $v))
+            ->when($request->date_to, fn($q, $v) => $q->whereDate('created_at', '<=', $v))
             ->when($request->search, function ($q, $v) {
                 $q->where(function ($sub) use ($v) {
                     $sub->where('description', 'LIKE', "%{$v}%")
@@ -769,7 +667,7 @@ class AdminController extends Controller
 
         return view('admin.activity-log', compact('logs', 'modules', 'actions', 'users', 'stats'));
     }
-    // =====================================================================
+        // =====================================================================
     //  USER PROFILE (Self Management)
     // =====================================================================
 
@@ -822,174 +720,5 @@ class AdminController extends Controller
 
         return redirect()->route('admin.profile')
             ->with('success', 'Profile updated successfully!');
-    }
-
-    public function vendorAccess(Request $request)
-    {
-
-        if (!auth()->user()->isAdmin() && !\App\Services\PermissionService::can(auth()->user(), 'admin.vendor-access.view')) {
-            abort(403, 'You do not have permission to perform this action.');
-        }
-
-        $vendors = \App\Models\Vendor::with('user')
-            ->when($request->search, fn ($q, $v) => $q->where('company_name', 'LIKE', "%{$v}%")
-                ->orWhereHas('user', fn ($uq) => $uq->where('email', 'LIKE', "%{$v}%")))
-            ->when($request->status, fn ($q, $v) => $q->where('status', $v))
-            ->latest()
-            ->paginate(25);
-
-        return view('admin.vendor-access', compact('vendors'));
-    }
-
-    public function impersonateVendor(\App\Models\Vendor $vendor)
-    {
-
-        if (!auth()->user()->isAdmin() && !\App\Services\PermissionService::can(auth()->user(), 'admin.vendor-access.view')) {
-            abort(403, 'You do not have permission to perform this action.');
-        }
-
-        if (!$vendor->user) {
-            return back()->with('error', 'This vendor has no user account.');
-        }
-
-        session(['impersonating_from' => auth()->id()]);
-        \Auth::login($vendor->user);
-
-        $companyCodes = $vendor->user->company_codes ?? [];
-        if (!empty($companyCodes)) {
-            session(['active_company' => $companyCodes[0]]);
-        }
-
-        return redirect()->route('vendor.dashboard');
-    }
-
-    public function stopImpersonating()
-    {
-        $adminId = session('impersonating_from');
-        if ($adminId) {
-            \Auth::loginUsingId($adminId);
-            session()->forget('impersonating_from');
-        }
-
-        return redirect()->route('admin.dashboard');
-    }
-    private function logPermissionChange(User $user, string $action, array $before, array $after, ?string $reason = null): void
-    {
-        $changes = [
-            'user_id'    => $user->id,
-            'user_name'  => $user->name,
-            'user_email' => $user->email,
-            'action'     => $action,
-            'before'     => $before,
-            'after'      => $after,
-            'changed_by' => auth()->user()->name ?? 'System',
-            'ip'         => request()->ip(),
-            'timestamp'  => now()->toISOString(),
-        ];
-
-        // Dedicated permission log
-        \Log::channel('permission')->info("{$action}: {$user->name} ({$user->email}) by " . (auth()->user()->name ?? 'System'), $changes);
-
-
-    }
-
-    public function skuSearch(Request $request)
-    {
-        $q = trim($request->q ?? '');
-        if (strlen($q) < 2) {
-            return response()->json(['results' => []]);
-        }
-
-        // Block external/vendor users
-        if (auth()->user()->user_type === 'external') {
-            return response()->json(['results' => []], 403);
-        }
-
-        $activeCompany = session('active_company');
-        $companyLabels = ['2100' => 'US', '2200' => 'EU', '2400' => 'UK'];
-
-        $products = \App\Models\Product::withoutGlobalScopes()
-            ->where(function ($query) use ($q) {
-                $query->where('sku', 'LIKE', "%{$q}%")
-                    ->orWhere('name', 'LIKE', "%{$q}%")
-                    ->orWhere('barcode', 'LIKE', "%{$q}%")
-                    ->orWhere('sap_code', 'LIKE', "%{$q}%");
-            })
-            ->when($activeCompany, fn ($qr) => $qr->where('company_code', $activeCompany))
-            ->with(['vendor:id,company_name'])
-            ->limit(20)
-            ->get()  ;
-
-        /*
-              $results = $products->map(function ($product) use ($companyLabels) {
-                  // Get live sheets containing this product
-                  $liveSheetItems = \App\Models\LiveSheetItem::where('product_id', $product->id)
-                      ->with(['liveSheet' => fn ($q) => $q->withoutGlobalScopes()])
-                      ->get();
-
-                  $liveSheets = $liveSheetItems->map(function ($lsItem) {
-                      $ls = $lsItem->liveSheet;
-                      if (!$ls || $ls->company_code != session('active_company')) {
-                          return null;
-                      }
-
-                      return [
-                          'id'           => $ls->id,
-                          'number'       => $ls->live_sheet_number,
-                          'status'       => $ls->status ?? 'draft',
-                          'qty'          => $lsItem->quantity,
-                          'url'          => route('sourcing.live-sheets.show', $ls),
-                          'download_url' => route('sourcing.live-sheets.download', $ls),
-                      ];
-                  })->filter()->unique('id')->values();
-
-                  return [
-                      'id'          => $product->id,
-                      'sku'         => $product->sku,
-                      'name'        => $product->name ?? '—',
-                      'barcode'     => $product->barcode ?? '',
-                      'vendor'      => $product->vendor->company_name ?? '—',
-                      'company'     => $companyLabels[$product->company_code] ?? $product->company_code,
-                      'live_sheets' => $liveSheets,
-                  ];
-              });
-*/
-
-        $results = $products->map(function ($product) use ($companyLabels) {
-            $activeCompany = session('active_company');
-
-            // Get live sheets containing this product — filtered by company
-            $liveSheetItems = \App\Models\LiveSheetItem::where('product_id', $product->id)
-                ->whereHas('liveSheet', fn ($q) => $q->withoutGlobalScopes()->where('company_code', $activeCompany))
-                ->with(['liveSheet' => fn ($q) => $q->withoutGlobalScopes()])
-                ->get();
-
-            $liveSheets = $liveSheetItems->map(function ($lsItem) {
-                $ls = $lsItem->liveSheet;
-                if (!$ls) {
-                    return null;
-                }
-
-                return [
-                    'id'           => $ls->id,
-                    'number'       => $ls->live_sheet_number,
-                    'status'       => $ls->status ?? 'draft',
-                    'qty'          => $lsItem->quantity,
-                    'url'          => route('sourcing.live-sheets.show', $ls),
-                    'download_url' => route('sourcing.live-sheets.download', $ls),
-                ];
-            })->filter()->unique('id')->values();
-
-            return [
-                'id'          => $product->id,
-                'sku'         => $product->sku,
-                'name'        => $product->name ?? '—',
-                'barcode'     => $product->barcode ?? '',
-                'vendor'      => $product->vendor->company_name ?? '—',
-                'company'     => $companyLabels[$product->company_code] ?? $product->company_code,
-                'live_sheets' => $liveSheets,
-            ];
-        });
-        return response()->json(['results' => $results]);
     }
 }

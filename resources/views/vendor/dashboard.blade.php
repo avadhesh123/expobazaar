@@ -4,30 +4,70 @@
 
 @section('content')
 {{-- Onboarding Status --}}
-@if($vendor->status !== 'active')
-<div style="padding:.85rem 1.2rem;background:#fef3c7;border-radius:10px;border:1px solid #fde68a;margin-bottom:1.25rem;">
-    <div style="font-size:.85rem;font-weight:700;color:#92400e;margin-bottom:.4rem;">Account Setup Progress</div>
-    <div style="display:flex;gap:.5rem;align-items:center;">
-        @php
-        $steps = [
-        ['Account Created', 'fas fa-user-check', true],
-        ['KYC Submitted', 'fas fa-id-card', in_array($vendor->kyc_status ?? '', ['submitted', 'approved'])],
-        ['KYC Approved', 'fas fa-check-circle', $vendor->kyc_status === 'approved'],
-        ['Contract Signed', 'fas fa-file-signature', in_array($vendor->contract_status ?? '', ['signed', 'sent'])],
-        ['Active', 'fas fa-store', !in_array($vendor->status ?? '', ['pending_kyc', 'pending_approval'])],
-        ];
-        @endphp
-        @foreach($steps as $index => [$label, $icon, $done])
-        <div style="display:flex;align-items:center;gap:.3rem;padding:.3rem .6rem;background:{{ $done?'#dcfce7':'#f1f5f9' }};border-radius:6px;">
-            <i class="{{ $icon }}" style="color:{{ $done?'#16a34a':'#94a3b8' }};font-size:.7rem;"></i>
-            <span style="font-size:.72rem;font-weight:600;color:{{ $done?'#166534':'#94a3b8' }};">{{ $label }}</span>
+ @php
+    $vendor = auth()->user()->vendor;
+    $setupSteps = [
+        'account_created' => true,
+        'kyc_submitted'   => !empty($vendor->kyc_status) && $vendor->kyc_status !== 'pending',
+        'kyc_approved'    => $vendor->kyc_status === 'approved',
+        'contract_signed' => !empty($vendor->contract_signed_at) || $vendor->contract_status === 'signed',
+        'active'          => $vendor->status === 'active',
+    ];
+    $allComplete = !in_array(false, $setupSteps, true);
+    $completedCount = count(array_filter($setupSteps));
+    $totalSteps = count($setupSteps);
+    $progressPct = round(($completedCount / $totalSteps) * 100);
+@endphp
+
+<div style="margin-bottom:1.25rem;border-radius:10px;border:1px solid {{ $allComplete ? '#bbf7d0' : '#fde68a' }};overflow:hidden;">
+    {{-- Accordion Header — always visible --}}
+    <div onclick="toggleSetupProgress()"
+        style="padding:.6rem 1rem;background:{{ $allComplete ? '#f0fdf4' : '#fef3c7' }};cursor:pointer;display:flex;justify-content:space-between;align-items:center;user-select:none;">
+        <div style="display:flex;align-items:center;gap:.6rem;">
+            <i class="fas {{ $allComplete ? 'fa-check-circle' : 'fa-tasks' }}" style="color:{{ $allComplete ? '#16a34a' : '#e8a838' }};font-size:.9rem;"></i>
+            <span style="font-size:.82rem;font-weight:700;color:{{ $allComplete ? '#166534' : '#92400e' }};">
+                Account Setup {{ $allComplete ? '— Complete' : 'Progress' }}
+            </span>
+            <span style="font-size:.65rem;padding:1px 6px;border-radius:4px;background:{{ $allComplete ? '#16a34a' : '#e8a838' }};color:#fff;font-weight:600;">
+                {{ $completedCount }}/{{ $totalSteps }}
+            </span>
         </div>
-        @if(!$loop->last)<i class="fas fa-arrow-right" style="color:#d1d5db;font-size:.5rem;"></i>@endif
-        @endforeach
+        <div style="display:flex;align-items:center;gap:.5rem;">
+            {{-- Mini progress bar in header --}}
+            <div style="width:80px;height:5px;background:{{ $allComplete ? '#bbf7d0' : '#fde68a' }};border-radius:3px;overflow:hidden;">
+                <div style="height:100%;width:{{ $progressPct }}%;background:{{ $allComplete ? '#16a34a' : '#e8a838' }};border-radius:3px;"></div>
+            </div>
+            <i class="fas fa-chevron-down" id="setupArrow" style="color:{{ $allComplete ? '#16a34a' : '#92400e' }};font-size:.65rem;transition:transform .2s;"></i>
+        </div>
     </div>
-    @if($vendor->kyc_status === 'pending')<a href="{{ route('vendor.kyc') }}" class="btn btn-secondary btn-sm" style="margin-top:.5rem;"><i class="fas fa-upload"></i> Submit KYC Documents</a>@endif
+
+    {{-- Accordion Body — toggle --}}
+    <div id="setupBody" style="display:{{ $allComplete ? 'none' : 'block' }};padding:.75rem 1rem;background:#fff;border-top:1px solid {{ $allComplete ? '#bbf7d0' : '#fde68a' }};">
+        <div style="display:flex;gap:.5rem;align-items:center;flex-wrap:wrap;">
+            @php
+                $steps = [
+                    'account_created' => ['icon' => 'fas fa-user-check', 'label' => 'Account Created'],
+                    'kyc_submitted'   => ['icon' => 'fas fa-id-card', 'label' => 'KYC Submitted'],
+                    'kyc_approved'    => ['icon' => 'fas fa-check-circle', 'label' => 'KYC Approved'],
+                    'contract_signed' => ['icon' => 'fas fa-file-signature', 'label' => 'Contract Signed'],
+                    'active'          => ['icon' => 'fas fa-store', 'label' => 'Active'],
+                ];
+            @endphp
+
+            @foreach($steps as $key => $step)
+                @php $done = $setupSteps[$key]; @endphp
+                <div style="display:flex;align-items:center;gap:.3rem;padding:.3rem .6rem;background:{{ $done ? '#dcfce7' : '#f1f5f9' }};border-radius:6px;{{ !$done ? 'border:1px dashed #d1d5db;' : '' }}">
+                    <i class="{{ $step['icon'] }}" style="color:{{ $done ? '#16a34a' : '#94a3b8' }};font-size:.7rem;"></i>
+                    <span style="font-size:.72rem;font-weight:600;color:{{ $done ? '#166534' : '#94a3b8' }};">{{ $step['label'] }}</span>
+                </div>
+                @if(!$loop->last)
+                <i class="fas fa-arrow-right" style="color:{{ $done ? '#16a34a' : '#d1d5db' }};font-size:.5rem;"></i>
+                @endif
+            @endforeach
+        </div>
+    </div>
 </div>
-@endif
+ 
 
 {{-- KPIs --}}
 <div class="grid-kpi">
@@ -68,21 +108,23 @@
         </div>
     </div>
 </div>
-{{-- Top 20 Best Selling SKUs --}}
+
+ 
+{{-- Best Selling SKUs --}}
 @php $cs = $activeCurrencySymbol ?? '$'; @endphp
 
-<div class="card" style="margin-top:1.25rem;">
+<div class="card">
     <div class="card-header">
-        <h3><i class="fas fa-trophy" style="margin-right:.5rem;color:#e8a838;"></i> Top 20 Best Selling SKUs</h3>
+        <h3><i class="fas fa-trophy" style="margin-right:.5rem;color:#e8a838;"></i> Top Selling SKUs (50% Revenue)</h3>
         <form method="GET" style="display:flex;gap:.4rem;align-items:flex-end;">
             <div>
                 <label style="font-size:.6rem;font-weight:600;color:#64748b;display:block;margin-bottom:.15rem;">From</label>
-                <input type="date" name="date_from" value="{{ $dateFrom }}"
+                <input type="date" name="date_from" id="date_from" value="{{ $dateFrom }}"
                     style="padding:.3rem .4rem;border:1px solid #d1d5db;border-radius:6px;font-size:.78rem;">
             </div>
             <div>
                 <label style="font-size:.6rem;font-weight:600;color:#64748b;display:block;margin-bottom:.15rem;">To</label>
-                <input type="date" name="date_to" value="{{ $dateTo }}"
+                <input type="date" name="date_to" id="date_to" value="{{ $dateTo }}"
                     style="padding:.3rem .4rem;border:1px solid #d1d5db;border-radius:6px;font-size:.78rem;">
             </div>
             <button type="submit" class="btn btn-primary btn-sm"><i class="fas fa-filter"></i></button>
@@ -90,12 +132,22 @@
         </form>
     </div>
 
-    <div style="padding:.4rem 1.25rem;background:#fefce8;border-bottom:1px solid #fde68a;font-size:.72rem;color:#854d0e;">
-        <i class="fas fa-calendar" style="margin-right:.2rem;"></i>
-        {{ \Carbon\Carbon::parse($dateFrom)->format('d M Y') }} — {{ \Carbon\Carbon::parse($dateTo)->format('d M Y') }}
-        · {{ $bestSelling->sum('total_qty') }} units sold · {{ $cs }}{{ number_format($bestSelling->sum('total_sales'), 2) }} total
-    </div>
-
+    {{-- Summary Bar --}}
+    <div style="padding:.5rem .75rem;background:#fefce8;border-bottom:1px solid #fde68a;display:flex;gap:1.5rem;font-size:.78rem;flex-wrap:wrap;">
+        <div>
+            <span style="color:#64748b;">Period:</span>
+            <strong>{{ \Carbon\Carbon::parse($dateFrom)->format('d M Y') }} — {{ \Carbon\Carbon::parse($dateTo)->format('d M Y') }}</strong>
+        </div>
+        <div>
+            <span style="color:#64748b;">Total Sales:</span>
+            <strong style="color:#166534;">{{ $cs }}{{ number_format($grandTotal, 2) }}</strong>
+        </div>
+        <div>
+            <span style="color:#64748b;">SKUs driving 50%:</span>
+            <strong style="color:#e8a838;">{{ $topSkuCount }} SKU(s)</strong>
+            <span style="font-size:.65rem;color:#94a3b8;">({{ $topSkuPct }}% of revenue)</span>
+        </div>
+    </div> 
     <div class="card-body" style="padding:0;overflow-x:auto;">
         <table class="data-table" style="font-size:.78rem;margin:0;">
             <thead>
@@ -104,45 +156,47 @@
                     <th>SKU</th>
                     <th>Product Name</th>
                     <th style="text-align:center;">Orders</th>
-                    <th style="text-align:center;">Shipped Qty</th>
+                    <th style="text-align:center;">Sold Qty</th>
                     <th style="text-align:right;">Avg Price</th>
                     <th style="text-align:right;">Total Sales</th>
-                    <th style="text-align:right;">% Share</th>
-                    <th style="width:150px;">Sales Distribution</th>
+                    <th style="text-align:right;">% of Total</th> 
                 </tr>
             </thead>
             <tbody>
-                @php $grandTotal = $bestSelling->sum('total_sales'); @endphp
+                @php $cumulative = ($bestSelling->currentPage() - 1) * $bestSelling->perPage(); @endphp
                 @forelse($bestSelling as $idx => $item)
                 @php
                     $product = $item->product;
                     $pct = $grandTotal > 0 ? round(($item->total_sales / $grandTotal) * 100, 1) : 0;
+                    $cumulative += floatval($item->total_sales);
+                    $cumPct = $grandTotal > 0 ? round(($cumulative / $grandTotal) * 100, 1) : 0;
+                    $rank = ($bestSelling->currentPage() - 1) * $bestSelling->perPage() + $idx + 1;
                     $medals = ['🥇', '🥈', '🥉'];
-                    $barColors = ['#e8a838', '#94a3b8', '#b45309', '#1e40af', '#16a34a', '#7c3aed', '#dc2626', '#0d9488'];
-                    $barColor = $barColors[$idx % count($barColors)];
+                    $barColor = $cumPct <= 25 ? '#16a34a' : ($cumPct <= 50 ? '#e8a838' : '#94a3b8');
                 @endphp
-                <tr style="{{ $idx < 3 ? 'background:#fffef5;' : '' }}">
+                <tr style="{{ $rank <= 3 ? 'background:#fffef5;' : '' }}">
                     <td style="text-align:center;">
-                        @if($idx < 3)
-                        <span style="font-size:1rem;">{{ $medals[$idx] }}</span>
+                        @if($rank <= 3)
+                        <span style="font-size:1rem;">{{ $medals[$rank - 1] }}</span>
                         @else
-                        <span style="color:#94a3b8;">{{ $idx + 1 }}</span>
+                        <span style="color:#94a3b8;">{{ $rank }}</span>
                         @endif
                     </td>
                     <td style="font-family:monospace;font-weight:600;">{{ $product->sku ?? '—' }}</td>
-                    <td style="font-size:.75rem;">{{ \Str::limit($product->name ?? '—', 35) }}</td>
+                    <td style="font-size:.75rem;">{{ \Str::limit($product->name ?? '—', 30) }}</td>
                     <td style="text-align:center;font-weight:600;">{{ $item->total_orders }}</td>
                     <td style="text-align:center;font-weight:700;color:#1e40af;">{{ number_format($item->total_qty) }}</td>
                     <td style="text-align:right;font-family:monospace;color:#64748b;">{{ $cs }}{{ number_format($item->avg_price, 2) }}</td>
                     <td style="text-align:right;font-family:monospace;font-weight:700;color:#166534;">{{ $cs }}{{ number_format($item->total_sales, 2) }}</td>
                     <td style="text-align:right;font-family:monospace;font-weight:600;color:{{ $barColor }};">{{ $pct }}%</td>
-                    <td>
+                    <!-- <td>
                         <div style="display:flex;align-items:center;gap:.3rem;">
                             <div style="flex:1;height:8px;background:#e2e8f0;border-radius:4px;overflow:hidden;">
-                                <div style="height:100%;width:{{ $pct }}%;background:{{ $barColor }};border-radius:4px;"></div>
+                                <div style="height:100%;width:{{ min(100, $cumPct * 2) }}%;background:{{ $barColor }};border-radius:4px;"></div>
                             </div>
+                            <span style="font-size:.6rem;color:#94a3b8;min-width:28px;">{{ $cumPct }}%</span>
                         </div>
-                    </td>
+                    </td> -->
                 </tr>
                 @empty
                 <tr><td colspan="9" style="text-align:center;padding:2rem;color:#94a3b8;">
@@ -151,22 +205,37 @@
                 </td></tr>
                 @endforelse
             </tbody>
-            @if($bestSelling->isNotEmpty())
-            <tfoot>
-                <tr style="background:#f0f4f8;font-weight:700;">
-                    <td colspan="3">TOP 20 TOTAL</td>
-                    <td style="text-align:center;">{{ $bestSelling->sum('total_orders') }}</td>
-                    <td style="text-align:center;">{{ number_format($bestSelling->sum('total_qty')) }}</td>
-                    <td></td>
-                    <td style="text-align:right;font-family:monospace;color:#166534;">{{ $cs }}{{ number_format($grandTotal, 2) }}</td>
-                    <td style="text-align:right;">100%</td>
-                    <td></td>
-                </tr>
-            </tfoot>
-            @endif
         </table>
     </div>
+
+    @if($bestSelling->hasPages())
+    <div style="padding:.75rem 1.25rem;border-top:1px solid #e8ecf1;">
+        {{ $bestSelling->links('pagination::tailwind') }}
+    </div>
+    @endif
 </div>
+<!-- GRAPH -->
+ <div class="card">
+    <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+        <h5 class="mb-0">Sales Graph</h5>
+        <div class="d-flex gap-2 align-items-center">
+            <input type="date" id="sales_from" class="form-control form-control-sm"
+                   value="{{ now()->subDays(30)->toDateString() }}">
+            <span>to</span>
+            <input type="date" id="sales_to" class="form-control form-control-sm"
+                   value="{{ now()->toDateString() }}">
+            <button type="button" id="btnLoadSalesChart" class="btn btn-sm btn-primary">
+                Apply
+            </button>
+        </div>
+    </div>
+    <div class="card-body">
+        <canvas id="vendorSalesChart" height="100"></canvas>
+    </div>
+</div>
+ 
+
+<!-- END -->
 <div class="grid-2">
     <div class="card">
         <div class="card-header">
@@ -201,7 +270,6 @@
             </table>
         </div>
     </div>
-
     
     <div class="card">
         <div class="card-header">
@@ -247,4 +315,91 @@
         <a href="{{ route('vendor.payouts') }}" class="btn btn-outline"><i class="fas fa-money-check-alt"></i> Payouts</a>
     </div>
 </div>
+<script>
+function toggleSetupProgress() {
+    var body = document.getElementById('setupBody');
+    var arrow = document.getElementById('setupArrow');
+    if (body.style.display === 'none') {
+        body.style.display = 'block';
+        arrow.style.transform = 'rotate(180deg)';
+    } else {
+        body.style.display = 'none';
+        arrow.style.transform = 'rotate(0deg)';
+    }
+}
+</script>
+{{-- Chart.js --}}
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    const ctx = document.getElementById('vendorSalesChart').getContext('2d');
+    let salesChart = null;
+
+    function loadSalesChart() {
+        const from = document.getElementById('sales_from').value;
+        const to   = document.getElementById('sales_to').value;
+
+        fetch(`{{ route('vendor.dashboard.sales-chart') }}?from=${from}&to=${to}`)
+            .then(r => r.json())
+            .then(data => {
+                if (salesChart) {
+                    salesChart.destroy();
+                }
+
+                salesChart = new Chart(ctx, {
+                    type: 'bar',   // or 'line'
+                    data: {
+                        labels: data.labels,
+                        datasets: [
+                            {
+                                label: 'Sales Amount',
+                                data: data.totals,
+                                borderColor: '#2563eb',
+                              //  backgroundColor: 'rgba(37, 99, 235, 0.1)',
+                               backgroundColor: '#5773e6',
+                                fill: true,
+                                tension: 0.3,
+                                yAxisID: 'y',
+                            },
+                            // {
+                            //     label: 'Orders',
+                            //     data: data.orders,
+                            //     borderColor: '#16a34a',
+                            //     backgroundColor: 'rgba(22, 163, 74, 0.1)',
+                            //     fill: false,
+                            //     tension: 0.3,
+                            //     yAxisID: 'y1',
+                            // }
+                        ]
+                    },
+                    options: {
+                        responsive: true,
+                        interaction: { mode: 'index', intersect: false },
+                        scales: {
+                            y: {
+                                type: 'linear',
+                                position: 'left',
+                                title: { display: true, text: 'Sales Amount' }
+                            },
+                            // y1: {
+                            //     type: 'linear',
+                            //     position: 'right',
+                            //     grid: { drawOnChartArea: false },
+                            //     title: { display: true, text: 'Orders' }
+                            // }
+                        }
+                    }
+                });
+            });
+    }
+
+    // Load on page open
+    loadSalesChart();
+
+    // Update when date changes / Apply clicked
+    document.getElementById('btnLoadSalesChart').addEventListener('click', loadSalesChart);
+    document.getElementById('sales_from').addEventListener('change', loadSalesChart);
+    document.getElementById('sales_to').addEventListener('change', loadSalesChart);
+});
+</script>
 @endsection

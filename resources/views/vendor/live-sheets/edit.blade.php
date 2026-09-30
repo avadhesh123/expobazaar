@@ -167,7 +167,7 @@ $weightUnit = $isUS ? 'LBS' : 'KG';
                             <input type="hidden" name="items[{{ $idx }}][product_id]" value="{{ $item->product_id }}">
                             {{ $item->product->sku ?? '—' }}
                         </td>
-                        <td>{{ $d['sap_code'] ?? '—' }}</td>
+                        <td>{{ $item->product->sap_code ?? '—' }}</td>
                         <td>{{$item->product->barcode ?? $d['barcode'] ?? '—' }}</td>
                         <td style="font-weight:500;">{{ $item->product->name ?? '—' }}</td>
                         <td style="font-size:.7rem;max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="{{ $d['description'] ?? '' }}">{{ Str::limit($d['description'] ?? '—', 40) }}</td>

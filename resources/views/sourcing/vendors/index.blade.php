@@ -22,7 +22,7 @@
 
             // Convert to array if stored as JSON string
             if (is_string($userCompanyCodes)) {
-            $userCompanyCodes = json_decode($userCompanyCodes, true) ?? [];
+              $userCompanyCodes = json_decode($userCompanyCodes, true) ?? [];
             }
 
             $allowedCompanies = array_filter(array_map('strval', $userCompanyCodes));
@@ -76,14 +76,33 @@
             <thead><tr><th>Vendor</th><th>Company</th><th>Contact</th><th>Onboarding Progress</th><th>Status</th><th>Created</th><th>Actions</th></tr></thead>
             <tbody>
                 @forelse($vendors as $v)
+                @php   
+                   
+                    $cc = ['2000'=>['🇮🇳','#dcfce7'],'2100'=>['🇺🇸','#dbeafe'],'2200'=>['🇳🇱','#fef3c7']];  
+                     $companyCodes = ''; 
+                    foreach ($v->user->company_codes as $code) {
+                        $flag = $cc[$code][0] ?? '';
+                        $bg   = $cc[$code][1] ?? '#f1f5f9';
+
+                        $companyCodes .= '<span style="
+                            display:inline-block;
+                            padding:.2rem .45rem;
+                            margin-right:.25rem;
+                            background:' . $bg . ';
+                            border-radius:5px;
+                            font-size:.78rem;
+                            font-weight:600;
+                        ">' . $flag . ' ' . e($code) . '</span>';
+                    }
+
+                @endphp
                 <tr>
                     <td>
                         <div style="font-weight:600;color:#0d1b2a;">{{ $v->company_name }}</div>
                         <div style="font-size:.7rem;color:#94a3b8;font-family:monospace;">{{ $v->vendor_code }}</div>
                     </td>
                     <td>
-                        @php $cc = ['2000'=>['🇮🇳','#dcfce7'],'2100'=>['🇺🇸','#dbeafe'],'2200'=>['🇳🇱','#fef3c7']]; @endphp
-                        <span style="padding:.2rem .45rem;background:{{ $cc[$v->company_code][1]??'#f1f5f9' }};border-radius:5px;font-size:.78rem;font-weight:600;">{{ $cc[$v->company_code][0]??'' }} {{ $v->company_code }}</span>
+                       {!! $companyCodes !!}
                     </td>
                     <td>
                         <div style="font-size:.82rem;">{{ $v->contact_person }}</div>

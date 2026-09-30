@@ -18,8 +18,7 @@ class AdminController extends Controller
 
     public function dashboard(Request $request)
     {
-        //  $companyCode = $request->get('company_code');
-        $companyCode = session('active_company');
+        $companyCode = $request->get('company_code');
         $data = $this->dashboardService->getAdminDashboard($companyCode);
         return view('admin.dashboard', compact('data', 'companyCode'));
     }
@@ -39,8 +38,8 @@ class AdminController extends Controller
         if ($search = $request->search) {
             $query->where(function ($q) use ($search) {
                 $q->where('name', 'like', "%{$search}%")
-                    ->orWhere('email', 'like', "%{$search}%")
-                    ->orWhere('phone', 'like', "%{$search}%");
+                  ->orWhere('email', 'like', "%{$search}%")
+                  ->orWhere('phone', 'like', "%{$search}%");
             });
         }
 
@@ -94,14 +93,11 @@ class AdminController extends Controller
             'user_type'       => 'required|in:internal,admin,external',
             'department'      => 'nullable|required_if:user_type,internal|in:sourcing,logistics,cataloguing,sales,finance,hod',
             'company_codes'   => 'required|array|min:1',
-            'company_codes.*' => 'in:2100,2200,2400',
+            'company_codes.*' => 'in:2000,2100,2200',
             'roles'           => 'nullable|array',
             'roles.*'         => 'exists:roles,id',
             'status'          => 'nullable|in:active,inactive',
         ]);
-
-        // print_r($validated);
-        // exit;
 
         $user = User::create([
             'name'              => $validated['name'],
@@ -112,7 +108,6 @@ class AdminController extends Controller
             'company_codes'     => $validated['company_codes'],
             'status'            => $validated['status'] ?? 'active',
             'email_verified_at' => now(),
-            'password'          => \Illuminate\Support\Facades\Hash::make('Noida@2026'),
         ]);
 
         if (!empty($validated['roles'])) {
@@ -131,87 +126,8 @@ class AdminController extends Controller
         $userRoleIds = $user->roles->pluck('id')->toArray();
         return view('admin.users.edit', compact('user', 'roles', 'userRoleIds'));
     }
+
     public function updateUser(Request $request, User $user)
-    {
-        $validated = $request->validate([
-            'name'            => 'required|string|max:255',
-            'email'           => 'required|email|unique:users,email,' . $user->id,
-            'phone'           => 'nullable|string|max:20',
-            'user_type'       => 'required|in:internal,admin,external',
-            'department'      => 'nullable|required_if:user_type,internal|in:sourcing,logistics,cataloguing,sales,finance,hod',
-            'company_codes'   => 'required|array|min:1',
-            'company_codes.*' => 'in:2000,2100,2200,2400',
-            'roles'           => 'nullable|array',
-            'roles.*'         => 'exists:roles,id',
-            'status'          => 'required|in:active,inactive,suspended',
-        ]);
-
-        // Capture BEFORE state (including roles)
-        $beforeRoles = $user->roles()->pluck('name', 'id')->toArray();
-        $before = [
-            'user_type'     => $user->user_type,
-            'department'    => $user->department,
-            'status'        => $user->status,
-            'company_codes' => $user->company_codes ?? [],
-            'roles'         => $beforeRoles,
-        ];
-
-        $oldValues = $user->toArray();
-
-        $user->update([
-            'name'          => $validated['name'],
-            'email'         => $validated['email'],
-            'phone'         => $validated['phone'] ?? $user->phone,
-            'user_type'     => $validated['user_type'],
-            'department'    => $validated['user_type'] === 'internal' ? $validated['department'] : null,
-            'company_codes' => $validated['company_codes'],
-            'status'        => $validated['status'],
-        ]);
-
-        $user->roles()->sync($validated['roles'] ?? []);
-
-        // Capture AFTER state (reload roles)
-        $user->load('roles');
-        $afterRoles = $user->roles->pluck('name', 'id')->toArray();
-        $after = [
-            'user_type'     => $user->user_type,
-            'department'    => $user->department,
-            'status'        => $user->status,
-            'company_codes' => $user->company_codes ?? [],
-            'roles'         => $afterRoles,
-        ];
-
-        // Log if anything changed
-        if ($before !== $after) {
-            // Build human-readable change summary
-            $changes = [];
-            if ($before['roles'] !== $after['roles']) {
-                $added = array_diff($afterRoles, $beforeRoles);
-                $removed = array_diff($beforeRoles, $afterRoles);
-                if ($added) {
-                    $changes[] = 'Roles added: ' . implode(', ', $added);
-                }
-                if ($removed) {
-                    $changes[] = 'Roles removed: ' . implode(', ', $removed);
-                }
-            }
-            if ($before['user_type'] !== $after['user_type']) {
-                $changes[] = "Type: {$before['user_type']} → {$after['user_type']}";
-            }
-            if ($before['department'] !== $after['department']) {
-                $changes[] = "Dept: {$before['department']} → {$after['department']}";
-            }
-            if ($before['status'] !== $after['status']) {
-                $changes[] = "Status: {$before['status']} → {$after['status']}";
-            }
-
-            $this->logPermissionChange($user, 'user_updated', $before, $after, implode(' | ', $changes));
-        }
-
-        \App\Models\ActivityLog::log('updated', 'users', $user, $oldValues, $user->fresh()->toArray(), "User '{$user->name}' updated");
-        return redirect()->route('admin.users')->with('success', "User '{$user->name}' updated successfully.");
-    }
-    public function updateUser11082026(Request $request, User $user)
     {
         $validated = $request->validate([
             'name'            => 'required|string|max:255',
@@ -225,14 +141,9 @@ class AdminController extends Controller
             'roles.*'         => 'exists:roles,id',
             'status'          => 'required|in:active,inactive,suspended',
         ]);
-        $before = [
-                'user_type'   => $user->user_type,
-                'department'  => $user->department,
-                'permissions' => $user->permissions ?? [],
-                'status'      => $user->status,
-            ];
+
         $oldValues = $user->toArray();
-        // print_r($validated);exit;
+
         $user->update([
             'name'          => $validated['name'],
             'email'         => $validated['email'],
@@ -245,38 +156,11 @@ class AdminController extends Controller
 
         $user->roles()->sync($validated['roles'] ?? []);
 
-
-        $after = [
-            'user_type'   => $user->user_type,
-            'department'  => $user->department,
-            'permissions' => $user->permissions ?? [],
-            'status'      => $user->status,
-        ];
-        // Log only if something changed
-        if ($before !== $after) {
-            $this->logPermissionChange($user, 'role_updated', $before, $after, $request->reason);
-        }
-
         \App\Models\ActivityLog::log('updated', 'users', $user, $oldValues, $user->fresh()->toArray(), "User '{$user->name}' updated");
 
         return redirect()->route('admin.users')->with('success', "User '{$user->name}' updated successfully.");
     }
 
-    public function resetUserPassword(Request $request, \App\Models\User $user)
-    {
-        $request->validate([
-            'password' => 'required|string|min:6|confirmed',
-        ]);
-
-        $user->update(['password' => \Illuminate\Support\Facades\Hash::make($request->password)]);
-        $this->logPermissionChange($user, 'password_reset', ['reset_by' => auth()->user()->name], ['new_password' => $request->password]);
-
-        \App\Models\ActivityLog::log('reset_password', 'user', $user, null, [
-            'reset_by' => auth()->user()->name,
-        ], "Password reset for {$user->name} by " . auth()->user()->name);
-
-        return back()->with('success', "Password reset for {$user->name}.");
-    }
     // =====================================================================
     //  USER PERMISSIONS — Manage roles + direct permissions per user
     // =====================================================================
@@ -333,8 +217,6 @@ class AdminController extends Controller
 
         $newRoles = $user->fresh()->roles->pluck('name')->toArray();
         $newPerms = $user->fresh()->permissions->pluck('name')->toArray();
-        $this->logPermissionChange($user, 'role_updated', $oldRoles, $newRoles);
-        $this->logPermissionChange($user, 'permissions_updated', $oldPerms, $newPerms);
 
         \App\Models\ActivityLog::log(
             'permissions_updated',
@@ -364,7 +246,6 @@ class AdminController extends Controller
 
         $oldStatus = $user->status;
         $user->update(['status' => $status]);
-        $this->logPermissionChange($user, 'status_changed', $oldStatus, $status);
 
         \App\Models\ActivityLog::log(
             'status_changed',
@@ -430,25 +311,20 @@ class AdminController extends Controller
 
         $count = $userIds->count();
         switch ($request->action) {
-            case 'activate':
-                User::whereIn('id', $userIds)->update(['status' => 'active']);
+            case 'activate':   User::whereIn('id', $userIds)->update(['status' => 'active']);
                 $msg = "{$count} user(s) activated.";
                 break;
-            case 'deactivate':
-                User::whereIn('id', $userIds)->update(['status' => 'inactive']);
+            case 'deactivate': User::whereIn('id', $userIds)->update(['status' => 'inactive']);
                 $msg = "{$count} user(s) deactivated.";
                 break;
-            case 'suspend':
-                User::whereIn('id', $userIds)->update(['status' => 'suspended']);
+            case 'suspend':    User::whereIn('id', $userIds)->update(['status' => 'suspended']);
                 $msg = "{$count} user(s) suspended.";
                 break;
-            case 'delete':
-                User::whereIn('id', $userIds)->update(['status' => 'inactive']);
+            case 'delete':     User::whereIn('id', $userIds)->update(['status' => 'inactive']);
                 User::whereIn('id', $userIds)->delete();
                 $msg = "{$count} user(s) deleted.";
                 break;
-            default:
-                return back()->with('error', 'Invalid action.');
+            default: return back()->with('error', 'Invalid action.');
         }
 
         return back()->with('success', $msg);
@@ -494,29 +370,9 @@ class AdminController extends Controller
         $vendors = Vendor::pendingApproval()->with('creator')->latest()->paginate(25);
         return view('admin.vendors.pending', compact('vendors'));
     }
-    public function showVendor(Vendor $vendor)
+
+    public function approveVendor(Vendor $vendor)
     {
-        $vendor->load('user', 'documents', 'creator');
-        return view('admin.vendors.show', compact('vendor'));
-    }
-    public function approveVendor(Request $request, Vendor $vendor)
-    {
-        if ($request->has('_reject') || $request->_reject) {
-            $request->validate(['reason' => 'required|string|max:500']);
-
-            $vendor->update([
-                'status' => 'rejected',
-                'rejection_reason' => $request->reason,
-            ]);
-
-            // Also update user status if exists
-            if ($vendor->user) {
-                $vendor->user->update(['is_active' => false]);
-            }
-
-            return back()->with('success', "Vendor '{$vendor->company_name}' rejected.");
-        }
-
         $this->vendorService->approveVendorCreation($vendor, auth()->user());
         return back()->with('success', 'Vendor approved successfully.');
     }
@@ -547,9 +403,6 @@ class AdminController extends Controller
             'company_codes' => 'nullable|array',
             'permissions'   => 'nullable|array',
         ]);
-
-        $validated['slug'] = \Str::slug($validated['name']);
-        $validated['guard_name'] = 'web';
 
         $role = Role::create($validated);
         if (!empty($validated['permissions'])) {
@@ -649,58 +502,24 @@ class AdminController extends Controller
         return back()->with('success', 'Category created.');
     }
 
-    public function salesChannels(Request $request)
+    public function salesChannels()
     {
-        $channels = SalesChannel::query()
-            ->when($request->company_code, function ($q, $code) {
-                $q->whereJsonContains('company_codes', $code);
-            })
-            ->when($request->status, function ($q, $status) {
-                $q->where('is_active', $status === 'active');
-            })
-            ->orderBy('name')
-            ->paginate(20);
-
-        // For dropdown in filter
-        $companies = ['2000', '2100', '2200']; // or fetch dynamically if needed
-
-        return view('admin.masters.sales-channels', compact('channels', 'companies'));
+        $channels = SalesChannel::all();
+        return view('admin.masters.sales-channels', compact('channels'));
     }
 
     public function storeSalesChannel(Request $request)
     {
-        $request->validate(['name' => 'required|string', 'type' => 'required|in:b2b,b2c', 'division' => 'required|in:marketplace,offline,direct']);
+        $request->validate(['name' => 'required|string', 'type' => 'required|in:marketplace,offline,direct']);
         SalesChannel::create([
             'name'          => $request->name,
             'slug'          => Str::slug($request->name),
             'type'          => $request->type,
-            'division'      => $request->division,
-            'channel_commission' => $request->channel_commission,
             'platform_url'  => $request->platform_url,
             'company_codes' => $request->company_codes,
-            'is_active'     => true
+            'is_active'     => true,
         ]);
         return back()->with('success', 'Sales channel created.');
-    }
-    public function updateSalesChannel(Request $request, SalesChannel $salesChannel)
-    {
-        $request->validate([
-            'name'               => 'required|string',
-            'type'               => 'required|in:b2b,b2c',
-            'division'           => 'required|in:marketplace,offline,direct',
-            'channel_commission' => 'nullable|numeric|min:0',
-        ]);
-        $salesChannel->update([
-            'name'               => $request->name,
-            'slug'               => Str::slug($request->name),
-            'type'               => $request->type,
-            'division'           => $request->division,
-            'platform_url'       => $request->platform_url,
-            'channel_commission' => $request->channel_commission,
-            'company_codes'      => $request->company_codes,
-            'is_active'          => $request->has('is_active'),
-        ]);
-        return back()->with('success', "Sales channel '{$salesChannel->name}' updated.");
     }
 
     public function warehouses()
@@ -740,256 +559,7 @@ class AdminController extends Controller
         $logs = \App\Models\ActivityLog::with('user')
             ->when($request->module, fn ($q, $v) => $q->where('module', $v))
             ->when($request->action, fn ($q, $v) => $q->where('action', $v))
-            ->when($request->user_id, fn ($q, $v) => $q->where('user_id', $v))
-            ->when($request->date_from, fn ($q, $v) => $q->whereDate('created_at', '>=', $v))
-            ->when($request->date_to, fn ($q, $v) => $q->whereDate('created_at', '<=', $v))
-            ->when($request->search, function ($q, $v) {
-                $q->where(function ($sub) use ($v) {
-                    $sub->where('description', 'LIKE', "%{$v}%")
-                        ->orWhere('subject_type', 'LIKE', "%{$v}%")
-                        ->orWhere('action', 'LIKE', "%{$v}%");
-                });
-            })
-            ->latest()
-            ->paginate(50)
-            ->withQueryString();
-
-        // For filter dropdowns
-        $modules = \App\Models\ActivityLog::distinct()->pluck('module')->filter()->sort()->values();
-        $actions = \App\Models\ActivityLog::distinct()->pluck('action')->filter()->sort()->values();
-        $users   = \App\Models\User::orderBy('name')->get(['id', 'name', 'email']);
-
-        // KPI summary
-        $stats = [
-            'total'        => \App\Models\ActivityLog::count(),
-            'today'        => \App\Models\ActivityLog::whereDate('created_at', today())->count(),
-            'this_week'    => \App\Models\ActivityLog::where('created_at', '>=', now()->startOfWeek())->count(),
-            'unique_users' => \App\Models\ActivityLog::distinct('user_id')->count('user_id'),
-        ];
-
-        return view('admin.activity-log', compact('logs', 'modules', 'actions', 'users', 'stats'));
-    }
-    // =====================================================================
-    //  USER PROFILE (Self Management)
-    // =====================================================================
-
-    /**
-     * Show Logged-in User Profile
-     */
-    public function profile()
-    {
-        $user = auth()->user()->load('roles.permissions');
-        return view('admin.profile.show', compact('user'));
-    }
-
-    /**
-     * Show Edit Profile Form
-     */
-    public function editProfile()
-    {
-        $user = auth()->user();
-        return view('admin.profile.edit', compact('user'));
-    }
-
-    /**
-     * Update User Profile
-     */
-    public function updateProfile(Request $request)
-    {
-        $user = auth()->user();
-
-        $validated = $request->validate([
-            'name'                  => 'required|string|max:255',
-            'email'                 => 'required|email|max:255|unique:users,email,' . $user->id,
-            'phone'                 => 'nullable|string|max:20',
-            'current_password'      => 'nullable|required_with:password|current_password',
-            'password'              => 'nullable|string|min:8|confirmed',
-        ]);
-
-        $user->update([
-            'name'  => $validated['name'],
-            'email' => $validated['email'],
-            'phone' => $validated['phone'] ?? $user->phone,
-        ]);
-
-        if (!empty($validated['password'])) {
-            $user->update([
-                'password' => Hash::make($validated['password'])
-            ]);
-        }
-
-        \App\Models\ActivityLog::log('profile_updated', 'users', $user, null, $user->fresh()->toArray(), "Profile updated by user");
-
-        return redirect()->route('admin.profile')
-            ->with('success', 'Profile updated successfully!');
-    }
-
-    public function vendorAccess(Request $request)
-    {
-
-        if (!auth()->user()->isAdmin() && !\App\Services\PermissionService::can(auth()->user(), 'admin.vendor-access.view')) {
-            abort(403, 'You do not have permission to perform this action.');
-        }
-
-        $vendors = \App\Models\Vendor::with('user')
-            ->when($request->search, fn ($q, $v) => $q->where('company_name', 'LIKE', "%{$v}%")
-                ->orWhereHas('user', fn ($uq) => $uq->where('email', 'LIKE', "%{$v}%")))
-            ->when($request->status, fn ($q, $v) => $q->where('status', $v))
-            ->latest()
-            ->paginate(25);
-
-        return view('admin.vendor-access', compact('vendors'));
-    }
-
-    public function impersonateVendor(\App\Models\Vendor $vendor)
-    {
-
-        if (!auth()->user()->isAdmin() && !\App\Services\PermissionService::can(auth()->user(), 'admin.vendor-access.view')) {
-            abort(403, 'You do not have permission to perform this action.');
-        }
-
-        if (!$vendor->user) {
-            return back()->with('error', 'This vendor has no user account.');
-        }
-
-        session(['impersonating_from' => auth()->id()]);
-        \Auth::login($vendor->user);
-
-        $companyCodes = $vendor->user->company_codes ?? [];
-        if (!empty($companyCodes)) {
-            session(['active_company' => $companyCodes[0]]);
-        }
-
-        return redirect()->route('vendor.dashboard');
-    }
-
-    public function stopImpersonating()
-    {
-        $adminId = session('impersonating_from');
-        if ($adminId) {
-            \Auth::loginUsingId($adminId);
-            session()->forget('impersonating_from');
-        }
-
-        return redirect()->route('admin.dashboard');
-    }
-    private function logPermissionChange(User $user, string $action, array $before, array $after, ?string $reason = null): void
-    {
-        $changes = [
-            'user_id'    => $user->id,
-            'user_name'  => $user->name,
-            'user_email' => $user->email,
-            'action'     => $action,
-            'before'     => $before,
-            'after'      => $after,
-            'changed_by' => auth()->user()->name ?? 'System',
-            'ip'         => request()->ip(),
-            'timestamp'  => now()->toISOString(),
-        ];
-
-        // Dedicated permission log
-        \Log::channel('permission')->info("{$action}: {$user->name} ({$user->email}) by " . (auth()->user()->name ?? 'System'), $changes);
-
-
-    }
-
-    public function skuSearch(Request $request)
-    {
-        $q = trim($request->q ?? '');
-        if (strlen($q) < 2) {
-            return response()->json(['results' => []]);
-        }
-
-        // Block external/vendor users
-        if (auth()->user()->user_type === 'external') {
-            return response()->json(['results' => []], 403);
-        }
-
-        $activeCompany = session('active_company');
-        $companyLabels = ['2100' => 'US', '2200' => 'EU', '2400' => 'UK'];
-
-        $products = \App\Models\Product::withoutGlobalScopes()
-            ->where(function ($query) use ($q) {
-                $query->where('sku', 'LIKE', "%{$q}%")
-                    ->orWhere('name', 'LIKE', "%{$q}%")
-                    ->orWhere('barcode', 'LIKE', "%{$q}%")
-                    ->orWhere('sap_code', 'LIKE', "%{$q}%");
-            })
-            ->when($activeCompany, fn ($qr) => $qr->where('company_code', $activeCompany))
-            ->with(['vendor:id,company_name'])
-            ->limit(20)
-            ->get()  ;
-
-        /*
-              $results = $products->map(function ($product) use ($companyLabels) {
-                  // Get live sheets containing this product
-                  $liveSheetItems = \App\Models\LiveSheetItem::where('product_id', $product->id)
-                      ->with(['liveSheet' => fn ($q) => $q->withoutGlobalScopes()])
-                      ->get();
-
-                  $liveSheets = $liveSheetItems->map(function ($lsItem) {
-                      $ls = $lsItem->liveSheet;
-                      if (!$ls || $ls->company_code != session('active_company')) {
-                          return null;
-                      }
-
-                      return [
-                          'id'           => $ls->id,
-                          'number'       => $ls->live_sheet_number,
-                          'status'       => $ls->status ?? 'draft',
-                          'qty'          => $lsItem->quantity,
-                          'url'          => route('sourcing.live-sheets.show', $ls),
-                          'download_url' => route('sourcing.live-sheets.download', $ls),
-                      ];
-                  })->filter()->unique('id')->values();
-
-                  return [
-                      'id'          => $product->id,
-                      'sku'         => $product->sku,
-                      'name'        => $product->name ?? '—',
-                      'barcode'     => $product->barcode ?? '',
-                      'vendor'      => $product->vendor->company_name ?? '—',
-                      'company'     => $companyLabels[$product->company_code] ?? $product->company_code,
-                      'live_sheets' => $liveSheets,
-                  ];
-              });
-*/
-
-        $results = $products->map(function ($product) use ($companyLabels) {
-            $activeCompany = session('active_company');
-
-            // Get live sheets containing this product — filtered by company
-            $liveSheetItems = \App\Models\LiveSheetItem::where('product_id', $product->id)
-                ->whereHas('liveSheet', fn ($q) => $q->withoutGlobalScopes()->where('company_code', $activeCompany))
-                ->with(['liveSheet' => fn ($q) => $q->withoutGlobalScopes()])
-                ->get();
-
-            $liveSheets = $liveSheetItems->map(function ($lsItem) {
-                $ls = $lsItem->liveSheet;
-                if (!$ls) {
-                    return null;
-                }
-
-                return [
-                    'id'           => $ls->id,
-                    'number'       => $ls->live_sheet_number,
-                    'status'       => $ls->status ?? 'draft',
-                    'qty'          => $lsItem->quantity,
-                    'url'          => route('sourcing.live-sheets.show', $ls),
-                    'download_url' => route('sourcing.live-sheets.download', $ls),
-                ];
-            })->filter()->unique('id')->values();
-
-            return [
-                'id'          => $product->id,
-                'sku'         => $product->sku,
-                'name'        => $product->name ?? '—',
-                'barcode'     => $product->barcode ?? '',
-                'vendor'      => $product->vendor->company_name ?? '—',
-                'company'     => $companyLabels[$product->company_code] ?? $product->company_code,
-                'live_sheets' => $liveSheets,
-            ];
-        });
-        return response()->json(['results' => $results]);
+            ->latest()->paginate(50);
+        return view('admin.activity-log', compact('logs'));
     }
 }
