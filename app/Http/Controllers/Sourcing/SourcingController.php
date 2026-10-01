@@ -48,12 +48,12 @@ class SourcingController extends Controller
         $this->vendorService->createVendorRequest($request->all(), auth()->user());
         return redirect()->route('sourcing.dashboard')->with('success', 'Vendor request submitted to admin.');
     }
-    
+
     public function vendors(Request $request)
     {
         $user = auth()->user();
         $activeCompany = session('active_company');
-        $isShow = ($user->user_type == 'internal' && $user->department == 'hod') || $user->isAdmin(); 
+        $isShow = ($user->user_type == 'internal' && $user->department == 'hod') || $user->isAdmin();
 
         $companyFilter = $isShow && $request->filled('company_code')
                ? $request->company_code
@@ -77,10 +77,10 @@ class SourcingController extends Controller
                   $q->where(function ($q2) use ($search) {
                       $q2->where('vendor_code', 'like', "%{$search}%");
                   });
-              }); 
+              });
         $vendors = $query->latest()
                     ->paginate(30)
-                    ->withQueryString(); 
+                    ->withQueryString();
 
         return view('sourcing.vendors.index', compact('vendors', 'companyFilter'));
     }
@@ -206,15 +206,73 @@ class SourcingController extends Controller
     //  STEP 3: LIVE SHEET REVIEW & APPROVAL
     // =====================================================================
 
-    public function liveSheets(Request $request)
+    public function liveSheetsOLD(Request $request)
     {
         $activeCompany = session('active_company');
+        $user = auth()->user();
+        $isShow = ($user->user_type == 'internal' && $user->department == 'hod') || $user->isAdmin();
+
+        $companyFilter = $isShow && $request->filled('company_code')
+               ? $request->company_code
+               : $activeCompany;
+
+        $query = Vendor::with('user')
+              ->whereHas('user', function ($q) use ($companyFilter) {
+                  $q->whereRaw(
+                      'JSON_VALID(company_codes)
+                 AND JSON_CONTAINS(
+                     CAST(company_codes AS JSON),
+                     ?
+                 )',
+                      ['"' . $companyFilter . '"']
+                  );
+              })
+              ->when($request->status, function ($q, $status) {
+                  $q->where('status', $status);
+              })
+              ->when($request->search, function ($q, $search) {
+                  $q->where(function ($q2) use ($search) {
+                      $q2->where('vendor_code', 'like', "%{$search}%");
+                  });
+              });
+        $vendors = $query->latest()->withQueryString();
+
 
         $liveSheets = LiveSheet::with('vendor', 'offerSheet', 'consignment', 'items.product')
             ->when($request->status, fn ($q, $v) => $q->where('status', $v))
             ->where('company_code', $activeCompany)
             ->latest()->paginate(20);
-        return view('sourcing.live-sheets.index', compact('liveSheets'));
+        return view('sourcing.live-sheets.index', compact('liveSheets', 'vendors'));
+    }
+
+    public function liveSheets(Request $request)
+    {
+        $activeCompany = session('active_company');
+        $user = auth()->user();
+        $isShow = ($user->user_type == 'internal' && $user->department == 'hod') || $user->isAdmin();
+
+        $companyFilter = $isShow && $request->filled('company_code')
+            ? $request->company_code
+            : $activeCompany;
+
+        $vendors = Vendor::with('user')
+            ->whereHas('user', fn ($q) => $q->whereJsonContains('company_codes', $companyFilter)) 
+            // ->when($request->search, fn ($q, $v) => $q->where(function ($q2) use ($v) {
+            //     $q2->where('vendor_code', 'like', "%{$v}%")
+            //        ->orWhere('company_name', 'like', "%{$v}%");
+            // }))
+            ->orderBy('company_name')
+            ->get(['id', 'company_name']);
+
+        $liveSheets = LiveSheet::with('vendor', 'offerSheet', 'consignment', 'items.product')
+            ->where('company_code', $companyFilter)
+            ->when($request->status, fn ($q, $v) => $q->where('status', $v))
+            ->when($request->vendor_id, fn ($q, $v) => $q->where('vendor_id', $v))
+            ->latest()
+            ->paginate(20)
+            ->withQueryString();
+
+        return view('sourcing.live-sheets.index', compact('liveSheets', 'vendors', 'companyFilter'));
     }
 
     /**

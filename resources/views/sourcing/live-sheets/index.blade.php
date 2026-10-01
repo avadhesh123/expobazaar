@@ -16,6 +16,15 @@
                     @foreach(['draft','submitted','locked','unlocked'] as $s)<option value="{{ $s }}" {{ request('status')===$s?'selected':'' }}>{{ ucfirst($s) }}</option>@endforeach
                 </select>
             </div>
+             <div style="min-width:140px;">
+                <label style="font-size:.7rem;font-weight:600;color:#64748b;display:block;margin-bottom:.25rem;">Vendor</label>
+                <select name="vendor_id" style="width:100%;padding:.4rem .5rem;border:1px solid #d1d5db;border-radius:8px;font-size:.82rem;font-family:inherit;">
+                    <option value="0">All</option>
+                    @foreach($vendors as $v)
+                    <option value="{{ $v->id }}" {{ request('vendor_id') == $v->id ? 'selected':'' }}>{{ ucfirst($v->company_name) }}</option>
+                    @endforeach
+                </select> 
+            </div>
             <button type="submit" class="btn btn-primary btn-sm"><i class="fas fa-filter"></i></button>
             <a href="{{ route('sourcing.live-sheets') }}" class="btn btn-outline btn-sm"><i class="fas fa-times"></i></a>
         </form>

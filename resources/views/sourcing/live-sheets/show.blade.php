@@ -30,30 +30,38 @@ $disabled = $liveSheet->is_locked ? 'disabled' : '';
     <button type="submit" class="btn btn-primary btn-sm"><i class="fas fa-box"></i> Create Consignment</button></form>
     @endif
 </div>
-
+{{--Gross weight = master carton weight x no. of master cartons 
+net weight = Qty Offered (Units/Sets) x product weight
+shipping value = Qty Offered (Units/Sets) x vendor FOB --}}
 {{-- Header --}}
 <div class="card" style="margin-bottom:1.25rem;">
     <div class="card-body" style="padding:1rem 1.4rem;">
-        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:.75rem;">
-            <div style="padding:.5rem;background:#f8fafc;border-radius:8px;">
-                <div style="font-size:.62rem;color:#64748b;text-transform:uppercase;font-weight:600;">Live Sheet</div>
-                <div style="font-weight:700;font-family:monospace;">{{ $liveSheet->live_sheet_number }}</div>
-            </div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:.75rem;">
             <div style="padding:.5rem;background:#f8fafc;border-radius:8px;">
                 <div style="font-size:.62rem;color:#64748b;text-transform:uppercase;font-weight:600;">Vendor</div>
-                <div style="font-weight:600;">{{ $liveSheet->vendor->company_name ?? '—' }}</div>
+                <div style="font-weight:600;font-family:monospace;">{{ $liveSheet->vendor->company_name  }}</div>
             </div>
+             
             <div style="padding:.5rem;background:#f8fafc;border-radius:8px;">
-                <div style="font-size:.62rem;color:#64748b;text-transform:uppercase;font-weight:600;">Offer Sheet</div>
-                <div>{{ $liveSheet->offerSheet->offer_sheet_number ?? '—' }}</div>
+                <div style="font-size:.62rem;color:#64748b;text-transform:uppercase;font-weight:600;">{{ $liveSheet->company_code }}</div>
+                <div style="font-weight:600;font-family:monospace;">{{ $liveSheet->offerSheet->offer_sheet_number ?? '—' }}</div>
             </div>
-            <div style="padding:.5rem;background:#f8fafc;border-radius:8px;">
-                <div style="font-size:.62rem;color:#64748b;text-transform:uppercase;font-weight:600;">Company</div>
-                <div>{{ $liveSheet->company_code }}</div>
-            </div>
+ 
             <div style="padding:.5rem;background:#f8fafc;border-radius:8px;">
                 <div style="font-size:.62rem;color:#64748b;text-transform:uppercase;font-weight:600;">Total CBM</div>
                 <div style="font-weight:700;font-family:monospace;">{{ number_format($liveSheet->total_cbm, 3) }}</div>
+            </div>
+              <div style="padding:.5rem;background:#f8fafc;border-radius:8px;">
+                <div style="font-size:.62rem;color:#64748b;text-transform:uppercase;font-weight:600;">Gross Weight</div>
+                <div style="font-weight:700;font-family:monospace;"id="gross-weight">{{ number_format($liveSheet->total_cbm, 3) }}</div>
+            </div>
+              <div style="padding:.5rem;background:#f8fafc;border-radius:8px;">
+                <div style="font-size:.62rem;color:#64748b;text-transform:uppercase;font-weight:600;">Net Weight</div>
+                <div style="font-weight:700;font-family:monospace;" id="net-weight">0</div>
+            </div>
+             <div style="padding:.5rem;background:#f8fafc;border-radius:8px;">
+                <div style="font-size:.62rem;color:#64748b;text-transform:uppercase;font-weight:600;">Shipping Value</div>
+                <div style="font-weight:700;font-family:monospace;"id="ship-value">{{ number_format($liveSheet->total_cbm, 3) }}</div>
             </div>
             <div style="padding:.5rem;background:#f8fafc;border-radius:8px;">
                 <div style="font-size:.62rem;color:#64748b;text-transform:uppercase;font-weight:600;">Status</div>
@@ -270,6 +278,9 @@ $disabled = $liveSheet->is_locked ? 'disabled' : '';
                 <tbody>       
                     @php
                     $finalCBM = 0;
+                    $grossWeight = 0;                    
+                    $netWeight = 0;
+                    $shipValue = 0; 
                     @endphp          
                     @foreach($liveSheet->items as $idx => $item)
 
@@ -311,7 +322,12 @@ $disabled = $liveSheet->is_locked ? 'disabled' : '';
                     $dutyAmt = $finalFob * ($dutyPercent / 100);
                     $freightAmt = $finalFob * ( $freightFactor /100 );
                     $landedCost = $finalFob + $dutyAmt + $freightAmt;
-                    $wsp = $landedCost * $wspFactor;
+                    $wsp = $landedCost * $wspFactor; 
+
+                    $grossWeight += $masterW *$d['no_of_master_carton'];  //Gross weight = master carton weight x no. of master cartons                  
+                    $netWeight += $d['qty_offered'] * $d['weight']; //net weight = Qty Offered (Units/Sets) x product weight
+                    $shipValue = $d['qty_offered'] * $d['vendor_fob'];  //shipping value = Qty Offered (Units/Sets) x vendor FOB
+
                     @endphp
 
                     <tr id="ls-row-{{ $idx }}" data-duty="{{ $d['duty_percent'] ?? 0 }}" style="{{ ($item->is_selected ?? 1) ? 'background:#f0fdf4;' : 'background:#fef2f2;opacity:.7;' }}">
@@ -499,8 +515,11 @@ $disabled = $liveSheet->is_locked ? 'disabled' : '';
     }
 </style>
 <script>
-    
-const activeCurrencySymbol = "{{ $activeCurrencySymbol }}";
+    document.getElementById('gross-weight').innerHTML="{{ $grossWeight }}";
+    document.getElementById('net-weight').innerHTML="{{ $netWeight }}";
+    document.getElementById('ship-value').innerHTML="{{ $shipValue }}";
+
+    const activeCurrencySymbol = "{{ $activeCurrencySymbol }}";
 
     $(document).on('input', 'input[name*="[target_fob]"], input[name*="[final_fob]"], input[name*="[freight_factor]"], input[name*="[wsp_factor]"]', function() {
         var name = $(this).attr('name');

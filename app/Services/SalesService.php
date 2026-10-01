@@ -631,9 +631,9 @@ class SalesService
     /**
      * Mark order as shipped with per-item shipped quantities
      */
-    public function shipOrder(Order $order, array $itemShippedQtys, string $trackingId, ?float $shippingCost, string $carrier): Order
+    public function shipOrder(Order $order, array $itemShippedQtys, string $trackingId, ?float $shippingCost, string $carrier, ?string $status): Order
     {
-        return DB::transaction(function () use ($order, $itemShippedQtys, $trackingId, $shippingCost, $carrier) {
+        return DB::transaction(function () use ($order, $itemShippedQtys, $trackingId, $shippingCost, $carrier, $status) {
 
             // Update each item's shipped_qty and deduct inventory
             $orderShippedQty = 0;
@@ -688,6 +688,7 @@ class SalesService
             }
 
             // Update order-level summary
+
             $order->update([
                 'shipped_qty'       => $orderShippedQty,
                 'shipped_amount'    => $orderShippedAmount,
@@ -695,10 +696,11 @@ class SalesService
                 'shipping_cost'     => $shippingCost,
                 'carrier'           => $carrier,
                 'shipping_provider' => $carrier,
-                'shipment_status'   => 'shipped',
-                'status'            => 'shipped',
-                'shipped_date'      => now(),
+                'shipment_status'   => $status ?? 'shipped',
+                'status'            => $status ?? 'shipped',
+                'shipped_date'      => ($status ?? 'shipped') !== 'label_created' ? now() : $order->shipped_date,
             ]);
+
 
             ActivityLog::log('shipped', 'order', $order, null, [
                 'tracking_id' => $trackingId,
@@ -726,11 +728,11 @@ class SalesService
         // Auto-set delivery date when delivered
         if (($data['status'] ?? '') === 'delivered' && !$order->delivery_date) {
             $updateData['delivery_date'] = $data['delivery_date'] ?? now()->toDateString();
-            $updateData['status'] = 'delivered';            
+            $updateData['status'] = 'delivered';
             $updateData['current_status'] = 'delivered';
 
         } elseif (!empty($data['delivery_date'])) {
-            $updateData['delivery_date'] = $data['delivery_date'];    
+            $updateData['delivery_date'] = $data['delivery_date'];
             $updateData['current_status'] = 'delivered';
 
         }
@@ -738,7 +740,7 @@ class SalesService
         if ($order->current_status === 'returned') {
             $updateData['status'] = 'returned';
         }
-
+                                            
         // If ship_date is null/empty → status = open
         // (introduced 27-Sep-2026 – recommendation Mr. Umang)
         $shipDate = array_key_exists('ship_date', $data)

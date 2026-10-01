@@ -167,7 +167,6 @@
                         </td>
                         <td style="background:#eef2ff;">
                             <select name="status" style="width:100%;padding:.2rem .25rem;border:1px solid #c7d2fe;border-radius:4px;font-size:.72rem;">
-                                <option value="">—</option>
                                 @foreach(['open'=>'Open','pending'=>'Pending','label_created'=>'Label Created','processing'=>'Processing','shipped'=>'Shipped','delivered'=>'Delivered','cancelled'=>'Cancelled','returned'=>'Returned','exception'=>'Exception','lost_in_transit'=>'Lost in Transit','partially_returned'=>'Partially Returned'] as $val => $label)
                                 <option value="{{ $val }}" {{ ($o->status ?? '') === $val ? 'selected' : '' }}>{{ $label }}</option>
                                 @endforeach

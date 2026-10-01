@@ -1489,7 +1489,8 @@ class SalesController extends Controller
                     $itemShippedQtys,
                     $data['tracking_id'],
                     $data['ship_cost'],
-                    $data['carrier']
+                    $data['carrier'],
+                    'label_created'
                 );
 
                 // Update pack type if your shipOrder doesn't handle it
